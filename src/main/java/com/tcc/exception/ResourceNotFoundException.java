@@ -1,4 +1,4 @@
-package com.extensao.tcc.exception;
+package com.tcc.exception;
 
 public class ResourceNotFoundException extends RuntimeException {
 

@@ -1,4 +1,4 @@
-package com.extensao.tcc.application.dto.response;
+package com.tcc.application.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 

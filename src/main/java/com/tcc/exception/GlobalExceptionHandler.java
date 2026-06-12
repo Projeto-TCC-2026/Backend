@@ -1,6 +1,6 @@
-package com.extensao.tcc.exception;
+package com.tcc.exception;
 
-import com.extensao.tcc.application.dto.response.ApiResponse;
+import com.tcc.application.dto.response.ApiResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;

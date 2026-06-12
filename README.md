@@ -64,7 +64,7 @@ Resposta:
 ## Estrutura do Projeto
 
 ```
-src/main/java/com/extensao/tcc
+src/main/java/com/tcc
 ├── application
 │   ├── dto
 │   │   ├── request       # DTOs de entrada
