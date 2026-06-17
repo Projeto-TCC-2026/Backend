@@ -1,12 +1,19 @@
 package com.tcc.application.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
+@Schema(description = "Resposta padrão da API")
 public class ApiResponse<T> {
 
+    @Schema(description = "Indica se a operação foi bem-sucedida", example = "true")
     private boolean success;
+
+    @Schema(description = "Dados retornados pela operação")
     private T data;
+
+    @Schema(description = "Mensagem de erro ou informação adicional", example = "Operação realizada com sucesso")
     private String message;
 
     private ApiResponse(boolean success, T data, String message) {
