@@ -1,0 +1,85 @@
+### Variables
+@baseUrl = http://localhost:8080
+@doctorId = 1
+
+### 1. Criar novo médico
+POST {{baseUrl}}/doctors
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "hospitalId": 1,
+  "fullName": "Dr. João Silva",
+  "cpf": "12345678901",
+  "crm": "12345-SP",
+  "specialty": "Cardiologia",
+  "phone": "11987654321"
+}
+
+### 2. Listar todos os médicos
+GET {{baseUrl}}/doctors
+
+### 3. Buscar médico por ID
+GET {{baseUrl}}/doctors/{{doctorId}}
+
+### 4. Buscar médico inexistente (deve retornar 404)
+GET {{baseUrl}}/doctors/999
+
+### 5. Atualizar médico
+PUT {{baseUrl}}/doctors/{{doctorId}}
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "hospitalId": 1,
+  "fullName": "Dr. João Silva Oliveira",
+  "cpf": "12345678901",
+  "crm": "12345-SP",
+  "specialty": "Cardiologia Intervencionista",
+  "phone": "11987654321"
+}
+
+### 6. Inativar médico (retorna erro - não implementado)
+PATCH {{baseUrl}}/doctors/{{doctorId}}/inactive
+
+### 7. Criar médico com validação inválida (CPF curto)
+POST {{baseUrl}}/doctors
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "hospitalId": 1,
+  "fullName": "Dr. Maria Santos",
+  "cpf": "123",
+  "crm": "67890-RJ",
+  "specialty": "Pediatria",
+  "phone": "11999999999"
+}
+
+### 8. Criar médico com user inexistente (deve retornar 404)
+POST {{baseUrl}}/doctors
+Content-Type: application/json
+
+{
+  "userId": 999,
+  "hospitalId": 1,
+  "fullName": "Dr. Pedro Costa",
+  "cpf": "98765432100",
+  "crm": "11111-MG",
+  "specialty": "Ortopedia",
+  "phone": "11988888888"
+}
+
+### 9. Criar médico com hospital inexistente (deve retornar 404)
+POST {{baseUrl}}/doctors
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "hospitalId": 999,
+  "fullName": "Dra. Ana Paula",
+  "cpf": "11111111111",
+  "crm": "22222-RS",
+  "specialty": "Dermatologia",
+  "phone": "11977777777"
+}
