@@ -67,6 +67,18 @@
 			<version>3.0.3</version>
 		</dependency>
 
+		<!-- Bean Validation: ativa as anotações @NotBlank, @Email, @Size etc. nos DTOs -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+
+		<!-- Actuator: health check robusto -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
 		<!-- Flyway - Database migrations -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

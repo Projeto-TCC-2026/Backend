@@ -30,8 +30,7 @@ tcc/
 │   │   │   │
 │   │   │   ├── presentation/          # Camada de Apresentação
 │   │   │   │   └── controller/       # REST Controllers
-│   │   │   │       ├── ExampleController.java
-│   │   │   │       └── HealthController.java
+│   │   │   │       └── ExampleController.java
 │   │   │   │
 │   │   │   ├── util/                  # Classes utilitárias
 │   │   │   └── TccApplication.java    # Classe principal
