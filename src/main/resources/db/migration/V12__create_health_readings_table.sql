@@ -7,7 +7,7 @@ CREATE TABLE health_readings (
     patient_device_id BIGINT       NOT NULL,
     reading_import_id BIGINT,
     reading_type      VARCHAR(100) NOT NULL,
-    value             VARCHAR(100) NOT NULL,
+    reading_value     VARCHAR(100) NOT NULL,
     unit              VARCHAR(50),
     measured_at       TIMESTAMP    NOT NULL,
 

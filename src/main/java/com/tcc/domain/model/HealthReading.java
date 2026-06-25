@@ -28,7 +28,7 @@ public class HealthReading {
     @Column(nullable = false, length = 100)
     private String readingType;
 
-    @Column(nullable = false, length = 100)
+    @Column(name = "reading_value", nullable = false, length = 100)
     private String value;
 
     @Column(length = 50)
