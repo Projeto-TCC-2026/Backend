@@ -31,3 +31,8 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Arquivos de ambiente / segredos — NÃO versionar
+.env
+.env.local
+.env.*.local

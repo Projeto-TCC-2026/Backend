@@ -47,7 +47,19 @@ A aplicação sobe em `http://localhost:8080`.
 java -jar target\tcc-0.0.1-SNAPSHOT.jar
 ```
 
-## Endpoint de verificação
+## Documentação Adicional
+
+A documentação detalhada do projeto está organizada na pasta [`docs/`](docs/):
+
+- [`docs/ENTITIES.md`](docs/ENTITIES.md) — Documentação das entidades
+- [`docs/ENTITY_DIAGRAM.md`](docs/ENTITY_DIAGRAM.md) — Diagrama de relacionamentos
+- [`docs/PROJECT_STRUCTURE.md`](docs/PROJECT_STRUCTURE.md) — Estrutura detalhada do projeto
+- [`docs/DOCTOR_CRUD_IMPLEMENTATION.md`](docs/DOCTOR_CRUD_IMPLEMENTATION.md) — Implementação do CRUD de Doctors
+- [`docs/IMPLEMENTATION_SUMMARY.md`](docs/IMPLEMENTATION_SUMMARY.md) — Resumo da implementação
+- [`docs/USAGE_EXAMPLES.md`](docs/USAGE_EXAMPLES.md) — Exemplos de uso das entidades
+- [`docs/doctors.http`](docs/doctors.http) — Casos de teste HTTP
+
+
 
 ```
 GET /api/health

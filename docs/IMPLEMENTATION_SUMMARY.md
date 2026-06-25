@@ -23,6 +23,7 @@ src/main/java/com/tcc/presentation/controller/
 
 ### 3. Documentação
 ```
+docs/
 ├── DOCTOR_CRUD_IMPLEMENTATION.md  ✅ Documentação detalhada
 └── doctors.http                   ✅ Arquivo para testes HTTP
 ```
@@ -119,7 +120,7 @@ http://localhost:8080/swagger-ui.html
 - Teste cada endpoint pela interface
 
 ### 3. Usar arquivo doctors.http
-- Abra o arquivo `doctors.http` no VS Code
+- Abra o arquivo `docs/doctors.http` no VS Code
 - Use a extensão "REST Client" para executar as requisições
 
 ### 4. Usar cURL
@@ -281,7 +282,7 @@ A implementação seguiu **rigorosamente** o passo a passo fornecido:
 
 ## 📞 Arquivos de Referência
 
-- `DOCTOR_CRUD_IMPLEMENTATION.md` - Documentação detalhada com exemplos
-- `doctors.http` - Casos de teste HTTP
-- `ENTITIES.md` - Documentação das entidades
-- `ENTITY_DIAGRAM.md` - Diagramas de relacionamento
+- `docs/DOCTOR_CRUD_IMPLEMENTATION.md` - Documentação detalhada com exemplos
+- `docs/doctors.http` - Casos de teste HTTP
+- `docs/ENTITIES.md` - Documentação das entidades
+- `docs/ENTITY_DIAGRAM.md` - Diagramas de relacionamento
