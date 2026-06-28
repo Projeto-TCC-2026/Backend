@@ -29,6 +29,7 @@ public class PatientMapper {
                 patient.getPhone(),
                 patient.getWeight(),
                 patient.getHeight(),
+                patient.getActive(),
                 patient.getCreatedAt(),
                 patient.getUpdatedAt()
         );

@@ -45,6 +45,9 @@ public class Patient {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
+    @Column(nullable = false)
+    private Boolean active = true;
+
     @OneToMany(mappedBy = "patient", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<DoctorPatient> doctorPatients = new ArrayList<>();
 
@@ -209,5 +212,22 @@ public class Patient {
 
     public void setAlerts(List<Alert> alerts) {
         this.alerts = alerts;
+    }
+
+    public Boolean getActive() {
+        return active;
+    }
+
+    public void setActive(Boolean active) {
+        this.active = active;
+    }
+
+    // Business methods
+    public void inactivate() {
+        this.active = false;
+    }
+
+    public boolean isActive() {
+        return active != null && active;
     }
 }

@@ -1,0 +1,91 @@
+### Arquivo de testes para API de Pacientes
+### Pré-requisito: ter um token JWT válido de um usuário com role DOCTOR
+
+@baseUrl = http://localhost:8080
+@token = seu_jwt_token_aqui
+
+### 1. Criar novo paciente
+POST {{baseUrl}}/api/patients
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "fullName": "João Silva Santos",
+  "cpf": "12345678901",
+  "birthDate": "1990-05-15",
+  "gender": "Masculino",
+  "phone": "(11) 99999-9999",
+  "weight": 75.5,
+  "height": 1.78
+}
+
+### 2. Listar todos os pacientes ativos
+GET {{baseUrl}}/api/patients
+Authorization: Bearer {{token}}
+
+### 3. Buscar paciente por ID
+GET {{baseUrl}}/api/patients/1
+Authorization: Bearer {{token}}
+
+### 4. Atualizar paciente
+PUT {{baseUrl}}/api/patients/1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "fullName": "João Silva Santos Junior",
+  "cpf": "12345678901",
+  "birthDate": "1990-05-15",
+  "gender": "Masculino",
+  "phone": "(11) 88888-8888",
+  "weight": 76.0,
+  "height": 1.78
+}
+
+### 5. Inativar paciente
+PATCH {{baseUrl}}/api/patients/1/inactive
+Authorization: Bearer {{token}}
+
+### Exemplos de respostas esperadas:
+
+### Sucesso - Criar paciente (201)
+# {
+#   "success": true,
+#   "data": {
+#     "id": 1,
+#     "user": {
+#       "id": 1,
+#       "username": "joao123",
+#       "email": "joao@email.com"
+#     },
+#     "fullName": "João Silva Santos",
+#     "cpf": "12345678901",
+#     "birthDate": "1990-05-15",
+#     "gender": "Masculino",
+#     "phone": "(11) 99999-9999",
+#     "weight": 75.5,
+#     "height": 1.78,
+#     "active": true,
+#     "createdAt": "2024-01-01T10:00:00",
+#     "updatedAt": "2024-01-01T10:00:00"
+#   }
+# }
+
+### Erro - CPF já cadastrado (422)
+# {
+#   "success": false,
+#   "message": "Já existe um paciente ativo cadastrado com o CPF: 12345678901"
+# }
+
+### Erro - Paciente não encontrado (404)
+# {
+#   "success": false,
+#   "message": "Paciente não encontrado com ID: 999"
+# }
+
+### Erro - Acesso negado (403)
+# {
+#   "error": "Access Denied"
+# }

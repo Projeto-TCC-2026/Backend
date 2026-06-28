@@ -13,6 +13,7 @@ public record PatientResponse(
         String phone,
         Double weight,
         Double height,
+        Boolean active,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {}

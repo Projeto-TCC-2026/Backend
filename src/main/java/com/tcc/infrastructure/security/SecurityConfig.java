@@ -43,10 +43,12 @@ public class SecurityConfig {
                                 "/api/health",
                                 "/h2-console/**",
                                 "/swagger-ui/**",
-                                "/v3/api-docs/**"
+                                "/swagger-ui.html",
+                                "/v3/api-docs/**",
+                                "/api-docs/**"
                         ).permitAll()
                         .requestMatchers("/api/doctors/**").hasRole("DOCTOR")
-                        .requestMatchers("/api/patients/**").hasRole("PATIENT")
+                        .requestMatchers("/api/patients/**").hasRole("DOCTOR")
                         .anyRequest().authenticated()
                 )
                 .headers(headers ->
