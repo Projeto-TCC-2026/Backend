@@ -1,10 +1,12 @@
 ### Variables
-@baseUrl = http://localhost:8080
+@baseUrl = http://localhost:8080/api
+@token = Bearer YOUR_JWT_TOKEN_HERE
 @doctorId = 1
 
 ### 1. Criar novo médico
 POST {{baseUrl}}/doctors
 Content-Type: application/json
+Authorization: {{token}}
 
 {
   "userId": 1,
@@ -16,18 +18,22 @@ Content-Type: application/json
   "phone": "11987654321"
 }
 
-### 2. Listar todos os médicos
-GET {{baseUrl}}/doctors
+### 2. Listar todos os médicos (paginado)
+GET {{baseUrl}}/doctors?page=0&size=10&sort=fullName,asc
+Authorization: {{token}}
 
 ### 3. Buscar médico por ID
 GET {{baseUrl}}/doctors/{{doctorId}}
+Authorization: {{token}}
 
 ### 4. Buscar médico inexistente (deve retornar 404)
 GET {{baseUrl}}/doctors/999
+Authorization: {{token}}
 
 ### 5. Atualizar médico
 PUT {{baseUrl}}/doctors/{{doctorId}}
 Content-Type: application/json
+Authorization: {{token}}
 
 {
   "userId": 1,
@@ -39,12 +45,42 @@ Content-Type: application/json
   "phone": "11987654321"
 }
 
-### 6. Inativar médico (retorna erro - não implementado)
-PATCH {{baseUrl}}/doctors/{{doctorId}}/inactive
+### 6. Excluir médico
+DELETE {{baseUrl}}/doctors/{{doctorId}}
+Authorization: {{token}}
 
-### 7. Criar médico com validação inválida (CPF curto)
+### 7. Buscar médico por nome
+GET {{baseUrl}}/doctors/search/name?name=João&page=0&size=10
+Authorization: {{token}}
+
+### 8. Buscar médico por CRM
+GET {{baseUrl}}/doctors/search/crm?crm=12345-SP
+Authorization: {{token}}
+
+### 9. Buscar médicos por especialidade
+GET {{baseUrl}}/doctors/search/specialty?specialty=Cardiologia&page=0&size=10
+Authorization: {{token}}
+
+### 10. Filtrar médicos (múltiplos critérios)
+GET {{baseUrl}}/doctors/filter?hospitalId=1&specialty=Cardiologia&name=João&page=0&size=10&sort=fullName,asc
+Authorization: {{token}}
+
+### 11. Filtrar por hospital
+GET {{baseUrl}}/doctors/filter?hospitalId=1&page=0&size=10
+Authorization: {{token}}
+
+### 12. Filtrar por especialidade
+GET {{baseUrl}}/doctors/filter?specialty=Cardiologia&page=0&size=10
+Authorization: {{token}}
+
+### 13. Listar com múltiplas ordenações
+GET {{baseUrl}}/doctors?page=0&size=10&sort=specialty,asc&sort=fullName,asc
+Authorization: {{token}}
+
+### 14. Criar médico com validação inválida (CPF curto)
 POST {{baseUrl}}/doctors
 Content-Type: application/json
+Authorization: {{token}}
 
 {
   "userId": 1,
@@ -56,9 +92,10 @@ Content-Type: application/json
   "phone": "11999999999"
 }
 
-### 8. Criar médico com user inexistente (deve retornar 404)
+### 15. Criar médico com user inexistente (deve retornar 404)
 POST {{baseUrl}}/doctors
 Content-Type: application/json
+Authorization: {{token}}
 
 {
   "userId": 999,
@@ -70,9 +107,10 @@ Content-Type: application/json
   "phone": "11988888888"
 }
 
-### 9. Criar médico com hospital inexistente (deve retornar 404)
+### 16. Criar médico com hospital inexistente (deve retornar 404)
 POST {{baseUrl}}/doctors
 Content-Type: application/json
+Authorization: {{token}}
 
 {
   "userId": 1,
@@ -82,4 +120,34 @@ Content-Type: application/json
   "crm": "22222-RS",
   "specialty": "Dermatologia",
   "phone": "11977777777"
+}
+
+### 17. Criar médico com CRM duplicado (deve retornar erro)
+POST {{baseUrl}}/doctors
+Content-Type: application/json
+Authorization: {{token}}
+
+{
+  "userId": 2,
+  "hospitalId": 1,
+  "fullName": "Dr. Carlos Souza",
+  "cpf": "22222222222",
+  "crm": "12345-SP",
+  "specialty": "Neurologia",
+  "phone": "11966666666"
+}
+
+### 18. Criar médico com CPF duplicado (deve retornar erro)
+POST {{baseUrl}}/doctors
+Content-Type: application/json
+Authorization: {{token}}
+
+{
+  "userId": 2,
+  "hospitalId": 1,
+  "fullName": "Dr. Lucas Mendes",
+  "cpf": "12345678901",
+  "crm": "99999-SP",
+  "specialty": "Psiquiatria",
+  "phone": "11955555555"
 }

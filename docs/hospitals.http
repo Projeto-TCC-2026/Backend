@@ -1,0 +1,65 @@
+### Variáveis
+@baseUrl = http://localhost:8080/api
+@token = Bearer YOUR_JWT_TOKEN_HERE
+
+### 1. Criar Hospital
+POST {{baseUrl}}/hospitals
+Content-Type: application/json
+Authorization: {{token}}
+
+{
+  "name": "Hospital Santa Maria",
+  "cnpj": "12345678901234",
+  "phone": "(11) 98765-4321",
+  "email": "contato@santamaria.com.br",
+  "address": "Rua das Flores, 123",
+  "city": "São Paulo",
+  "state": "SP"
+}
+
+### 2. Listar Todos os Hospitais (paginado)
+GET {{baseUrl}}/hospitals?page=0&size=10&sort=name,asc
+Authorization: {{token}}
+
+### 3. Buscar Hospital por ID
+GET {{baseUrl}}/hospitals/1
+Authorization: {{token}}
+
+### 4. Atualizar Hospital
+PUT {{baseUrl}}/hospitals/1
+Content-Type: application/json
+Authorization: {{token}}
+
+{
+  "name": "Hospital Santa Maria - Unidade Central",
+  "cnpj": "12345678901234",
+  "phone": "(11) 98765-4321",
+  "email": "contato@santamaria.com.br",
+  "address": "Rua das Flores, 123 - Sala 101",
+  "city": "São Paulo",
+  "state": "SP"
+}
+
+### 5. Excluir Hospital
+DELETE {{baseUrl}}/hospitals/1
+Authorization: {{token}}
+
+### 6. Buscar Hospital por Nome
+GET {{baseUrl}}/hospitals/search/name?name=Santa&page=0&size=10
+Authorization: {{token}}
+
+### 7. Filtrar Hospitais (múltiplos critérios)
+GET {{baseUrl}}/hospitals/filter?name=Santa&city=São Paulo&state=SP&page=0&size=10&sort=name,asc
+Authorization: {{token}}
+
+### 8. Filtrar por Cidade
+GET {{baseUrl}}/hospitals/filter?city=São Paulo&page=0&size=10
+Authorization: {{token}}
+
+### 9. Filtrar por Estado
+GET {{baseUrl}}/hospitals/filter?state=SP&page=0&size=10
+Authorization: {{token}}
+
+### 10. Listar com Ordenação por Data de Criação
+GET {{baseUrl}}/hospitals?page=0&size=10&sort=createdAt,desc
+Authorization: {{token}}
