@@ -9,11 +9,10 @@ import com.tcc.domain.repository.PatientRepository;
 import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.BusinessException;
 import com.tcc.exception.ResourceNotFoundException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 public class PatientServiceImpl implements PatientService {
@@ -55,11 +54,9 @@ public class PatientServiceImpl implements PatientService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<PatientResponse> getAllActivePatients() {
-        return patientRepository.findByActiveTrue()
-                .stream()
-                .map(patientMapper::toResponse)
-                .collect(Collectors.toList());
+    public Page<PatientResponse> getAllActivePatients(Pageable pageable) {
+        return patientRepository.findByActiveTrue(pageable)
+                .map(patientMapper::toResponse);
     }
 
     @Override
@@ -103,11 +100,39 @@ public class PatientServiceImpl implements PatientService {
 
     @Override
     @Transactional
+    public void deletePatient(Long id) {
+        Patient patient = patientRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Paciente não encontrado com ID: " + id));
+
+        // Verificar se há relacionamentos que impedem a exclusão
+        // Por exemplo, verificar se há leituras de saúde, procedimentos, etc.
+        // Para agora, vamos permitir a exclusão direta
+        // Se necessário, adicionar validações de relacionamento aqui
+
+        patientRepository.delete(patient);
+    }
+
+    @Override
+    @Transactional
     public void inactivatePatient(Long id) {
         Patient patient = patientRepository.findByIdAndActiveTrue(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Paciente não encontrado com ID: " + id));
 
         patient.inactivate();
         patientRepository.save(patient);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<PatientResponse> searchByName(String name, Pageable pageable) {
+        return patientRepository.findByFullNameContainingIgnoreCaseAndActiveTrue(name, pageable)
+                .map(patientMapper::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<PatientResponse> searchByCpf(String cpf, Pageable pageable) {
+        return patientRepository.findByCpfContainingAndActiveTrue(cpf, pageable)
+                .map(patientMapper::toResponse);
     }
 }
