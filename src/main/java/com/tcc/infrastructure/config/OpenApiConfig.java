@@ -4,6 +4,8 @@ import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -38,10 +40,27 @@ public class OpenApiConfig {
                 .version("1.0")
                 .contact(contact)
                 .description("Esta é a documentação da API do projeto TCC 2026. " +
-                           "A API fornece endpoints para gerenciar todas as funcionalidades do sistema.")
+                           "A API fornece endpoints para gerenciar todas as funcionalidades do sistema. " +
+                           "Para testar endpoints protegidos: faça login em /auth/doctor/login ou /auth/patient/login, " +
+                           "copie o accessToken e clique em 'Authorize' inserindo: Bearer {token}")
                 .license(mitLicense);
 
-        OpenAPI openAPI = new OpenAPI().info(info).servers(List.of(devServer));
+        // Configuração do esquema de segurança JWT
+        SecurityScheme securityScheme = new SecurityScheme()
+                .name("Bearer Authentication")
+                .type(SecurityScheme.Type.HTTP)
+                .scheme("bearer")
+                .bearerFormat("JWT")
+                .description("Insira o token JWT obtido no login. Exemplo: Bearer eyJhbGci...");
+
+        SecurityRequirement securityRequirement = new SecurityRequirement()
+                .addList("Bearer Authentication");
+
+        OpenAPI openAPI = new OpenAPI()
+                .info(info)
+                .servers(List.of(devServer))
+                .addSecurityItem(securityRequirement)
+                .schemaRequirement("Bearer Authentication", securityScheme);
 
         // Adiciona servidor de produção se configurado
         if (prodUrl != null && !prodUrl.isEmpty()) {

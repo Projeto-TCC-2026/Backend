@@ -20,6 +20,9 @@ public class User {
     @Column(nullable = false, length = 50)
     private String role;
 
+    @Column(nullable = false)
+    private Boolean active = true;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -51,7 +54,11 @@ public class User {
         this.email = email;
         this.passwordHash = passwordHash;
         this.role = role;
+        this.active = true;
     }
+
+    public Boolean getActive() { return active; }
+    public void setActive(Boolean active) { this.active = active; }
 
     // Getters and Setters
     public Long getId() {

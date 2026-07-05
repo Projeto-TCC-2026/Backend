@@ -14,6 +14,9 @@ import com.tcc.domain.repository.DoctorRepository;
 import com.tcc.domain.repository.PatientRepository;
 import com.tcc.domain.repository.RefreshTokenRepository;
 import com.tcc.domain.repository.UserRepository;
+import com.tcc.exception.InvalidTokenException;
+import com.tcc.exception.ResourceNotFoundException;
+import com.tcc.exception.UnauthorizedException;
 import com.tcc.infrastructure.security.JwtService;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Value;
@@ -64,23 +67,18 @@ public class AuthServiceImpl implements AuthService {
         User user = findAndValidateUser(request);
 
         if (!"DOCTOR".equalsIgnoreCase(user.getRole())) {
-            throw new RuntimeException("Credenciais inválidas");
+            throw new UnauthorizedException("Credenciais inválidas");
         }
 
         Doctor doctor = doctorRepository.findByUserId(user.getId())
-                .orElseThrow(() -> new RuntimeException("Perfil de médico não encontrado"));
+                .orElseThrow(() -> new ResourceNotFoundException("Perfil de médico não encontrado"));
 
         String accessToken = jwtService.generateToken(user.getEmail());
         String refreshToken = createRefreshToken(user);
 
         return new DoctorAuthResponse(
-                accessToken,
-                refreshToken,
-                user.getRole(),
-                doctor.getId(),
-                doctor.getFullName(),
-                doctor.getCrm(),
-                user.getEmail()
+                accessToken, refreshToken, user.getRole(),
+                doctor.getId(), doctor.getFullName(), doctor.getCrm(), user.getEmail()
         );
     }
 
@@ -90,22 +88,18 @@ public class AuthServiceImpl implements AuthService {
         User user = findAndValidateUser(request);
 
         if (!"PATIENT".equalsIgnoreCase(user.getRole())) {
-            throw new RuntimeException("Credenciais inválidas");
+            throw new UnauthorizedException("Credenciais inválidas");
         }
 
         Patient patient = patientRepository.findByUserId(user.getId())
-                .orElseThrow(() -> new RuntimeException("Perfil de paciente não encontrado"));
+                .orElseThrow(() -> new ResourceNotFoundException("Perfil de paciente não encontrado"));
 
         String accessToken = jwtService.generateToken(user.getEmail());
         String refreshToken = createRefreshToken(user);
 
         return new PatientAuthResponse(
-                accessToken,
-                refreshToken,
-                user.getRole(),
-                patient.getId(),
-                patient.getFullName(),
-                user.getEmail()
+                accessToken, refreshToken, user.getRole(),
+                patient.getId(), patient.getFullName(), user.getEmail()
         );
     }
 
@@ -113,13 +107,17 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public RefreshTokenResponse refresh(RefreshTokenRequest request) {
         RefreshToken refreshToken = refreshTokenRepository.findByToken(request.getRefreshToken())
-                .orElseThrow(() -> new RuntimeException("Refresh token inválido"));
+                .orElseThrow(() -> new InvalidTokenException("Refresh token inválido"));
 
-        if (!refreshToken.isValid()) {
-            throw new RuntimeException("Refresh token expirado ou revogado");
+        if (refreshToken.getRevoked()) {
+            throw new InvalidTokenException("Refresh token já foi revogado");
         }
 
-        // Rotaciona o refresh token — invalida o atual e gera um novo
+        if (refreshToken.isExpired()) {
+            throw new InvalidTokenException("Refresh token expirado");
+        }
+
+        // Rotaciona — invalida o atual e gera um novo
         refreshToken.setRevoked(true);
         refreshTokenRepository.save(refreshToken);
 
@@ -133,7 +131,7 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public void logout(RefreshTokenRequest request) {
         RefreshToken refreshToken = refreshTokenRepository.findByToken(request.getRefreshToken())
-                .orElseThrow(() -> new RuntimeException("Refresh token inválido"));
+                .orElseThrow(() -> new InvalidTokenException("Refresh token inválido"));
 
         refreshTokenRepository.revokeAllByUserId(refreshToken.getUser().getId());
     }
@@ -142,17 +140,16 @@ public class AuthServiceImpl implements AuthService {
 
     private User findAndValidateUser(LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("Credenciais inválidas"));
+                .orElseThrow(() -> new UnauthorizedException("Credenciais inválidas"));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new RuntimeException("Credenciais inválidas");
+            throw new UnauthorizedException("Credenciais inválidas");
         }
 
         return user;
     }
 
     private String createRefreshToken(User user) {
-        // Revoga tokens anteriores do usuário antes de criar um novo
         refreshTokenRepository.revokeAllByUserId(user.getId());
 
         String tokenValue = jwtService.generateRefreshToken();
