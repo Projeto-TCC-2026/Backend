@@ -1,5 +1,11 @@
 package com.tcc.infrastructure.config;
 
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
@@ -7,26 +13,22 @@ import io.swagger.v3.oas.models.info.License;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-
-import java.util.List;
 
 @Configuration
 public class OpenApiConfig {
 
-    @Value("${tcc.openapi.dev-url:http://localhost:8080}")
-    private String devUrl;
-
+    // URL de produção opcional — se definida em tcc.openapi.prod-url aparece como
+    // servidor extra no seletor do Swagger UI.
     @Value("${tcc.openapi.prod-url:}")
     private String prodUrl;
 
     @Bean
     public OpenAPI myOpenAPI() {
-        Server devServer = new Server();
-        devServer.setUrl(devUrl);
-        devServer.setDescription("Servidor de Desenvolvimento");
+        // URL relativa "/" faz o Swagger UI usar o mesmo host/porta de onde a página
+        // foi carregada, funcionando tanto em localhost quanto em qualquer IP/domínio.
+        Server defaultServer = new Server();
+        defaultServer.setUrl("/");
+        defaultServer.setDescription("Servidor atual");
 
         Contact contact = new Contact();
         contact.setEmail("contato@tcc.com");
@@ -58,16 +60,16 @@ public class OpenApiConfig {
 
         OpenAPI openAPI = new OpenAPI()
                 .info(info)
-                .servers(List.of(devServer))
+                .servers(List.of(defaultServer))
                 .addSecurityItem(securityRequirement)
                 .schemaRequirement("Bearer Authentication", securityScheme);
 
-        // Adiciona servidor de produção se configurado
+        // Adiciona servidor de produção como opção extra se configurado via propriedade
         if (prodUrl != null && !prodUrl.isEmpty()) {
             Server prodServer = new Server();
             prodServer.setUrl(prodUrl);
             prodServer.setDescription("Servidor de Produção");
-            openAPI.servers(List.of(devServer, prodServer));
+            openAPI.getServers().add(prodServer);
         }
 
         return openAPI;
