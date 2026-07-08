@@ -27,6 +27,12 @@ public class PatientMapper {
                 patient.getBirthDate(),
                 patient.getGender(),
                 patient.getPhone(),
+                patient.getEmail(),
+                patient.getAddress(),
+                patient.getCity(),
+                patient.getState(),
+                patient.getZipCode(),
+                patient.getBloodType(),
                 patient.getWeight(),
                 patient.getHeight(),
                 patient.getActive(),
@@ -53,6 +59,12 @@ public class PatientMapper {
         patient.setBirthDate(request.birthDate());
         patient.setGender(request.gender());
         patient.setPhone(request.phone());
+        patient.setEmail(request.email());
+        patient.setAddress(request.address());
+        patient.setCity(request.city());
+        patient.setState(request.state());
+        patient.setZipCode(request.zipCode());
+        patient.setBloodType(request.bloodType());
         patient.setWeight(request.weight());
         patient.setHeight(request.height());
         return patient;
@@ -64,6 +76,12 @@ public class PatientMapper {
         patient.setBirthDate(request.birthDate());
         patient.setGender(request.gender());
         patient.setPhone(request.phone());
+        patient.setEmail(request.email());
+        patient.setAddress(request.address());
+        patient.setCity(request.city());
+        patient.setState(request.state());
+        patient.setZipCode(request.zipCode());
+        patient.setBloodType(request.bloodType());
         patient.setWeight(request.weight());
         patient.setHeight(request.height());
     }

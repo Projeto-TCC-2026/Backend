@@ -164,6 +164,71 @@ public class PatientController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/search/email")
+    @PreAuthorize("hasRole('DOCTOR')")
+    @Operation(
+        summary = "Buscar pacientes por e-mail",
+        description = "Pesquisa pacientes pelo e-mail (busca parcial, case-insensitive). " +
+                      "Retorna apenas pacientes ativos. Suporta paginação e ordenação."
+    )
+    public ResponseEntity<ApiResponse<Page<PatientResponse>>> searchByEmail(
+            @Parameter(description = "E-mail do paciente (busca parcial)", example = "joao@email.com")
+            @RequestParam String email,
+            @PageableDefault(size = 10, sort = "fullName", direction = Sort.Direction.ASC) Pageable pageable) {
+        
+        Page<PatientResponse> patients = patientService.searchByEmail(email, pageable);
+        ApiResponse<Page<PatientResponse>> response = ApiResponse.success(patients);
+        
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/search/phone")
+    @PreAuthorize("hasRole('DOCTOR')")
+    @Operation(
+        summary = "Buscar pacientes por telefone",
+        description = "Pesquisa pacientes pelo telefone (busca parcial). " +
+                      "Retorna apenas pacientes ativos. Suporta paginação e ordenação."
+    )
+    public ResponseEntity<ApiResponse<Page<PatientResponse>>> searchByPhone(
+            @Parameter(description = "Telefone do paciente (busca parcial)", example = "11987654321")
+            @RequestParam String phone,
+            @PageableDefault(size = 10, sort = "fullName", direction = Sort.Direction.ASC) Pageable pageable) {
+        
+        Page<PatientResponse> patients = patientService.searchByPhone(phone, pageable);
+        ApiResponse<Page<PatientResponse>> response = ApiResponse.success(patients);
+        
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/filter")
+    @PreAuthorize("hasRole('DOCTOR')")
+    @Operation(
+        summary = "Filtrar pacientes",
+        description = "Filtra pacientes por múltiplos critérios: nome, gênero, cidade e estado. " +
+                      "Todos os parâmetros são opcionais e combinados com AND. " +
+                      "Retorna apenas pacientes ativos. Suporta paginação e ordenação."
+    )
+    public ResponseEntity<ApiResponse<Page<PatientResponse>>> filterPatients(
+            @Parameter(description = "Nome do paciente (busca parcial)")
+            @RequestParam(required = false) String name,
+            
+            @Parameter(description = "Gênero do paciente", example = "Masculino")
+            @RequestParam(required = false) String gender,
+            
+            @Parameter(description = "Cidade do paciente")
+            @RequestParam(required = false) String city,
+            
+            @Parameter(description = "Estado do paciente (sigla de 2 letras)", example = "SP")
+            @RequestParam(required = false) String state,
+            
+            @PageableDefault(size = 10, sort = "fullName", direction = Sort.Direction.ASC) Pageable pageable) {
+        
+        Page<PatientResponse> patients = patientService.filterPatients(name, gender, city, state, pageable);
+        ApiResponse<Page<PatientResponse>> response = ApiResponse.success(patients);
+        
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/{id}/procedures")
     @PreAuthorize("hasRole('DOCTOR')")
     @Operation(

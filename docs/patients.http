@@ -2,7 +2,7 @@
 ### API de Pacientes - Testes Completos
 ### ============================================
 ### Pré-requisito: ter um token JWT válido de um usuário com role DOCTOR
-### Total de Endpoints: 10 (8 CRUD + 2 Procedimentos)
+### Total de Endpoints: 14 (8 CRUD + 2 Procedimentos + 4 Buscas)
 
 @baseUrl = http://localhost:8080
 @token = seu_jwt_token_aqui
@@ -105,17 +105,55 @@ GET {{baseUrl}}/api/patients/search/cpf?cpf=12345678901&page=0&size=10
 Authorization: Bearer {{token}}
 
 ### ============================================
-### 9. GET - Listar procedimentos realizados de um paciente
+### 9. GET - Buscar pacientes por e-mail (paginado)
+### ============================================
+GET {{baseUrl}}/api/patients/search/email?email=joao&page=0&size=10
+Authorization: Bearer {{token}}
+
+### 9.1 - Buscar por e-mail completo
+GET {{baseUrl}}/api/patients/search/email?email=joao@email.com&page=0&size=10
+Authorization: Bearer {{token}}
+
+### ============================================
+### 10. GET - Buscar pacientes por telefone (paginado)
+### ============================================
+GET {{baseUrl}}/api/patients/search/phone?phone=119&page=0&size=10
+Authorization: Bearer {{token}}
+
+### 10.1 - Buscar por telefone completo
+GET {{baseUrl}}/api/patients/search/phone?phone=11987654321&page=0&size=10
+Authorization: Bearer {{token}}
+
+### ============================================
+### 11. GET - Filtrar pacientes (múltiplos critérios)
+### ============================================
+GET {{baseUrl}}/api/patients/filter?name=João&gender=MALE&city=São Paulo&state=SP&page=0&size=10
+Authorization: Bearer {{token}}
+
+### 11.1 - Filtrar apenas por nome
+GET {{baseUrl}}/api/patients/filter?name=Silva&page=0&size=10
+Authorization: Bearer {{token}}
+
+### 11.2 - Filtrar apenas por gênero
+GET {{baseUrl}}/api/patients/filter?gender=FEMALE&page=0&size=10
+Authorization: Bearer {{token}}
+
+### 11.3 - Filtrar por cidade e estado
+GET {{baseUrl}}/api/patients/filter?city=Rio de Janeiro&state=RJ&page=0&size=10
+Authorization: Bearer {{token}}
+
+### ============================================
+### 12. GET - Listar procedimentos realizados de um paciente
 ### ============================================
 GET {{baseUrl}}/api/patients/1/procedures?page=0&size=10&sort=executionDate,desc
 Authorization: Bearer {{token}}
 
-### 9.1 - Listar com paginação diferente
+### 12.1 - Listar com paginação diferente
 GET {{baseUrl}}/api/patients/1/procedures?page=0&size=5
 Authorization: Bearer {{token}}
 
 ### ============================================
-### 10. GET - Contar procedimentos realizados de um paciente
+### 13. GET - Contar procedimentos realizados de um paciente
 ### ============================================
 GET {{baseUrl}}/api/patients/1/procedures/count
 Authorization: Bearer {{token}}
@@ -230,6 +268,92 @@ Authorization: Bearer {{token}}
 # }
 
 ### ✅ Sucesso - Buscar por nome (200 OK)
+# {
+#   "success": true,
+#   "data": {
+#     "content": [
+#       {
+#         "id": 1,
+#         "fullName": "João Silva Santos",
+#         "cpf": "12345678901"
+#       },
+#       {
+#         "id": 5,
+#         "fullName": "João Carlos Mendes",
+#         "cpf": "11122233344"
+#       }
+#     ],
+#     "totalElements": 2,
+#     "totalPages": 1,
+#     "number": 0
+#   }
+# }
+
+### ✅ Sucesso - Buscar por e-mail (200 OK)
+# {
+#   "success": true,
+#   "data": {
+#     "content": [
+#       {
+#         "id": 1,
+#         "fullName": "João Silva Santos",
+#         "email": "joao@email.com",
+#         "cpf": "12345678901"
+#       }
+#     ],
+#     "totalElements": 1,
+#     "totalPages": 1,
+#     "number": 0
+#   }
+# }
+
+### ✅ Sucesso - Buscar por telefone (200 OK)
+# {
+#   "success": true,
+#   "data": {
+#     "content": [
+#       {
+#         "id": 1,
+#         "fullName": "João Silva Santos",
+#         "phone": "11987654321",
+#         "cpf": "12345678901"
+#       }
+#     ],
+#     "totalElements": 1,
+#     "totalPages": 1,
+#     "number": 0
+#   }
+# }
+
+### ✅ Sucesso - Filtrar pacientes (200 OK)
+# {
+#   "success": true,
+#   "data": {
+#     "content": [
+#       {
+#         "id": 1,
+#         "fullName": "João Silva Santos",
+#         "gender": "MALE",
+#         "city": "São Paulo",
+#         "state": "SP",
+#         "cpf": "12345678901"
+#       },
+#       {
+#         "id": 3,
+#         "fullName": "João Carlos Mendes",
+#         "gender": "MALE",
+#         "city": "São Paulo",
+#         "state": "SP",
+#         "cpf": "33344455566"
+#       }
+#     ],
+#     "totalElements": 2,
+#     "totalPages": 1,
+#     "number": 0
+#   }
+# }
+
+### ✅ Sucesso - Listar procedimentos do paciente (200 OK)
 # {
 #   "success": true,
 #   "data": {
@@ -373,7 +497,20 @@ Authorization: Bearer {{token}}
 # 3. Tentar excluir paciente com procedimentos (deve falhar)
 # 4. Verificar paginação dos procedimentos
 
-### Teste 5: Segurança
+### Teste 5: Buscas avançadas
+# 1. Buscar por e-mail parcial (GET /patients/search/email)
+# 2. Buscar por telefone parcial (GET /patients/search/phone)
+# 3. Filtrar por múltiplos critérios (GET /patients/filter)
+# 4. Testar combinações de filtros (nome+gênero, cidade+estado, etc.)
+
+### Teste 6: Validações de negócio
+# 1. Tentar criar paciente com CPF duplicado (deve falhar)
+# 2. Tentar criar paciente com e-mail duplicado (deve falhar)
+# 3. Validar formato de e-mail inválido (deve falhar)
+# 4. Validar estado com formato inválido (deve falhar)
+# 5. Validar CPF apenas com números (deve aceitar)
+
+### Teste 7: Segurança
 # 1. Tentar acessar sem token (deve retornar 401)
 # 2. Tentar acessar com token de PATIENT (deve retornar 403)
 # 3. Acessar com token de DOCTOR (deve funcionar)
@@ -389,8 +526,12 @@ Authorization: Bearer {{token}}
 # 5. Buscas retornam apenas pacientes ativos
 # 6. Paginação padrão: 10 itens, ordenado por nome
 # 7. CPF deve ser único entre pacientes ativos
-# 8. Um usuário pode estar vinculado a apenas um paciente
-# 9. Paciente com procedimentos não pode ser excluído (usar inativação)
-# 10. Endpoints de procedimentos preparados para integração futura
+# 8. E-mail deve ser único entre pacientes ativos (se fornecido)
+# 9. Estado deve ser sigla de 2 letras maiúsculas (ex: SP, RJ)
+# 10. CPF deve conter apenas números
+# 11. Paciente com procedimentos não pode ser excluído (usar inativação)
+# 12. Novos campos: email, address, city, state, zipCode, bloodType
+# 13. Filtros combinados: todos opcionais, combinados com AND
+# 14. Buscas por e-mail e telefone são case-insensitive e parciais
 # 
 ### ============================================

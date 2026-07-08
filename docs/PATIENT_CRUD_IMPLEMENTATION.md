@@ -8,7 +8,7 @@ Implementação completa do módulo CRUD de Pacientes seguindo o padrão dos mó
 
 ## 📋 Requisitos Implementados
 
-### ✅ Funcionalidades (10 Endpoints)
+### ✅ Funcionalidades (14 Endpoints)
 - **Cadastro de Paciente** - POST /api/patients
 - **Edição de Paciente** - PUT /api/patients/{id}  
 - **Busca de Paciente por ID** - GET /api/patients/{id}
@@ -17,8 +17,18 @@ Implementação completa do módulo CRUD de Pacientes seguindo o padrão dos mó
 - **Inativação de Paciente** - PATCH /api/patients/{id}/inactive (soft delete)
 - **Busca por Nome** - GET /api/patients/search/name (paginada)
 - **Busca por CPF** - GET /api/patients/search/cpf (paginada)
-- **Listar Procedimentos do Paciente** - GET /api/patients/{id}/procedures (paginada) ⭐ NOVO
-- **Contar Procedimentos do Paciente** - GET /api/patients/{id}/procedures/count ⭐ NOVO
+- **Busca por E-mail** - GET /api/patients/search/email (paginada) ⭐ NOVO
+- **Busca por Telefone** - GET /api/patients/search/phone (paginada) ⭐ NOVO
+- **Filtros Combinados** - GET /api/patients/filter (paginada) ⭐ NOVO
+- **Listar Procedimentos do Paciente** - GET /api/patients/{id}/procedures (paginada)
+- **Contar Procedimentos do Paciente** - GET /api/patients/{id}/procedures/count
+
+**NOVAS FUNCIONALIDADES AVANÇADAS:**
+- ✅ **Campos adicionais**: email, address, city, state, zipCode, bloodType
+- ✅ **Validações aprimoradas**: e-mail único, CPF apenas números, estado sigla
+- ✅ **Filtros combinados**: múltiplos critérios opcionais
+- ✅ **Índices de performance**: 7 índices para otimização de buscas
+- ✅ **Migration V20**: novos campos e índices
 
 ### ✅ Regras de Negócio
 - ✅ **Somente Doutor pode cadastrar paciente** - Implementado com `@PreAuthorize("hasRole('DOCTOR')")`
@@ -189,6 +199,9 @@ CREATE INDEX idx_patients_active ON patients(active);
 | PATCH | `/api/patients/{id}/inactive` | Inativar (soft) | Não | 200 OK |
 | GET | `/api/patients/search/name` | Buscar por nome | ✅ Sim | 200 OK |
 | GET | `/api/patients/search/cpf` | Buscar por CPF | ✅ Sim | 200 OK |
+| GET | `/api/patients/search/email` | Buscar por e-mail | ✅ Sim | 200 OK |
+| GET | `/api/patients/search/phone` | Buscar por telefone | ✅ Sim | 200 OK |
+| GET | `/api/patients/filter` | Filtros combinados | ✅ Sim | 200 OK |
 | GET | `/api/patients/{id}/procedures` | Listar procedimentos | ✅ Sim | 200 OK |
 | GET | `/api/patients/{id}/procedures/count` | Contar procedimentos | Não | 200 OK |
 

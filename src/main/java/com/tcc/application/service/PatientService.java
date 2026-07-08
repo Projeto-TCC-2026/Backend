@@ -25,6 +25,13 @@ public interface PatientService {
     
     Page<PatientResponse> searchByCpf(String cpf, Pageable pageable);
     
+    Page<PatientResponse> searchByEmail(String email, Pageable pageable);
+    
+    Page<PatientResponse> searchByPhone(String phone, Pageable pageable);
+    
+    // Filtros combinados
+    Page<PatientResponse> filterPatients(String name, String gender, String city, String state, Pageable pageable);
+    
     // Métodos de relacionamento com Procedimentos Realizados
     Page<ProcedureExecutionResponse> getPatientProcedureExecutions(Long patientId, Pageable pageable);
     

@@ -55,6 +55,13 @@ public class PatientServiceImpl implements PatientService {
             throw new BusinessException("Usuário já está associado a um paciente");
         }
 
+        // Verificar se já existe paciente com esse e-mail ativo (se fornecido)
+        if (request.email() != null && !request.email().trim().isEmpty()) {
+            if (patientRepository.existsByEmailAndActiveTrue(request.email())) {
+                throw new BusinessException("Já existe um paciente ativo cadastrado com o e-mail: " + request.email());
+            }
+        }
+
         Patient patient = patientMapper.toEntity(request, user);
         Patient savedPatient = patientRepository.save(patient);
         
@@ -87,6 +94,15 @@ public class PatientServiceImpl implements PatientService {
         if (!existingPatient.getCpf().equals(request.cpf()) && 
             patientRepository.existsByCpfAndActiveTrue(request.cpf())) {
             throw new BusinessException("Já existe um paciente ativo cadastrado com o CPF: " + request.cpf());
+        }
+
+        // Verificar se o e-mail já existe em outro paciente ativo (exceto o atual)
+        if (request.email() != null && !request.email().trim().isEmpty()) {
+            if (existingPatient.getEmail() == null || !existingPatient.getEmail().equals(request.email())) {
+                if (patientRepository.existsByEmailAndActiveTrue(request.email())) {
+                    throw new BusinessException("Já existe um paciente ativo cadastrado com o e-mail: " + request.email());
+                }
+            }
         }
 
         // Verificar se o usuário mudou e se já está associado a outro paciente
@@ -149,6 +165,27 @@ public class PatientServiceImpl implements PatientService {
     @Transactional(readOnly = true)
     public Page<PatientResponse> searchByCpf(String cpf, Pageable pageable) {
         return patientRepository.findByCpfContainingAndActiveTrue(cpf, pageable)
+                .map(patientMapper::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<PatientResponse> searchByEmail(String email, Pageable pageable) {
+        return patientRepository.findByEmailContainingIgnoreCaseAndActiveTrue(email, pageable)
+                .map(patientMapper::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<PatientResponse> searchByPhone(String phone, Pageable pageable) {
+        return patientRepository.findByPhoneContainingAndActiveTrue(phone, pageable)
+                .map(patientMapper::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<PatientResponse> filterPatients(String name, String gender, String city, String state, Pageable pageable) {
+        return patientRepository.findByFilters(name, gender, city, state, pageable)
                 .map(patientMapper::toResponse);
     }
 
