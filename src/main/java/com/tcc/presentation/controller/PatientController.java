@@ -3,6 +3,7 @@ package com.tcc.presentation.controller;
 import com.tcc.application.dto.request.PatientRequest;
 import com.tcc.application.dto.response.ApiResponse;
 import com.tcc.application.dto.response.PatientResponse;
+import com.tcc.application.dto.response.ProcedureExecutionResponse;
 import com.tcc.application.service.PatientService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -159,6 +160,40 @@ public class PatientController {
         
         Page<PatientResponse> patients = patientService.searchByCpf(cpf, pageable);
         ApiResponse<Page<PatientResponse>> response = ApiResponse.success(patients);
+        
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}/procedures")
+    @PreAuthorize("hasRole('DOCTOR')")
+    @Operation(
+        summary = "Listar procedimentos realizados de um paciente",
+        description = "Retorna todos os procedimentos realizados (ProcedureExecution) associados a um paciente específico. " +
+                      "Suporta paginação e ordenação. Preparado para integração futura com o módulo de Procedimentos."
+    )
+    public ResponseEntity<ApiResponse<Page<ProcedureExecutionResponse>>> getPatientProcedures(
+            @Parameter(description = "ID do paciente", example = "1", required = true)
+            @PathVariable Long id,
+            @PageableDefault(size = 10, sort = "executionDate", direction = Sort.Direction.DESC) Pageable pageable) {
+        
+        Page<ProcedureExecutionResponse> procedures = patientService.getPatientProcedureExecutions(id, pageable);
+        ApiResponse<Page<ProcedureExecutionResponse>> response = ApiResponse.success(procedures);
+        
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}/procedures/count")
+    @PreAuthorize("hasRole('DOCTOR')")
+    @Operation(
+        summary = "Contar procedimentos realizados de um paciente",
+        description = "Retorna o total de procedimentos realizados associados a um paciente específico"
+    )
+    public ResponseEntity<ApiResponse<Long>> countPatientProcedures(
+            @Parameter(description = "ID do paciente", example = "1", required = true)
+            @PathVariable Long id) {
+        
+        Long count = patientService.countPatientProcedureExecutions(id);
+        ApiResponse<Long> response = ApiResponse.success(count);
         
         return ResponseEntity.ok(response);
     }

@@ -2,10 +2,13 @@ package com.tcc.application.service;
 
 import com.tcc.application.dto.request.PatientRequest;
 import com.tcc.application.dto.response.PatientResponse;
+import com.tcc.application.dto.response.ProcedureExecutionResponse;
 import com.tcc.application.mapper.PatientMapper;
+import com.tcc.application.mapper.ProcedureExecutionMapper;
 import com.tcc.domain.model.Patient;
 import com.tcc.domain.model.User;
 import com.tcc.domain.repository.PatientRepository;
+import com.tcc.domain.repository.ProcedureExecutionRepository;
 import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.BusinessException;
 import com.tcc.exception.ResourceNotFoundException;
@@ -19,14 +22,20 @@ public class PatientServiceImpl implements PatientService {
 
     private final PatientRepository patientRepository;
     private final UserRepository userRepository;
+    private final ProcedureExecutionRepository procedureExecutionRepository;
     private final PatientMapper patientMapper;
+    private final ProcedureExecutionMapper procedureExecutionMapper;
 
     public PatientServiceImpl(PatientRepository patientRepository, 
                              UserRepository userRepository,
-                             PatientMapper patientMapper) {
+                             ProcedureExecutionRepository procedureExecutionRepository,
+                             PatientMapper patientMapper,
+                             ProcedureExecutionMapper procedureExecutionMapper) {
         this.patientRepository = patientRepository;
         this.userRepository = userRepository;
+        this.procedureExecutionRepository = procedureExecutionRepository;
         this.patientMapper = patientMapper;
+        this.procedureExecutionMapper = procedureExecutionMapper;
     }
 
     @Override
@@ -104,10 +113,17 @@ public class PatientServiceImpl implements PatientService {
         Patient patient = patientRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Paciente não encontrado com ID: " + id));
 
-        // Verificar se há relacionamentos que impedem a exclusão
-        // Por exemplo, verificar se há leituras de saúde, procedimentos, etc.
-        // Para agora, vamos permitir a exclusão direta
-        // Se necessário, adicionar validações de relacionamento aqui
+        // Verificar se há procedimentos realizados associados
+        if (patient.hasProcedureExecutions()) {
+            throw new BusinessException("Não é possível excluir o paciente. Existem " + 
+                    patient.countProcedureExecutions() + " procedimento(s) realizado(s) associado(s). " +
+                    "Use a inativação ao invés da exclusão para manter o histórico.");
+        }
+
+        // Verificar outros relacionamentos críticos se necessário
+        if (!patient.getHealthReadings().isEmpty()) {
+            throw new BusinessException("Não é possível excluir o paciente. Existem leituras de saúde associadas.");
+        }
 
         patientRepository.delete(patient);
     }
@@ -134,5 +150,28 @@ public class PatientServiceImpl implements PatientService {
     public Page<PatientResponse> searchByCpf(String cpf, Pageable pageable) {
         return patientRepository.findByCpfContainingAndActiveTrue(cpf, pageable)
                 .map(patientMapper::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ProcedureExecutionResponse> getPatientProcedureExecutions(Long patientId, Pageable pageable) {
+        // Verificar se o paciente existe e está ativo
+        Patient patient = patientRepository.findByIdAndActiveTrue(patientId)
+                .orElseThrow(() -> new ResourceNotFoundException("Paciente não encontrado com ID: " + patientId));
+
+        // Buscar os procedimentos realizados do paciente com paginação
+        return procedureExecutionRepository.findByPatientId(patientId, pageable)
+                .map(procedureExecutionMapper::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Long countPatientProcedureExecutions(Long patientId) {
+        // Verificar se o paciente existe e está ativo
+        Patient patient = patientRepository.findByIdAndActiveTrue(patientId)
+                .orElseThrow(() -> new ResourceNotFoundException("Paciente não encontrado com ID: " + patientId));
+
+        // Contar os procedimentos realizados do paciente
+        return procedureExecutionRepository.countByPatientId(patientId);
     }
 }

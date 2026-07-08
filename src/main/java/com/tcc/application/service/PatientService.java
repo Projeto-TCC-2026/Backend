@@ -2,6 +2,7 @@ package com.tcc.application.service;
 
 import com.tcc.application.dto.request.PatientRequest;
 import com.tcc.application.dto.response.PatientResponse;
+import com.tcc.application.dto.response.ProcedureExecutionResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -23,4 +24,9 @@ public interface PatientService {
     Page<PatientResponse> searchByName(String name, Pageable pageable);
     
     Page<PatientResponse> searchByCpf(String cpf, Pageable pageable);
+    
+    // Métodos de relacionamento com Procedimentos Realizados
+    Page<ProcedureExecutionResponse> getPatientProcedureExecutions(Long patientId, Pageable pageable);
+    
+    Long countPatientProcedureExecutions(Long patientId);
 }

@@ -63,6 +63,9 @@ public class Patient {
     @OneToMany(mappedBy = "patient", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Alert> alerts = new ArrayList<>();
 
+    @OneToMany(mappedBy = "patient", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<ProcedureExecution> procedureExecutions = new ArrayList<>();
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -214,6 +217,14 @@ public class Patient {
         this.alerts = alerts;
     }
 
+    public List<ProcedureExecution> getProcedureExecutions() {
+        return procedureExecutions;
+    }
+
+    public void setProcedureExecutions(List<ProcedureExecution> procedureExecutions) {
+        this.procedureExecutions = procedureExecutions;
+    }
+
     public Boolean getActive() {
         return active;
     }
@@ -229,5 +240,31 @@ public class Patient {
 
     public boolean isActive() {
         return active != null && active;
+    }
+
+    // Métodos de negócio para Procedimentos Realizados
+    public void addProcedureExecution(ProcedureExecution procedureExecution) {
+        this.procedureExecutions.add(procedureExecution);
+        procedureExecution.setPatient(this);
+    }
+
+    public void removeProcedureExecution(ProcedureExecution procedureExecution) {
+        this.procedureExecutions.remove(procedureExecution);
+        procedureExecution.setPatient(null);
+    }
+
+    public List<ProcedureExecution> getActiveProcedureExecutions() {
+        // Retorna apenas procedimentos não cancelados
+        return procedureExecutions.stream()
+                .filter(pe -> !"CANCELLED".equals(pe.getStatus()))
+                .toList();
+    }
+
+    public long countProcedureExecutions() {
+        return procedureExecutions.size();
+    }
+
+    public boolean hasProcedureExecutions() {
+        return !procedureExecutions.isEmpty();
     }
 }

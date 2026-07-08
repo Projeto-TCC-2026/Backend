@@ -2,7 +2,7 @@
 ### API de Pacientes - Testes Completos
 ### ============================================
 ### Pré-requisito: ter um token JWT válido de um usuário com role DOCTOR
-### Total de Endpoints: 8
+### Total de Endpoints: 10 (8 CRUD + 2 Procedimentos)
 
 @baseUrl = http://localhost:8080
 @token = seu_jwt_token_aqui
@@ -102,6 +102,22 @@ Authorization: Bearer {{token}}
 
 ### 8.1 - Buscar por CPF completo
 GET {{baseUrl}}/api/patients/search/cpf?cpf=12345678901&page=0&size=10
+Authorization: Bearer {{token}}
+
+### ============================================
+### 9. GET - Listar procedimentos realizados de um paciente
+### ============================================
+GET {{baseUrl}}/api/patients/1/procedures?page=0&size=10&sort=executionDate,desc
+Authorization: Bearer {{token}}
+
+### 9.1 - Listar com paginação diferente
+GET {{baseUrl}}/api/patients/1/procedures?page=0&size=5
+Authorization: Bearer {{token}}
+
+### ============================================
+### 10. GET - Contar procedimentos realizados de um paciente
+### ============================================
+GET {{baseUrl}}/api/patients/1/procedures/count
 Authorization: Bearer {{token}}
 
 ### ============================================
@@ -235,6 +251,48 @@ Authorization: Bearer {{token}}
 #   }
 # }
 
+### ✅ Sucesso - Listar procedimentos do paciente (200 OK)
+# {
+#   "success": true,
+#   "data": {
+#     "content": [
+#       {
+#         "id": 1,
+#         "patientProcedure": {
+#           "id": 5,
+#           "status": "IN_PROGRESS"
+#         },
+#         "procedure": {
+#           "id": 2,
+#           "name": "Curativos",
+#           "description": "Troca de curativos"
+#         },
+#         "doctor": {
+#           "id": 3,
+#           "fullName": "Dr. Carlos Alberto"
+#         },
+#         "patient": {
+#           "id": 1,
+#           "fullName": "João Silva Santos"
+#         },
+#         "executionDate": "2024-01-15T10:30:00",
+#         "status": "COMPLETED",
+#         "observations": "Procedimento realizado com sucesso"
+#       }
+#     ],
+#     "totalElements": 5,
+#     "totalPages": 1,
+#     "size": 10,
+#     "number": 0
+#   }
+# }
+
+### ✅ Sucesso - Contar procedimentos (200 OK)
+# {
+#   "success": true,
+#   "data": 25
+# }
+
 ### ============================================
 ### EXEMPLOS DE ERROS
 ### ============================================
@@ -309,7 +367,13 @@ Authorization: Bearer {{token}}
 # 3. Testar paginação (page=0, page=1, etc.)
 # 4. Testar ordenação (asc, desc)
 
-### Teste 4: Segurança
+### Teste 4: Relacionamento com Procedimentos
+# 1. Listar procedimentos de um paciente (GET /patients/{id}/procedures)
+# 2. Contar procedimentos de um paciente (GET /patients/{id}/procedures/count)
+# 3. Tentar excluir paciente com procedimentos (deve falhar)
+# 4. Verificar paginação dos procedimentos
+
+### Teste 5: Segurança
 # 1. Tentar acessar sem token (deve retornar 401)
 # 2. Tentar acessar com token de PATIENT (deve retornar 403)
 # 3. Acessar com token de DOCTOR (deve funcionar)
@@ -326,5 +390,7 @@ Authorization: Bearer {{token}}
 # 6. Paginação padrão: 10 itens, ordenado por nome
 # 7. CPF deve ser único entre pacientes ativos
 # 8. Um usuário pode estar vinculado a apenas um paciente
+# 9. Paciente com procedimentos não pode ser excluído (usar inativação)
+# 10. Endpoints de procedimentos preparados para integração futura
 # 
 ### ============================================

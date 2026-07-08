@@ -8,7 +8,7 @@ Implementação completa do módulo CRUD de Pacientes seguindo o padrão dos mó
 
 ## 📋 Requisitos Implementados
 
-### ✅ Funcionalidades (8 Endpoints)
+### ✅ Funcionalidades (10 Endpoints)
 - **Cadastro de Paciente** - POST /api/patients
 - **Edição de Paciente** - PUT /api/patients/{id}  
 - **Busca de Paciente por ID** - GET /api/patients/{id}
@@ -17,6 +17,8 @@ Implementação completa do módulo CRUD de Pacientes seguindo o padrão dos mó
 - **Inativação de Paciente** - PATCH /api/patients/{id}/inactive (soft delete)
 - **Busca por Nome** - GET /api/patients/search/name (paginada)
 - **Busca por CPF** - GET /api/patients/search/cpf (paginada)
+- **Listar Procedimentos do Paciente** - GET /api/patients/{id}/procedures (paginada) ⭐ NOVO
+- **Contar Procedimentos do Paciente** - GET /api/patients/{id}/procedures/count ⭐ NOVO
 
 ### ✅ Regras de Negócio
 - ✅ **Somente Doutor pode cadastrar paciente** - Implementado com `@PreAuthorize("hasRole('DOCTOR')")`
@@ -187,6 +189,8 @@ CREATE INDEX idx_patients_active ON patients(active);
 | PATCH | `/api/patients/{id}/inactive` | Inativar (soft) | Não | 200 OK |
 | GET | `/api/patients/search/name` | Buscar por nome | ✅ Sim | 200 OK |
 | GET | `/api/patients/search/cpf` | Buscar por CPF | ✅ Sim | 200 OK |
+| GET | `/api/patients/{id}/procedures` | Listar procedimentos | ✅ Sim | 200 OK |
+| GET | `/api/patients/{id}/procedures/count` | Contar procedimentos | Não | 200 OK |
 
 ### Detalhamento dos Endpoints
 
