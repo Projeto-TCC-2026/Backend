@@ -6,6 +6,7 @@ import com.tcc.application.dto.response.AuthResponse;
 import com.tcc.application.dto.response.DoctorAuthResponse;
 import com.tcc.application.dto.response.PatientAuthResponse;
 import com.tcc.application.dto.response.RefreshTokenResponse;
+import com.tcc.application.dto.response.UserProfileResponse;
 
 public interface AuthService {
 
@@ -18,4 +19,6 @@ public interface AuthService {
     RefreshTokenResponse refresh(RefreshTokenRequest request);
 
     void logout(RefreshTokenRequest request);
+
+    UserProfileResponse getProfile(String email);
 }

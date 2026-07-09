@@ -2,6 +2,7 @@ package com.tcc.application.service;
 
 import com.tcc.application.dto.request.UserRequest;
 import com.tcc.application.dto.response.UserResponse;
+import com.tcc.domain.model.Role;
 import com.tcc.domain.model.User;
 import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.BusinessException;
@@ -30,12 +31,12 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException("Já existe um usuário cadastrado com o e-mail: " + request.email());
         }
 
-        validateRole(request.role());
+        Role role = parseRole(request.role());
 
         User user = new User(
                 request.email(),
                 passwordEncoder.encode(request.password()),
-                request.role().toUpperCase()
+                role
         );
 
         return toResponse(userRepository.save(user));
@@ -71,7 +72,7 @@ public class UserServiceImpl implements UserService {
 
         user.setEmail(request.email());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
-        user.setRole(request.role().toUpperCase());
+        user.setRole(parseRole(request.role()));
 
         return toResponse(userRepository.save(user));
     }
@@ -89,19 +90,23 @@ public class UserServiceImpl implements UserService {
 
     // --- Helpers ---
 
-    private void validateRole(String role) {
-        if (!role.equalsIgnoreCase("ADMIN") &&
-            !role.equalsIgnoreCase("DOCTOR") &&
-            !role.equalsIgnoreCase("PATIENT")) {
+    private Role parseRole(String role) {
+        try {
+            return Role.valueOf(role.toUpperCase());
+        } catch (IllegalArgumentException e) {
             throw new BusinessException("Role inválida. Valores aceitos: ADMIN, DOCTOR, PATIENT");
         }
+    }
+
+    private void validateRole(String role) {
+        parseRole(role);
     }
 
     private UserResponse toResponse(User user) {
         return new UserResponse(
                 user.getId(),
                 user.getEmail(),
-                user.getRole(),
+                user.getRole().name(),
                 user.getCreatedAt(),
                 user.getUpdatedAt()
         );

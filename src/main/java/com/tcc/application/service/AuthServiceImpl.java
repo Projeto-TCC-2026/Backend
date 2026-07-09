@@ -6,9 +6,11 @@ import com.tcc.application.dto.response.AuthResponse;
 import com.tcc.application.dto.response.DoctorAuthResponse;
 import com.tcc.application.dto.response.PatientAuthResponse;
 import com.tcc.application.dto.response.RefreshTokenResponse;
+import com.tcc.application.dto.response.UserProfileResponse;
 import com.tcc.domain.model.Doctor;
 import com.tcc.domain.model.Patient;
 import com.tcc.domain.model.RefreshToken;
+import com.tcc.domain.model.Role;
 import com.tcc.domain.model.User;
 import com.tcc.domain.repository.DoctorRepository;
 import com.tcc.domain.repository.PatientRepository;
@@ -58,7 +60,7 @@ public class AuthServiceImpl implements AuthService {
         User user = findAndValidateUser(request);
         String accessToken = jwtService.generateToken(user.getEmail());
         String refreshToken = createRefreshToken(user);
-        return new AuthResponse(accessToken, refreshToken, user.getEmail(), user.getRole());
+        return new AuthResponse(accessToken, refreshToken, user.getEmail(), user.getRole().name());
     }
 
     @Override
@@ -66,7 +68,7 @@ public class AuthServiceImpl implements AuthService {
     public DoctorAuthResponse loginDoctor(LoginRequest request) {
         User user = findAndValidateUser(request);
 
-        if (!"DOCTOR".equalsIgnoreCase(user.getRole())) {
+        if (user.getRole() != Role.DOCTOR) {
             throw new UnauthorizedException("Credenciais inválidas");
         }
 
@@ -77,7 +79,7 @@ public class AuthServiceImpl implements AuthService {
         String refreshToken = createRefreshToken(user);
 
         return new DoctorAuthResponse(
-                accessToken, refreshToken, user.getRole(),
+                accessToken, refreshToken, user.getRole().name(),
                 doctor.getId(), doctor.getFullName(), doctor.getCrm(), user.getEmail()
         );
     }
@@ -87,7 +89,7 @@ public class AuthServiceImpl implements AuthService {
     public PatientAuthResponse loginPatient(LoginRequest request) {
         User user = findAndValidateUser(request);
 
-        if (!"PATIENT".equalsIgnoreCase(user.getRole())) {
+        if (user.getRole() != Role.PATIENT) {
             throw new UnauthorizedException("Credenciais inválidas");
         }
 
@@ -98,7 +100,7 @@ public class AuthServiceImpl implements AuthService {
         String refreshToken = createRefreshToken(user);
 
         return new PatientAuthResponse(
-                accessToken, refreshToken, user.getRole(),
+                accessToken, refreshToken, user.getRole().name(),
                 patient.getId(), patient.getFullName(), user.getEmail()
         );
     }
@@ -134,6 +136,27 @@ public class AuthServiceImpl implements AuthService {
                 .orElseThrow(() -> new InvalidTokenException("Refresh token inválido"));
 
         refreshTokenRepository.revokeAllByUserId(refreshToken.getUser().getId());
+    }
+
+    @Override
+    public UserProfileResponse getProfile(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado"));
+
+        if (user.getRole() == Role.DOCTOR) {
+            Doctor doctor = doctorRepository.findByUserId(user.getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Perfil de médico não encontrado"));
+
+            String hospitalName = doctor.getHospital() != null ? doctor.getHospital().getName() : null;
+
+            return new UserProfileResponse(
+                    user.getId(), user.getEmail(), user.getRole().name(), doctor.getFullName(),
+                    doctor.getId(), doctor.getCrm(), doctor.getSpecialty(), hospitalName
+            );
+        }
+
+        // ADMIN or other roles — base fields only
+        return new UserProfileResponse(user.getId(), user.getEmail(), user.getRole().name());
     }
 
     // --- Helpers ---

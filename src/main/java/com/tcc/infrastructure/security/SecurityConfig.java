@@ -57,6 +57,7 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/api-docs/**"
                         ).permitAll()
+                        .requestMatchers("/auth/me").authenticated()
                         .requestMatchers("/api/doctors/**").hasRole("DOCTOR")
                         .requestMatchers("/api/patients/**").hasRole("DOCTOR")
                         .requestMatchers("/api/users/**").hasRole("ADMIN")
