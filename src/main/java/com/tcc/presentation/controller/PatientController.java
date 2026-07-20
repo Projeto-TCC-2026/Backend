@@ -3,18 +3,21 @@ package com.tcc.presentation.controller;
 import com.tcc.application.dto.request.PatientRequest;
 import com.tcc.application.dto.response.ApiResponse;
 import com.tcc.application.dto.response.PatientResponse;
+import com.tcc.application.dto.response.ProcedureExecutionResponse;
 import com.tcc.application.service.PatientService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/patients")
@@ -47,11 +50,14 @@ public class PatientController {
     @PreAuthorize("hasRole('DOCTOR')")
     @Operation(
         summary = "Listar todos os pacientes ativos",
-        description = "Retorna uma lista de todos os pacientes ativos cadastrados no sistema"
+        description = "Retorna uma lista paginada de todos os pacientes ativos cadastrados no sistema. " +
+                      "Suporta paginação (page, size) e ordenação (sort)."
     )
-    public ResponseEntity<ApiResponse<List<PatientResponse>>> getAllPatients() {
-        List<PatientResponse> patients = patientService.getAllActivePatients();
-        ApiResponse<List<PatientResponse>> response = ApiResponse.success(patients);
+    public ResponseEntity<ApiResponse<Page<PatientResponse>>> getAllPatients(
+            @PageableDefault(size = 10, sort = "fullName", direction = Sort.Direction.ASC) Pageable pageable) {
+        
+        Page<PatientResponse> patients = patientService.getAllActivePatients(pageable);
+        ApiResponse<Page<PatientResponse>> response = ApiResponse.success(patients);
         
         return ResponseEntity.ok(response);
     }
@@ -89,6 +95,23 @@ public class PatientController {
         return ResponseEntity.ok(response);
     }
 
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('DOCTOR')")
+    @Operation(
+        summary = "Excluir paciente",
+        description = "Remove um paciente do sistema permanentemente (hard delete). " +
+                      "Use com cautela, pois esta ação é irreversível."
+    )
+    public ResponseEntity<ApiResponse<Void>> deletePatient(
+            @Parameter(description = "ID do paciente", example = "1", required = true)
+            @PathVariable Long id) {
+        
+        patientService.deletePatient(id);
+        ApiResponse<Void> response = ApiResponse.success();
+        
+        return ResponseEntity.ok(response);
+    }
+
     @PatchMapping("/{id}/inactive")
     @PreAuthorize("hasRole('DOCTOR')")
     @Operation(
@@ -101,6 +124,141 @@ public class PatientController {
         
         patientService.inactivatePatient(id);
         ApiResponse<Void> response = ApiResponse.success();
+        
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/search/name")
+    @PreAuthorize("hasRole('DOCTOR')")
+    @Operation(
+        summary = "Buscar pacientes por nome",
+        description = "Pesquisa pacientes pelo nome completo (busca parcial, case-insensitive). " +
+                      "Retorna apenas pacientes ativos. Suporta paginação e ordenação."
+    )
+    public ResponseEntity<ApiResponse<Page<PatientResponse>>> searchByName(
+            @Parameter(description = "Nome do paciente (busca parcial)", example = "João Silva")
+            @RequestParam String name,
+            @PageableDefault(size = 10, sort = "fullName", direction = Sort.Direction.ASC) Pageable pageable) {
+        
+        Page<PatientResponse> patients = patientService.searchByName(name, pageable);
+        ApiResponse<Page<PatientResponse>> response = ApiResponse.success(patients);
+        
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/search/cpf")
+    @PreAuthorize("hasRole('DOCTOR')")
+    @Operation(
+        summary = "Buscar pacientes por CPF",
+        description = "Pesquisa pacientes pelo CPF (busca parcial). " +
+                      "Retorna apenas pacientes ativos. Suporta paginação e ordenação."
+    )
+    public ResponseEntity<ApiResponse<Page<PatientResponse>>> searchByCpf(
+            @Parameter(description = "CPF do paciente (busca parcial)", example = "123.456.789-00")
+            @RequestParam String cpf,
+            @PageableDefault(size = 10, sort = "fullName", direction = Sort.Direction.ASC) Pageable pageable) {
+        
+        Page<PatientResponse> patients = patientService.searchByCpf(cpf, pageable);
+        ApiResponse<Page<PatientResponse>> response = ApiResponse.success(patients);
+        
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/search/email")
+    @PreAuthorize("hasRole('DOCTOR')")
+    @Operation(
+        summary = "Buscar pacientes por e-mail",
+        description = "Pesquisa pacientes pelo e-mail (busca parcial, case-insensitive). " +
+                      "Retorna apenas pacientes ativos. Suporta paginação e ordenação."
+    )
+    public ResponseEntity<ApiResponse<Page<PatientResponse>>> searchByEmail(
+            @Parameter(description = "E-mail do paciente (busca parcial)", example = "joao@email.com")
+            @RequestParam String email,
+            @PageableDefault(size = 10, sort = "fullName", direction = Sort.Direction.ASC) Pageable pageable) {
+        
+        Page<PatientResponse> patients = patientService.searchByEmail(email, pageable);
+        ApiResponse<Page<PatientResponse>> response = ApiResponse.success(patients);
+        
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/search/phone")
+    @PreAuthorize("hasRole('DOCTOR')")
+    @Operation(
+        summary = "Buscar pacientes por telefone",
+        description = "Pesquisa pacientes pelo telefone (busca parcial). " +
+                      "Retorna apenas pacientes ativos. Suporta paginação e ordenação."
+    )
+    public ResponseEntity<ApiResponse<Page<PatientResponse>>> searchByPhone(
+            @Parameter(description = "Telefone do paciente (busca parcial)", example = "11987654321")
+            @RequestParam String phone,
+            @PageableDefault(size = 10, sort = "fullName", direction = Sort.Direction.ASC) Pageable pageable) {
+        
+        Page<PatientResponse> patients = patientService.searchByPhone(phone, pageable);
+        ApiResponse<Page<PatientResponse>> response = ApiResponse.success(patients);
+        
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/filter")
+    @PreAuthorize("hasRole('DOCTOR')")
+    @Operation(
+        summary = "Filtrar pacientes",
+        description = "Filtra pacientes por múltiplos critérios: nome, gênero, cidade e estado. " +
+                      "Todos os parâmetros são opcionais e combinados com AND. " +
+                      "Retorna apenas pacientes ativos. Suporta paginação e ordenação."
+    )
+    public ResponseEntity<ApiResponse<Page<PatientResponse>>> filterPatients(
+            @Parameter(description = "Nome do paciente (busca parcial)")
+            @RequestParam(required = false) String name,
+            
+            @Parameter(description = "Gênero do paciente", example = "Masculino")
+            @RequestParam(required = false) String gender,
+            
+            @Parameter(description = "Cidade do paciente")
+            @RequestParam(required = false) String city,
+            
+            @Parameter(description = "Estado do paciente (sigla de 2 letras)", example = "SP")
+            @RequestParam(required = false) String state,
+            
+            @PageableDefault(size = 10, sort = "fullName", direction = Sort.Direction.ASC) Pageable pageable) {
+        
+        Page<PatientResponse> patients = patientService.filterPatients(name, gender, city, state, pageable);
+        ApiResponse<Page<PatientResponse>> response = ApiResponse.success(patients);
+        
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}/procedures")
+    @PreAuthorize("hasRole('DOCTOR')")
+    @Operation(
+        summary = "Listar procedimentos realizados de um paciente",
+        description = "Retorna todos os procedimentos realizados (ProcedureExecution) associados a um paciente específico. " +
+                      "Suporta paginação e ordenação. Preparado para integração futura com o módulo de Procedimentos."
+    )
+    public ResponseEntity<ApiResponse<Page<ProcedureExecutionResponse>>> getPatientProcedures(
+            @Parameter(description = "ID do paciente", example = "1", required = true)
+            @PathVariable Long id,
+            @PageableDefault(size = 10, sort = "executionDate", direction = Sort.Direction.DESC) Pageable pageable) {
+        
+        Page<ProcedureExecutionResponse> procedures = patientService.getPatientProcedureExecutions(id, pageable);
+        ApiResponse<Page<ProcedureExecutionResponse>> response = ApiResponse.success(procedures);
+        
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}/procedures/count")
+    @PreAuthorize("hasRole('DOCTOR')")
+    @Operation(
+        summary = "Contar procedimentos realizados de um paciente",
+        description = "Retorna o total de procedimentos realizados associados a um paciente específico"
+    )
+    public ResponseEntity<ApiResponse<Long>> countPatientProcedures(
+            @Parameter(description = "ID do paciente", example = "1", required = true)
+            @PathVariable Long id) {
+        
+        Long count = patientService.countPatientProcedureExecutions(id);
+        ApiResponse<Long> response = ApiResponse.success(count);
         
         return ResponseEntity.ok(response);
     }

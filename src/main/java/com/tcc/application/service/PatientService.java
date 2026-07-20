@@ -2,18 +2,38 @@ package com.tcc.application.service;
 
 import com.tcc.application.dto.request.PatientRequest;
 import com.tcc.application.dto.response.PatientResponse;
-
-import java.util.List;
+import com.tcc.application.dto.response.ProcedureExecutionResponse;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 public interface PatientService {
     
     PatientResponse createPatient(PatientRequest request);
     
-    List<PatientResponse> getAllActivePatients();
+    Page<PatientResponse> getAllActivePatients(Pageable pageable);
     
     PatientResponse getPatientById(Long id);
     
     PatientResponse updatePatient(Long id, PatientRequest request);
     
+    void deletePatient(Long id);
+    
     void inactivatePatient(Long id);
+    
+    // Buscas adicionais
+    Page<PatientResponse> searchByName(String name, Pageable pageable);
+    
+    Page<PatientResponse> searchByCpf(String cpf, Pageable pageable);
+    
+    Page<PatientResponse> searchByEmail(String email, Pageable pageable);
+    
+    Page<PatientResponse> searchByPhone(String phone, Pageable pageable);
+    
+    // Filtros combinados
+    Page<PatientResponse> filterPatients(String name, String gender, String city, String state, Pageable pageable);
+    
+    // Métodos de relacionamento com Procedimentos Realizados
+    Page<ProcedureExecutionResponse> getPatientProcedureExecutions(Long patientId, Pageable pageable);
+    
+    Long countPatientProcedureExecutions(Long patientId);
 }
