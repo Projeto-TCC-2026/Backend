@@ -31,4 +31,11 @@ public interface HospitalRepository extends JpaRepository<Hospital, Long> {
         @Param("state") String state,
         Pageable pageable
     );
+    
+    // Dashboard queries - Consultas otimizadas com COUNT
+    @Query("SELECT COUNT(h) FROM Hospital h")
+    Long countTotalHospitals();
+    
+    // Note: Hospital doesn't have active field, so we count all as active
+    // If you want to add active/inactive logic, add the field to Hospital entity first
 }

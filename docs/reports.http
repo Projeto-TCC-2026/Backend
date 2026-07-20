@@ -1,0 +1,31 @@
+### Variáveis
+@baseUrl = http://localhost:8080/api
+@token = Bearer YOUR_JWT_TOKEN_HERE
+
+### 1. Relatório de Pacientes por Hospital
+GET {{baseUrl}}/reports/patients-by-hospital
+Authorization: {{token}}
+
+### 2. Relatório de Doutores por Hospital
+GET {{baseUrl}}/reports/doctors-by-hospital
+Authorization: {{token}}
+
+### 3. Relatório de Procedimentos por Doutor
+GET {{baseUrl}}/reports/procedures-by-doctor
+Authorization: {{token}}
+
+### 4. Relatório de Procedimentos por Período (últimos 12 meses)
+GET {{baseUrl}}/reports/procedures-by-period?startDate=2025-01-01T00:00:00&endDate=2026-12-31T23:59:59
+Authorization: {{token}}
+
+### 5. Relatório de Procedimentos por Período (último mês)
+GET {{baseUrl}}/reports/procedures-by-period?startDate=2026-06-01T00:00:00&endDate=2026-06-30T23:59:59
+Authorization: {{token}}
+
+### 6. Relatório de Procedimentos por Período (ano atual)
+GET {{baseUrl}}/reports/procedures-by-period?startDate=2026-01-01T00:00:00&endDate=2026-12-31T23:59:59
+Authorization: {{token}}
+
+### 7. Relatório com datas inválidas (deve retornar erro)
+GET {{baseUrl}}/reports/procedures-by-period?startDate=2026-12-31T23:59:59&endDate=2026-01-01T00:00:00
+Authorization: {{token}}

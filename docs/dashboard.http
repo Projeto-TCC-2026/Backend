@@ -1,0 +1,19 @@
+### Variáveis
+@baseUrl = http://localhost:8080/api
+@token = Bearer YOUR_JWT_TOKEN_HERE
+
+### 1. Dashboard Administrativo
+GET {{baseUrl}}/dashboard/admin
+Authorization: {{token}}
+
+### 2. Dashboard do Hospital (ID 1)
+GET {{baseUrl}}/dashboard/hospital/1
+Authorization: {{token}}
+
+### 3. Dashboard do Hospital (ID 2)
+GET {{baseUrl}}/dashboard/hospital/2
+Authorization: {{token}}
+
+### 4. Dashboard de Hospital Inexistente (deve retornar 404)
+GET {{baseUrl}}/dashboard/hospital/999
+Authorization: {{token}}
