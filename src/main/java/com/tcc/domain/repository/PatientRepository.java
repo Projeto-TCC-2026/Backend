@@ -24,7 +24,8 @@ public interface PatientRepository extends JpaRepository<Patient, Long> {
     List<Patient> findByActiveTrue();
     
     // Buscar apenas pacientes ativos (com paginação)
-    Page<Patient> findByActiveTrue(Pageable pageable);
+    @Query("SELECT p FROM Patient p WHERE p.active = true")
+    Page<Patient> findPagedByActiveTrue(Pageable pageable);
     
     // Buscar paciente ativo por ID
     Optional<Patient> findByIdAndActiveTrue(Long id);
