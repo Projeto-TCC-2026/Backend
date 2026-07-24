@@ -11,6 +11,7 @@ public record HospitalResponse(
         String address,
         String city,
         String state,
+        Boolean active,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {}

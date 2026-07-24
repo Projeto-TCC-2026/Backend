@@ -16,6 +16,8 @@ public interface AuthService {
 
     PatientAuthResponse loginPatient(LoginRequest request);
 
+    AuthResponse loginAdmin(LoginRequest request);
+
     RefreshTokenResponse refresh(RefreshTokenRequest request);
 
     void logout(RefreshTokenRequest request);

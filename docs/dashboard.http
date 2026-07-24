@@ -1,0 +1,341 @@
+### ===========================================
+### DASHBOARD ADMINISTRATIVO - TESTES
+### ===========================================
+
+### Variables
+@host = http://localhost:8080
+@adminEmail = admin@sistema.com
+@adminPassword = admin123
+
+### ===========================================
+### 1. AUTENTICAÇÃO
+### ===========================================
+
+### Login como administrador
+POST {{host}}/auth/admin/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+> {%
+client.test("Admin Login Success", function() {
+    client.assert(response.status === 200, "Login should return 200");
+    client.global.set("admin_token", response.body.accessToken);
+});
+%}
+
+### ===========================================
+### 2. DASHBOARD PRINCIPAL
+### ===========================================
+
+### Dashboard completo (endpoint principal)
+GET {{host}}/api/dashboard
+Authorization: Bearer {{admin_token}}
+
+> {%
+client.test("Dashboard Loaded", function() {
+    client.assert(response.status === 200, "Dashboard should load successfully");
+    client.assert(response.body.success === true, "Response should be successful");
+    
+    const data = response.body.data;
+    client.assert(typeof data.totalHospitals === 'number', "Should have hospital count");
+    client.assert(typeof data.totalDoctors === 'number', "Should have doctor count");
+    client.assert(typeof data.totalPatients === 'number', "Should have patient count");
+});
+%}
+
+### Dashboard do AdminController (endpoint alternativo)
+GET {{host}}/api/admin/dashboard
+Authorization: Bearer {{admin_token}}
+
+### ===========================================
+### 3. MÉTRICAS DETALHADAS
+### ===========================================
+
+### Métricas com breakdown detalhado
+GET {{host}}/api/dashboard/metrics
+Authorization: Bearer {{admin_token}}
+
+> {%
+client.test("Detailed Metrics", function() {
+    client.assert(response.status === 200, "Metrics should load");
+    
+    const data = response.body.data;
+    client.assert(data.hospitals !== undefined, "Should have hospital metrics");
+    client.assert(data.doctors !== undefined, "Should have doctor metrics");
+    client.assert(data.patients !== undefined, "Should have patient metrics");
+    client.assert(data.users !== undefined, "Should have user metrics");
+});
+%}
+
+### ===========================================
+### 4. ESTATÍSTICAS ESPECÍFICAS
+### ===========================================
+
+### Estatísticas de Hospitais
+GET {{host}}/api/dashboard/stats/hospitals
+Authorization: Bearer {{admin_token}}
+
+> {%
+client.test("Hospital Stats", function() {
+    client.assert(response.status === 200, "Hospital stats should load");
+    
+    const data = response.body.data;
+    client.assert(typeof data.totalHospitals === 'number', "Should have total hospitals");
+    client.assert(typeof data.averageDoctorsPerHospital === 'number', "Should have average calculation");
+});
+%}
+
+### Estatísticas de Doutores
+GET {{host}}/api/dashboard/stats/doctors
+Authorization: Bearer {{admin_token}}
+
+> {%
+client.test("Doctor Stats", function() {
+    client.assert(response.status === 200, "Doctor stats should load");
+    
+    const data = response.body.data;
+    client.assert(typeof data.totalDoctors === 'number', "Should have total doctors");
+    client.assert(typeof data.doctorsPerHospital === 'number', "Should have ratio calculation");
+});
+%}
+
+### Estatísticas de Pacientes
+GET {{host}}/api/dashboard/stats/patients
+Authorization: Bearer {{admin_token}}
+
+> {%
+client.test("Patient Stats", function() {
+    client.assert(response.status === 200, "Patient stats should load");
+    
+    const data = response.body.data;
+    client.assert(typeof data.totalPatients === 'number', "Should have total patients");
+    client.assert(typeof data.activePatients === 'number', "Should have active patients");
+    client.assert(typeof data.inactivePatients === 'number', "Should have inactive patients");
+});
+%}
+
+### ===========================================
+### 5. RESUMO EXECUTIVO
+### ===========================================
+
+### Resumo para widgets/cards
+GET {{host}}/api/dashboard/summary
+Authorization: Bearer {{admin_token}}
+
+> {%
+client.test("Executive Summary", function() {
+    client.assert(response.status === 200, "Summary should load");
+    
+    const data = response.body.data;
+    client.assert(data.hospitals !== undefined, "Should have hospitals card data");
+    client.assert(data.doctors !== undefined, "Should have doctors card data");
+    client.assert(data.patients !== undefined, "Should have patients card data");
+    client.assert(data.users !== undefined, "Should have users card data");
+    
+    // Verificar estrutura dos cards
+    client.assert(typeof data.hospitals.count === 'number', "Hospital card should have count");
+    client.assert(typeof data.hospitals.label === 'string', "Hospital card should have label");
+    client.assert(typeof data.hospitals.icon === 'string', "Hospital card should have icon");
+    client.assert(typeof data.hospitals.color === 'string', "Hospital card should have color");
+});
+%}
+
+### ===========================================
+### 6. SAÚDE DO SISTEMA
+### ===========================================
+
+### Verificar saúde dos serviços
+GET {{host}}/api/dashboard/health
+Authorization: Bearer {{admin_token}}
+
+> {%
+client.test("System Health", function() {
+    client.assert(response.status === 200, "Health check should work");
+    
+    const data = response.body.data;
+    client.assert(data.status !== undefined, "Should have system status");
+    client.assert(data.database !== undefined, "Should have database status");
+    client.assert(data.services !== undefined, "Should have services status");
+});
+%}
+
+### ===========================================
+### 7. TENDÊNCIAS E CRESCIMENTO
+### ===========================================
+
+### Dados de tendências (placeholder)
+GET {{host}}/api/dashboard/trends
+Authorization: Bearer {{admin_token}}
+
+> {%
+client.test("Growth Trends", function() {
+    client.assert(response.status === 200, "Trends should load");
+    
+    const data = response.body.data;
+    client.assert(data.hospitalsGrowth !== undefined, "Should have hospitals growth");
+    client.assert(data.doctorsGrowth !== undefined, "Should have doctors growth");
+    client.assert(data.patientsGrowth !== undefined, "Should have patients growth");
+});
+%}
+
+### ===========================================
+### 8. TESTES DE SEGURANÇA
+### ===========================================
+
+### Tentar acessar dashboard sem token (deve retornar 401)
+GET {{host}}/api/dashboard
+
+> {%
+client.test("Unauthorized Access", function() {
+    client.assert(response.status === 401, "Should return 401 without token");
+});
+%}
+
+### Tentar acessar métricas sem token (deve retornar 401)
+GET {{host}}/api/dashboard/metrics
+
+### Tentar acessar resumo sem token (deve retornar 401)
+GET {{host}}/api/dashboard/summary
+
+### ===========================================
+### 9. COMPARAÇÃO DE ENDPOINTS
+### ===========================================
+
+### Dashboard principal (DashboardController)
+GET {{host}}/api/dashboard
+Authorization: Bearer {{admin_token}}
+
+### Dashboard alternativo (AdminController)
+GET {{host}}/api/admin/dashboard
+Authorization: Bearer {{admin_token}}
+
+### Perfil do admin (AdminController)
+GET {{host}}/api/admin/profile
+Authorization: Bearer {{admin_token}}
+
+### ===========================================
+### 10. TESTES DE PERFORMANCE
+### ===========================================
+
+### Múltiplas chamadas simultâneas
+GET {{host}}/api/dashboard
+Authorization: Bearer {{admin_token}}
+
+###
+GET {{host}}/api/dashboard/metrics
+Authorization: Bearer {{admin_token}}
+
+###
+GET {{host}}/api/dashboard/summary
+Authorization: Bearer {{admin_token}}
+
+###
+GET {{host}}/api/dashboard/health
+Authorization: Bearer {{admin_token}}
+
+### ===========================================
+### 11. VALIDAÇÃO DOS DADOS
+### ===========================================
+
+### Verificar consistência dos números
+GET {{host}}/api/admin/dashboard
+Authorization: Bearer {{admin_token}}
+
+> {%
+client.test("Data Consistency", function() {
+    client.assert(response.status === 200, "Should load successfully");
+    
+    const data = response.body.data;
+    
+    // Verificar que todos os números são não-negativos
+    client.assert(data.totalHospitals >= 0, "Hospitals count should be non-negative");
+    client.assert(data.totalDoctors >= 0, "Doctors count should be non-negative");
+    client.assert(data.totalPatients >= 0, "Patients count should be non-negative");
+    client.assert(data.totalUsers >= 0, "Users count should be non-negative");
+    
+    // Verificar relações lógicas
+    client.assert(data.totalUsers >= data.totalDoctors, "Total users should be >= doctors");
+    client.assert(data.totalUsers >= data.totalPatients, "Total users should be >= patients");
+});
+%}
+
+### Comparar números entre endpoints
+GET {{host}}/api/dashboard/metrics
+Authorization: Bearer {{admin_token}}
+
+> {%
+client.test("Cross-Endpoint Consistency", function() {
+    const data = response.body.data;
+    
+    // Armazenar números para comparação
+    client.global.set("metrics_hospitals", data.hospitals.total);
+    client.global.set("metrics_doctors", data.doctors.total);
+    client.global.set("metrics_patients", data.patients.total);
+});
+%}
+
+### Verificar consistência com resumo
+GET {{host}}/api/dashboard/summary
+Authorization: Bearer {{admin_token}}
+
+> {%
+client.test("Summary Consistency", function() {
+    const data = response.body.data;
+    
+    // Comparar com números das métricas
+    const metricsHospitals = parseInt(client.global.get("metrics_hospitals"));
+    const metricsPatients = parseInt(client.global.get("metrics_patients"));
+    
+    if (metricsHospitals && data.hospitals.count) {
+        client.assert(data.hospitals.count === metricsHospitals, 
+            "Hospital count should match between metrics and summary");
+    }
+    
+    if (metricsPatients && data.patients.count) {
+        client.assert(data.patients.count === metricsPatients,
+            "Patient count should match between metrics and summary");
+    }
+});
+%}
+
+### ===========================================
+### 12. CENÁRIOS DE USO REAL
+### ===========================================
+
+### Simular carregamento de dashboard completo (como frontend faria)
+GET {{host}}/api/dashboard/summary
+Authorization: Bearer {{admin_token}}
+
+### Seguido de métricas detalhadas
+GET {{host}}/api/dashboard/metrics
+Authorization: Bearer {{admin_token}}
+
+### E verificação de saúde
+GET {{host}}/api/dashboard/health
+Authorization: Bearer {{admin_token}}
+
+### Refresh periódico (como um dashboard real)
+GET {{host}}/api/dashboard
+Authorization: Bearer {{admin_token}}
+
+### ===========================================
+### 13. DOCUMENTAÇÃO E METADATA
+### ===========================================
+
+### Verificar metadados nos responses
+GET {{host}}/api/dashboard
+Authorization: Bearer {{admin_token}}
+
+> {%
+client.test("Response Metadata", function() {
+    const data = response.body.data;
+    
+    client.assert(data.lastUpdate !== undefined, "Should have lastUpdate timestamp");
+    client.assert(data.systemStatus !== undefined, "Should have system status");
+    client.assert(data.message !== undefined, "Should have status message");
+});
+%}

@@ -34,6 +34,9 @@ public class Hospital {
     @Column(length = 2)
     private String state;
 
+    @Column(nullable = false)
+    private Boolean active = true;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -126,6 +129,14 @@ public class Hospital {
 
     public void setState(String state) {
         this.state = state;
+    }
+
+    public Boolean getActive() {
+        return active;
+    }
+
+    public void setActive(Boolean active) {
+        this.active = active;
     }
 
     public LocalDateTime getCreatedAt() {

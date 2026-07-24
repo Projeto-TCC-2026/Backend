@@ -2,6 +2,7 @@ package com.tcc.application.service;
 
 import com.tcc.application.dto.request.HospitalRequest;
 import com.tcc.application.dto.response.HospitalResponse;
+import com.tcc.application.dto.response.HospitalSummary;
 import com.tcc.application.mapper.HospitalMapper;
 import com.tcc.domain.model.Hospital;
 import com.tcc.domain.repository.HospitalRepository;
@@ -99,5 +100,49 @@ public class HospitalServiceImpl implements HospitalService {
     public Page<HospitalResponse> filterHospitals(String name, String city, String state, Pageable pageable) {
         return hospitalRepository.findByFilters(name, city, state, pageable)
                 .map(hospitalMapper::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countHospitals() {
+        return hospitalRepository.count();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countActiveHospitals() {
+        return hospitalRepository.countByActiveTrue();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countInactiveHospitals() {
+        return hospitalRepository.countByActiveFalse();
+    }
+
+    @Override
+    @Transactional
+    public void enableHospital(Long id) {
+        Hospital hospital = hospitalRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Hospital não encontrado com ID: " + id));
+        
+        hospital.setActive(true);
+        hospitalRepository.save(hospital);
+    }
+
+    @Override
+    @Transactional
+    public void disableHospital(Long id) {
+        Hospital hospital = hospitalRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Hospital não encontrado com ID: " + id));
+        
+        hospital.setActive(false);
+        hospitalRepository.save(hospital);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<HospitalSummary> getHospitalsSummary(Pageable pageable) {
+        return hospitalRepository.findHospitalsSummary(pageable);
     }
 }

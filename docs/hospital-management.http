@@ -1,0 +1,328 @@
+### ===========================================
+### GESTÃO DE HOSPITAIS - TESTE COMPLETO
+### ===========================================
+
+### Variables
+@host = http://localhost:8080
+@adminEmail = admin@sistema.com
+@adminPassword = admin123
+
+### ===========================================
+### 1. AUTENTICAÇÃO
+### ===========================================
+
+### Login como administrador
+POST {{host}}/auth/admin/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+> {%
+client.test("Login Admin Success", function() {
+    client.assert(response.status === 200, "Login should return 200");
+    client.global.set("admin_token", response.body.accessToken);
+});
+%}
+
+### ===========================================
+### 2. LISTAR HOSPITAIS
+### ===========================================
+
+### Listar todos os hospitais (endpoint principal)
+GET {{host}}/api/admin/hospital-management
+Authorization: Bearer {{admin_token}}
+
+### Listar com paginação personalizada
+GET {{host}}/api/admin/hospital-management?page=0&size=5&sort=name,desc
+Authorization: Bearer {{admin_token}}
+
+### Listar com filtro por cidade
+GET {{host}}/api/admin/hospital-management?city=São Paulo
+Authorization: Bearer {{admin_token}}
+
+### Listar com filtro por estado
+GET {{host}}/api/admin/hospital-management?state=SP
+Authorization: Bearer {{admin_token}}
+
+### Listar com múltiplos filtros
+GET {{host}}/api/admin/hospital-management?name=Santa&city=São Paulo&state=SP
+Authorization: Bearer {{admin_token}}
+
+### Listar apenas hospitais ativos
+GET {{host}}/api/admin/hospital-management/active
+Authorization: Bearer {{admin_token}}
+
+### Listar apenas hospitais inativos
+GET {{host}}/api/admin/hospital-management/inactive
+Authorization: Bearer {{admin_token}}
+
+### Buscar hospital por nome
+GET {{host}}/api/admin/hospital-management/search?query=Santa Casa
+Authorization: Bearer {{admin_token}}
+
+### ===========================================
+### 3. CADASTRAR HOSPITAL
+### ===========================================
+
+### Cadastrar novo hospital completo
+POST {{host}}/api/admin/hospital-management
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+  "name": "Hospital Santa Casa de São Paulo",
+  "cnpj": "12.345.678/0001-90",
+  "phone": "(11) 3333-4444",
+  "email": "contato@santacasa-sp.org.br",
+  "address": "Rua Dr. Cesário Mota Jr, 112 - Vila Buarque",
+  "city": "São Paulo",
+  "state": "SP"
+}
+
+> {%
+client.test("Hospital Created", function() {
+    client.assert(response.status === 201, "Hospital creation should return 201");
+    if (response.body.data) {
+        client.global.set("hospital_id", response.body.data.id);
+    }
+});
+%}
+
+### Cadastrar hospital básico (campos mínimos)
+POST {{host}}/api/admin/hospital-management
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+  "name": "Hospital Municipal de Campinas",
+  "cnpj": "98.765.432/0001-21",
+  "city": "Campinas",
+  "state": "SP"
+}
+
+### Teste de validação - CNPJ duplicado (deve falhar)
+POST {{host}}/api/admin/hospital-management
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+  "name": "Outro Hospital",
+  "cnpj": "12.345.678/0001-90",
+  "city": "Rio de Janeiro",
+  "state": "RJ"
+}
+
+### Teste de validação - campos obrigatórios (deve falhar)
+POST {{host}}/api/admin/hospital-management
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+  "phone": "(11) 9999-8888"
+}
+
+### ===========================================
+### 4. VISUALIZAR INFORMAÇÕES
+### ===========================================
+
+### Visualizar hospital específico
+GET {{host}}/api/admin/hospital-management/{{hospital_id}}
+Authorization: Bearer {{admin_token}}
+
+### Visualizar hospital inexistente (deve retornar 404)
+GET {{host}}/api/admin/hospital-management/9999
+Authorization: Bearer {{admin_token}}
+
+### Resumo executivo dos hospitais
+GET {{host}}/api/admin/hospital-management/summary
+Authorization: Bearer {{admin_token}}
+
+### Estatísticas dos hospitais
+GET {{host}}/api/admin/hospital-management/stats
+Authorization: Bearer {{admin_token}}
+
+### ===========================================
+### 5. EDITAR HOSPITAL
+### ===========================================
+
+### Atualizar informações completas do hospital
+PUT {{host}}/api/admin/hospital-management/{{hospital_id}}
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+  "name": "Hospital Santa Casa de São Paulo - Unidade Central",
+  "cnpj": "12.345.678/0001-90",
+  "phone": "(11) 3333-5555",
+  "email": "central@santacasa-sp.org.br",
+  "address": "Rua Dr. Cesário Mota Jr, 112 - Vila Buarque - Centro",
+  "city": "São Paulo",
+  "state": "SP"
+}
+
+### Atualizar apenas alguns campos
+PUT {{host}}/api/admin/hospital-management/{{hospital_id}}
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+  "name": "Hospital Santa Casa de São Paulo - Unidade Principal",
+  "cnpj": "12.345.678/0001-90",
+  "phone": "(11) 3333-6666",
+  "email": "contato@santacasa-sp.org.br",
+  "address": "Rua Dr. Cesário Mota Jr, 112 - Vila Buarque",
+  "city": "São Paulo",
+  "state": "SP"
+}
+
+### Teste de edição - hospital inexistente (deve falhar)
+PUT {{host}}/api/admin/hospital-management/9999
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+  "name": "Hospital Teste",
+  "cnpj": "11.111.111/0001-11",
+  "city": "Teste",
+  "state": "TS"
+}
+
+### ===========================================
+### 6. ATIVAR/INATIVAR HOSPITAL
+### ===========================================
+
+### Verificar status atual do hospital
+GET {{host}}/api/admin/hospital-management/{{hospital_id}}
+Authorization: Bearer {{admin_token}}
+
+### Inativar hospital
+PATCH {{host}}/api/admin/hospital-management/{{hospital_id}}/deactivate
+Authorization: Bearer {{admin_token}}
+
+### Verificar se foi inativado
+GET {{host}}/api/admin/hospital-management/{{hospital_id}}
+Authorization: Bearer {{admin_token}}
+
+### Ativar hospital novamente
+PATCH {{host}}/api/admin/hospital-management/{{hospital_id}}/activate
+Authorization: Bearer {{admin_token}}
+
+### Verificar se foi ativado
+GET {{host}}/api/admin/hospital-management/{{hospital_id}}
+Authorization: Bearer {{admin_token}}
+
+### Alternar status (toggle)
+PATCH {{host}}/api/admin/hospital-management/{{hospital_id}}/toggle-status
+Authorization: Bearer {{admin_token}}
+
+### Verificar resultado do toggle
+GET {{host}}/api/admin/hospital-management/{{hospital_id}}
+Authorization: Bearer {{admin_token}}
+
+### Alternar novamente para voltar ao estado original
+PATCH {{host}}/api/admin/hospital-management/{{hospital_id}}/toggle-status
+Authorization: Bearer {{admin_token}}
+
+### ===========================================
+### 7. ENDPOINTS ALTERNATIVOS (AdminController)
+### ===========================================
+
+### Listar hospitais (endpoint alternativo)
+GET {{host}}/api/admin/hospitals
+Authorization: Bearer {{admin_token}}
+
+### Cadastrar via endpoint alternativo
+POST {{host}}/api/admin/hospitals
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+  "name": "Hospital das Clínicas",
+  "cnpj": "55.666.777/0001-88",
+  "phone": "(11) 2661-0000",
+  "email": "contato@hc.fm.usp.br",
+  "address": "Av. Dr. Enéas Carvalho de Aguiar, 255",
+  "city": "São Paulo", 
+  "state": "SP"
+}
+
+### ===========================================
+### 8. TESTES DE SEGURANÇA
+### ===========================================
+
+### Tentar acessar sem token (deve retornar 401)
+GET {{host}}/api/admin/hospital-management
+
+### Tentar cadastrar sem token (deve retornar 401)
+POST {{host}}/api/admin/hospital-management
+Content-Type: application/json
+
+{
+  "name": "Hospital Teste Segurança",
+  "cnpj": "99.888.777/0001-66",
+  "city": "Teste",
+  "state": "TS"
+}
+
+### TODO: Testar com token de DOCTOR (deve retornar 403)
+### (Primeiro fazer login como doctor e usar o token aqui)
+
+### ===========================================
+### 9. TESTES DE PERFORMANCE E LIMITES
+### ===========================================
+
+### Listar com paginação grande
+GET {{host}}/api/admin/hospital-management?page=0&size=100
+Authorization: Bearer {{admin_token}}
+
+### Busca com termo muito específico
+GET {{host}}/api/admin/hospital-management/search?query=XYZ123NAOEXISTE
+Authorization: Bearer {{admin_token}}
+
+### Filtros com valores não encontrados
+GET {{host}}/api/admin/hospital-management?city=CidadeInexistente&state=XX
+Authorization: Bearer {{admin_token}}
+
+### ===========================================
+### 10. VALIDAÇÕES DE DADOS
+### ===========================================
+
+### CNPJ inválido
+POST {{host}}/api/admin/hospital-management
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+  "name": "Hospital Teste CNPJ",
+  "cnpj": "123.456",
+  "city": "São Paulo",
+  "state": "SP"
+}
+
+### Estado inválido (mais de 2 caracteres)
+POST {{host}}/api/admin/hospital-management
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+  "name": "Hospital Teste Estado",
+  "cnpj": "77.888.999/0001-55",
+  "city": "São Paulo",
+  "state": "SAO_PAULO"
+}
+
+### Email inválido
+POST {{host}}/api/admin/hospital-management
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+  "name": "Hospital Teste Email",
+  "cnpj": "66.777.888/0001-44",
+  "email": "email_invalido",
+  "city": "São Paulo",
+  "state": "SP"
+}

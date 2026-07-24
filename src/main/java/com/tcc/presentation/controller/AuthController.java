@@ -48,6 +48,12 @@ public class AuthController {
         return ResponseEntity.ok(authService.loginPatient(request));
     }
 
+    @PostMapping("/admin/login")
+    @Operation(summary = "Login administrador", description = "Autentica um administrador e retorna tokens com dados do perfil")
+    public ResponseEntity<AuthResponse> loginAdmin(@RequestBody LoginRequest request) {
+        return ResponseEntity.ok(authService.loginAdmin(request));
+    }
+
     @PostMapping("/refresh")
     @Operation(summary = "Renovar token", description = "Gera um novo access token a partir de um refresh token válido")
     public ResponseEntity<RefreshTokenResponse> refresh(@RequestBody RefreshTokenRequest request) {

@@ -1,0 +1,216 @@
+### ===========================================
+### MÓDULO ADMINISTRATIVO - ENDPOINTS
+### ===========================================
+
+### Variables
+@host = http://localhost:8080
+@adminEmail = admin@sistema.com
+@adminPassword = admin123
+
+### ===========================================
+### 1. AUTENTICAÇÃO ADMINISTRATIVA
+### ===========================================
+
+### Login específico para administrador
+POST {{host}}/auth/admin/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+> {%
+client.test("Login Admin", function() {
+    client.assert(response.status === 200, "Response status is not 200");
+    client.global.set("admin_access_token", response.body.accessToken);
+    client.global.set("admin_refresh_token", response.body.refreshToken);
+});
+%}
+
+### Login geral (funciona para qualquer role)
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+### Perfil do usuário logado
+GET {{host}}/auth/me
+Authorization: Bearer {{admin_access_token}}
+
+### Logout
+POST {{host}}/auth/logout
+Content-Type: application/json
+
+{
+  "refreshToken": "{{admin_refresh_token}}"
+}
+
+### ===========================================
+### 2. DASHBOARD ADMINISTRATIVO
+### ===========================================
+
+### Dashboard com estatísticas gerais
+GET {{host}}/api/admin/dashboard
+Authorization: Bearer {{admin_access_token}}
+
+### Perfil do administrador logado
+GET {{host}}/api/admin/profile
+Authorization: Bearer {{admin_access_token}}
+
+### ===========================================
+### 3. GERENCIAMENTO DE HOSPITAIS (ADMIN)
+### ===========================================
+
+### Listar todos os hospitais
+GET {{host}}/api/admin/hospitals?page=0&size=10&sort=name,asc
+Authorization: Bearer {{admin_access_token}}
+
+### Cadastrar novo hospital
+POST {{host}}/api/admin/hospitals
+Authorization: Bearer {{admin_access_token}}
+Content-Type: application/json
+
+{
+  "name": "Hospital Santa Casa",
+  "cnpj": "12.345.678/0001-90",
+  "phone": "(11) 3333-4444",
+  "email": "contato@santacasa.com.br",
+  "address": "Rua das Flores, 123",
+  "city": "São Paulo",
+  "state": "SP"
+}
+
+### Visualizar hospital específico
+GET {{host}}/api/admin/hospitals/1
+Authorization: Bearer {{admin_access_token}}
+
+### Atualizar hospital
+PUT {{host}}/api/admin/hospitals/1
+Authorization: Bearer {{admin_access_token}}
+Content-Type: application/json
+
+{
+  "name": "Hospital Santa Casa - Unidade Central",
+  "cnpj": "12.345.678/0001-90",
+  "phone": "(11) 3333-5555",
+  "email": "central@santacasa.com.br",
+  "address": "Rua das Flores, 123 - Centro",
+  "city": "São Paulo",
+  "state": "SP"
+}
+
+### Excluir hospital
+DELETE {{host}}/api/admin/hospitals/1
+Authorization: Bearer {{admin_access_token}}
+
+### Habilitar acesso do hospital
+PATCH {{host}}/api/admin/hospitals/1/enable
+Authorization: Bearer {{admin_access_token}}
+
+### Desabilitar acesso do hospital
+PATCH {{host}}/api/admin/hospitals/1/disable
+Authorization: Bearer {{admin_access_token}}
+
+### Resumo dos hospitais com estatísticas
+GET {{host}}/api/admin/hospitals/summary?page=0&size=10
+Authorization: Bearer {{admin_access_token}}
+
+### ===========================================
+### 4. GERENCIAMENTO DE USUÁRIOS (ADMIN)
+### ===========================================
+
+### Listar todos os usuários
+GET {{host}}/api/admin/users?page=0&size=10&sort=email,asc
+Authorization: Bearer {{admin_access_token}}
+
+### Listar usuários por role
+GET {{host}}/api/admin/users?role=DOCTOR&page=0&size=10
+Authorization: Bearer {{admin_access_token}}
+
+### Cadastrar novo usuário (DOCTOR)
+POST {{host}}/api/admin/users
+Authorization: Bearer {{admin_access_token}}
+Content-Type: application/json
+
+{
+  "email": "doutor@hospital.com",
+  "password": "senha123",
+  "role": "DOCTOR"
+}
+
+### Cadastrar novo usuário (ADMIN)
+POST {{host}}/api/admin/users
+Authorization: Bearer {{admin_access_token}}
+Content-Type: application/json
+
+{
+  "email": "admin2@sistema.com",
+  "password": "admin456",
+  "role": "ADMIN"
+}
+
+### Cadastrar novo usuário (PATIENT)
+POST {{host}}/api/admin/users
+Authorization: Bearer {{admin_access_token}}
+Content-Type: application/json
+
+{
+  "email": "paciente@email.com",
+  "password": "paciente123",
+  "role": "PATIENT"
+}
+
+### Visualizar usuário específico
+GET {{host}}/api/admin/users/2
+Authorization: Bearer {{admin_access_token}}
+
+### Atualizar usuário
+PUT {{host}}/api/admin/users/2
+Authorization: Bearer {{admin_access_token}}
+Content-Type: application/json
+
+{
+  "email": "doutor.atualizado@hospital.com",
+  "password": "novaSenha123",
+  "role": "DOCTOR"
+}
+
+### Excluir usuário (soft delete)
+DELETE {{host}}/api/admin/users/2
+Authorization: Bearer {{admin_access_token}}
+
+### Ativar usuário
+PATCH {{host}}/api/admin/users/2/activate
+Authorization: Bearer {{admin_access_token}}
+
+### Desativar usuário
+PATCH {{host}}/api/admin/users/2/deactivate
+Authorization: Bearer {{admin_access_token}}
+
+### ===========================================
+### 5. TESTES DE SEGURANÇA
+### ===========================================
+
+### Tentar acessar endpoint admin sem token (deve retornar 401)
+GET {{host}}/api/admin/dashboard
+
+### Tentar acessar endpoint admin com token de DOCTOR (deve retornar 403)
+# Primeiro faça login como doctor e use o token aqui
+GET {{host}}/api/admin/dashboard
+Authorization: Bearer TOKEN_DE_DOCTOR_AQUI
+
+### ===========================================
+### 6. ENDPOINTS EXISTENTES (Para comparação)
+### ===========================================
+
+### Hospitais (endpoints gerais - ADMIN ou DOCTOR)
+GET {{host}}/api/hospitals
+Authorization: Bearer {{admin_access_token}}
+
+### Usuários (endpoints gerais - apenas ADMIN)
+GET {{host}}/api/users
+Authorization: Bearer {{admin_access_token}}

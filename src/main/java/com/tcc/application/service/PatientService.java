@@ -36,4 +36,9 @@ public interface PatientService {
     Page<ProcedureExecutionResponse> getPatientProcedureExecutions(Long patientId, Pageable pageable);
     
     Long countPatientProcedureExecutions(Long patientId);
+    
+    // Métodos para dashboard
+    long countAllPatients();
+    
+    long countActivePatients();
 }

@@ -59,6 +59,9 @@ public interface PatientRepository extends JpaRepository<Patient, Long> {
                                  @Param("city") String city,
                                  @Param("state") String state,
                                  Pageable pageable);
+                                 
+    // Métodos de contagem para dashboard
+    long countByActiveTrue();
 }
 
 

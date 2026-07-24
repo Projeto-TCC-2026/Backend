@@ -51,9 +51,27 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional(readOnly = true)
+    public Page<UserResponse> getAllUsers(Role role, Pageable pageable) {
+        if (role == null) {
+            return getAllUsers(pageable);
+        }
+        return userRepository.findAllByRoleAndActiveTrue(role, pageable)
+                .map(this::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public UserResponse getUserById(Long id) {
         User user = userRepository.findByIdAndActiveTrue(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado com ID: " + id));
+        return toResponse(user);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public UserResponse getUserByEmail(String email) {
+        User user = userRepository.findByEmailAndActiveTrue(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado com e-mail: " + email));
         return toResponse(user);
     }
 
@@ -84,6 +102,50 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado com ID: " + id));
 
         // Soft delete
+        user.setActive(false);
+        userRepository.save(user);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countUsers() {
+        return userRepository.countByActiveTrue();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countUsersByRole(Role role) {
+        return userRepository.countByRoleAndActiveTrue(role);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countInactiveUsers() {
+        return userRepository.countByActiveFalse();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countInactiveUsersByRole(Role role) {
+        return userRepository.countByRoleAndActiveFalse(role);
+    }
+
+    @Override
+    @Transactional
+    public void activateUser(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado com ID: " + id));
+        
+        user.setActive(true);
+        userRepository.save(user);
+    }
+
+    @Override
+    @Transactional
+    public void deactivateUser(Long id) {
+        User user = userRepository.findByIdAndActiveTrue(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado com ID: " + id));
+        
         user.setActive(false);
         userRepository.save(user);
     }

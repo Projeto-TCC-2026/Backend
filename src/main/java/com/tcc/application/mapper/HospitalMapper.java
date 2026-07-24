@@ -21,6 +21,7 @@ public class HospitalMapper {
                 hospital.getAddress(),
                 hospital.getCity(),
                 hospital.getState(),
+                hospital.getActive(),
                 hospital.getCreatedAt(),
                 hospital.getUpdatedAt()
         );
@@ -28,11 +29,17 @@ public class HospitalMapper {
 
     public HospitalSummary toSummary(Hospital hospital) {
         if (hospital == null) return null;
+        long totalDoctors = hospital.getDoctors() != null ? hospital.getDoctors().size() : 0;
         return new HospitalSummary(
                 hospital.getId(),
                 hospital.getName(),
+                hospital.getCnpj(),
                 hospital.getCity(),
-                hospital.getState()
+                hospital.getState(),
+                hospital.getPhone(),
+                hospital.getEmail(),
+                totalDoctors,
+                hospital.getActive()
         );
     }
 

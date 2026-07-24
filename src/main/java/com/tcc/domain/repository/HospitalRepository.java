@@ -1,5 +1,6 @@
 package com.tcc.domain.repository;
 
+import com.tcc.application.dto.response.HospitalSummary;
 import com.tcc.domain.model.Hospital;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -17,6 +18,11 @@ public interface HospitalRepository extends JpaRepository<Hospital, Long> {
     
     boolean existsByCnpj(String cnpj);
     
+    // Contadores específicos
+    long countByActiveTrue();
+    
+    long countByActiveFalse();
+    
     // Busca por nome (case-insensitive, busca parcial)
     Page<Hospital> findByNameContainingIgnoreCase(String name, Pageable pageable);
     
@@ -31,4 +37,12 @@ public interface HospitalRepository extends JpaRepository<Hospital, Long> {
         @Param("state") String state,
         Pageable pageable
     );
+    
+    // Resumo dos hospitais com contagem de médicos
+    @Query("SELECT new com.tcc.application.dto.response.HospitalSummary(" +
+           "h.id, h.name, h.cnpj, h.city, h.state, h.phone, h.email, " +
+           "CAST(COUNT(d.id) AS long), h.active) " +
+           "FROM Hospital h LEFT JOIN h.doctors d " +
+           "GROUP BY h.id, h.name, h.cnpj, h.city, h.state, h.phone, h.email, h.active")
+    Page<HospitalSummary> findHospitalsSummary(Pageable pageable);
 }

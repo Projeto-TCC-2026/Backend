@@ -211,4 +211,16 @@ public class PatientServiceImpl implements PatientService {
         // Contar os procedimentos realizados do paciente
         return procedureExecutionRepository.countByPatientId(patientId);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countAllPatients() {
+        return patientRepository.count();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countActivePatients() {
+        return patientRepository.countByActiveTrue();
+    }
 }

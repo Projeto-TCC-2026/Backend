@@ -107,6 +107,21 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
+    public AuthResponse loginAdmin(LoginRequest request) {
+        User user = findAndValidateUser(request);
+
+        if (user.getRole() != Role.ADMIN) {
+            throw new UnauthorizedException("Credenciais inválidas - Acesso restrito a administradores");
+        }
+
+        String accessToken = jwtService.generateToken(user.getEmail());
+        String refreshToken = createRefreshToken(user);
+
+        return new AuthResponse(accessToken, refreshToken, user.getEmail(), user.getRole().name());
+    }
+
+    @Override
+    @Transactional
     public RefreshTokenResponse refresh(RefreshTokenRequest request) {
         RefreshToken refreshToken = refreshTokenRepository.findByToken(request.getRefreshToken())
                 .orElseThrow(() -> new InvalidTokenException("Refresh token inválido"));
