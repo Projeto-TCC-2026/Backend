@@ -92,9 +92,13 @@ public class ReportServiceImpl implements ReportService {
         
         return results.stream()
                 .map(row -> new ProceduresByPeriodResponse(
-                        (String) row[0],                // period (YYYY-MM)
-                        ((Number) row[1]).longValue()   // totalProcedures
+                        formatPeriod((Number) row[0], (Number) row[1]),
+                        ((Number) row[2]).longValue()
                 ))
                 .collect(Collectors.toList());
+    }
+
+    private String formatPeriod(Number year, Number month) {
+        return "%04d-%02d".formatted(year.intValue(), month.intValue());
     }
 }

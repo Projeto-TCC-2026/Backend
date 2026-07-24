@@ -7,5 +7,5 @@ public interface DashboardService {
     
     AdminDashboardResponse getAdminDashboard();
     
-    HospitalDashboardResponse getHospitalDashboard(Long hospitalId);
+    HospitalDashboardResponse getHospitalDashboard(Long hospitalId, String requesterEmail);
 }

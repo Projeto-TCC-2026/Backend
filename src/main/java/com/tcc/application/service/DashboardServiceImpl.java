@@ -7,10 +7,14 @@ import com.tcc.application.dto.response.ProceduresByPeriodResponse;
 import com.tcc.application.mapper.PatientMapper;
 import com.tcc.domain.model.Hospital;
 import com.tcc.domain.model.Patient;
+import com.tcc.domain.model.Role;
+import com.tcc.domain.model.User;
 import com.tcc.domain.repository.DoctorRepository;
 import com.tcc.domain.repository.HospitalRepository;
 import com.tcc.domain.repository.PatientRepository;
 import com.tcc.domain.repository.ProcedureRepository;
+import com.tcc.domain.repository.UserRepository;
+import com.tcc.exception.UnauthorizedException;
 import com.tcc.exception.ResourceNotFoundException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -27,17 +31,20 @@ public class DashboardServiceImpl implements DashboardService {
     private final DoctorRepository doctorRepository;
     private final PatientRepository patientRepository;
     private final ProcedureRepository procedureRepository;
+    private final UserRepository userRepository;
     private final PatientMapper patientMapper;
 
     public DashboardServiceImpl(HospitalRepository hospitalRepository,
                                 DoctorRepository doctorRepository,
                                 PatientRepository patientRepository,
                                 ProcedureRepository procedureRepository,
+                                UserRepository userRepository,
                                 PatientMapper patientMapper) {
         this.hospitalRepository = hospitalRepository;
         this.doctorRepository = doctorRepository;
         this.patientRepository = patientRepository;
         this.procedureRepository = procedureRepository;
+        this.userRepository = userRepository;
         this.patientMapper = patientMapper;
     }
 
@@ -67,7 +74,20 @@ public class DashboardServiceImpl implements DashboardService {
 
     @Override
     @Transactional(readOnly = true)
-    public HospitalDashboardResponse getHospitalDashboard(Long hospitalId) {
+    public HospitalDashboardResponse getHospitalDashboard(Long hospitalId, String requesterEmail) {
+        User requester = userRepository.findByEmail(requesterEmail)
+                .orElseThrow(() -> new UnauthorizedException("Usuário autenticado não encontrado"));
+
+        if (requester.getRole() == Role.DOCTOR) {
+            Long requesterHospitalId = doctorRepository.findByUserId(requester.getId())
+                    .orElseThrow(() -> new UnauthorizedException("Perfil de médico não encontrado"))
+                    .getHospital().getId();
+
+            if (!hospitalId.equals(requesterHospitalId)) {
+                throw new UnauthorizedException("Você não tem permissão para acessar dados deste hospital");
+            }
+        }
+
         // Verificar se o hospital existe
         Hospital hospital = hospitalRepository.findById(hospitalId)
                 .orElseThrow(() -> new ResourceNotFoundException("Hospital não encontrado com ID: " + hospitalId));
@@ -86,8 +106,8 @@ public class DashboardServiceImpl implements DashboardService {
         
         List<ProceduresByPeriodResponse> proceduresByPeriod = proceduresData.stream()
                 .map(row -> new ProceduresByPeriodResponse(
-                        (String) row[0],    // period
-                        ((Number) row[1]).longValue()  // totalProcedures
+                        formatPeriod((Number) row[0], (Number) row[1]),
+                        ((Number) row[2]).longValue()
                 ))
                 .collect(Collectors.toList());
 
@@ -108,5 +128,9 @@ public class DashboardServiceImpl implements DashboardService {
                 proceduresByPeriod,
                 latestPatients
         );
+    }
+
+    private String formatPeriod(Number year, Number month) {
+        return "%04d-%02d".formatted(year.intValue(), month.intValue());
     }
 }

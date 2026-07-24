@@ -9,6 +9,7 @@ import com.tcc.application.service.ReportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -38,6 +39,11 @@ public class ReportController {
                       "Os resultados são ordenados por quantidade de pacientes (decrescente). " +
                       "Acesso restrito a administradores."
     )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Relatório retornado com sucesso"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Não autenticado"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Acesso negado")
+    })
     public ResponseEntity<ApiResponse<List<PatientsByHospitalResponse>>> getPatientsByHospital() {
         List<PatientsByHospitalResponse> report = reportService.getPatientsByHospital();
         ApiResponse<List<PatientsByHospitalResponse>> response = ApiResponse.success(report);
@@ -53,6 +59,11 @@ public class ReportController {
                       "Os resultados são ordenados por quantidade de doutores (decrescente). " +
                       "Acesso restrito a administradores."
     )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Relatório retornado com sucesso"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Não autenticado"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Acesso negado")
+    })
     public ResponseEntity<ApiResponse<List<DoctorsByHospitalResponse>>> getDoctorsByHospital() {
         List<DoctorsByHospitalResponse> report = reportService.getDoctorsByHospital();
         ApiResponse<List<DoctorsByHospitalResponse>> response = ApiResponse.success(report);
@@ -61,13 +72,18 @@ public class ReportController {
     }
 
     @GetMapping("/procedures-by-doctor")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('DOCTOR')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(
         summary = "Relatório de Procedimentos por Doutor",
         description = "Retorna a quantidade de procedimentos ativos agrupados por doutor. " +
                       "Inclui informações do doutor (nome, especialidade) e total de procedimentos. " +
                       "Os resultados são ordenados por quantidade de procedimentos (decrescente)."
     )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Relatório retornado com sucesso"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Não autenticado"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Acesso negado")
+    })
     public ResponseEntity<ApiResponse<List<ProceduresByDoctorResponse>>> getProceduresByDoctor() {
         List<ProceduresByDoctorResponse> report = reportService.getProceduresByDoctor();
         ApiResponse<List<ProceduresByDoctorResponse>> response = ApiResponse.success(report);
@@ -76,13 +92,19 @@ public class ReportController {
     }
 
     @GetMapping("/procedures-by-period")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('DOCTOR')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(
         summary = "Relatório de Procedimentos por Período",
         description = "Retorna a quantidade de procedimentos ativos agrupados por período (mês/ano). " +
                       "Requer data de início e fim para o período de análise. " +
                       "Os resultados são ordenados por período (decrescente)."
     )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Relatório retornado com sucesso"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Período inválido"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Não autenticado"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Acesso negado")
+    })
     public ResponseEntity<ApiResponse<List<ProceduresByPeriodResponse>>> getProceduresByPeriod(
             @Parameter(
                 description = "Data de início do período (formato: yyyy-MM-dd'T'HH:mm:ss)",

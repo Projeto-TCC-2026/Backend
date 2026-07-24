@@ -36,26 +36,26 @@ public interface ProcedureRepository extends JpaRepository<Procedure, Long> {
            "ORDER BY totalProcedures DESC")
     List<Object[]> countProceduresByDoctor();
     
-    // Procedures by period - Using createdAt
-    @Query("SELECT FUNCTION('DATE_FORMAT', p.createdAt, '%Y-%m') as period, COUNT(p) as totalProcedures " +
+    // Procedures by period - YEAR/MONTH are translated by Hibernate for H2 and PostgreSQL
+    @Query("SELECT YEAR(p.createdAt) as year, MONTH(p.createdAt) as month, COUNT(p) as totalProcedures " +
            "FROM Procedure p " +
            "WHERE p.active = true " +
            "AND p.createdAt BETWEEN :startDate AND :endDate " +
-           "GROUP BY FUNCTION('DATE_FORMAT', p.createdAt, '%Y-%m') " +
-           "ORDER BY period DESC")
+           "GROUP BY YEAR(p.createdAt), MONTH(p.createdAt) " +
+           "ORDER BY year DESC, month DESC")
     List<Object[]> countProceduresByPeriod(
         @Param("startDate") LocalDateTime startDate,
         @Param("endDate") LocalDateTime endDate
     );
     
     // Procedures by period for a specific hospital
-    @Query("SELECT FUNCTION('DATE_FORMAT', p.createdAt, '%Y-%m') as period, COUNT(p) as totalProcedures " +
+    @Query("SELECT YEAR(p.createdAt) as year, MONTH(p.createdAt) as month, COUNT(p) as totalProcedures " +
            "FROM Procedure p " +
            "WHERE p.active = true " +
            "AND p.doctor.hospital.id = :hospitalId " +
            "AND p.createdAt BETWEEN :startDate AND :endDate " +
-           "GROUP BY FUNCTION('DATE_FORMAT', p.createdAt, '%Y-%m') " +
-           "ORDER BY period DESC")
+           "GROUP BY YEAR(p.createdAt), MONTH(p.createdAt) " +
+           "ORDER BY year DESC, month DESC")
     List<Object[]> countProceduresByPeriodAndHospitalId(
         @Param("hospitalId") Long hospitalId,
         @Param("startDate") LocalDateTime startDate,
