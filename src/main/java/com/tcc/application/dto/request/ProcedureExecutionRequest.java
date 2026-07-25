@@ -1,6 +1,7 @@
 package com.tcc.application.dto.request;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -9,16 +10,16 @@ import jakarta.validation.constraints.Size;
 public record ProcedureExecutionRequest(
 
         @NotNull(message = "ID do procedimento do paciente é obrigatório")
-        Long patientProcedureId,
+        UUID patientProcedureId,
 
         @NotNull(message = "ID do procedimento é obrigatório")
-        Long procedureId,
+        UUID procedureId,
 
         @NotNull(message = "ID do médico é obrigatório")
-        Long doctorId,
+        UUID doctorId,
 
         @NotNull(message = "ID do paciente é obrigatório")
-        Long patientId,
+        UUID patientId,
 
         @NotNull(message = "Data de execução é obrigatória")
         LocalDateTime executionDate,

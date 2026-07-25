@@ -10,23 +10,21 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
-public interface HospitalRepository extends JpaRepository<Hospital, Long> {
+public interface HospitalRepository extends JpaRepository<Hospital, UUID> {
     
     Optional<Hospital> findByCnpj(String cnpj);
     
     boolean existsByCnpj(String cnpj);
     
-    // Contadores específicos
     long countByActiveTrue();
     
     long countByActiveFalse();
     
-    // Busca por nome (case-insensitive, busca parcial)
     Page<Hospital> findByNameContainingIgnoreCase(String name, Pageable pageable);
     
-    // Filtros combinados
     @Query("SELECT h FROM Hospital h WHERE " +
            "(:name IS NULL OR LOWER(h.name) LIKE LOWER(CONCAT('%', :name, '%'))) AND " +
            "(:city IS NULL OR LOWER(h.city) LIKE LOWER(CONCAT('%', :city, '%'))) AND " +
@@ -38,7 +36,6 @@ public interface HospitalRepository extends JpaRepository<Hospital, Long> {
         Pageable pageable
     );
     
-    // Resumo dos hospitais com contagem de médicos
     @Query("SELECT new com.tcc.application.dto.response.HospitalSummary(" +
            "h.id, h.name, h.cnpj, h.city, h.state, h.phone, h.email, " +
            "CAST(COUNT(d.id) AS long), h.active) " +
@@ -46,7 +43,6 @@ public interface HospitalRepository extends JpaRepository<Hospital, Long> {
            "GROUP BY h.id, h.name, h.cnpj, h.city, h.state, h.phone, h.email, h.active")
     Page<HospitalSummary> findHospitalsSummary(Pageable pageable);
     
-    // Dashboard queries - Consultas otimizadas com COUNT
     @Query("SELECT COUNT(h) FROM Hospital h")
     Long countTotalHospitals();
 }

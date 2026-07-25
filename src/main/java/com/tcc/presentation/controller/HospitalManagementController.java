@@ -20,6 +20,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/admin/hospital-management")
@@ -83,7 +84,7 @@ public class HospitalManagementController {
     )
     public ResponseEntity<ApiResponse<HospitalResponse>> getHospitalDetails(
             @Parameter(description = "ID único do hospital", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         HospitalResponse hospital = hospitalService.getHospitalById(id);
         ApiResponse<HospitalResponse> response = ApiResponse.success(hospital);
@@ -152,7 +153,7 @@ public class HospitalManagementController {
     )
     public ResponseEntity<ApiResponse<HospitalResponse>> updateHospital(
             @Parameter(description = "ID único do hospital", example = "1", required = true)
-            @PathVariable Long id,
+            @PathVariable UUID id,
             @Valid @RequestBody HospitalRequest request) {
         
         HospitalResponse hospital = hospitalService.updateHospital(id, request);
@@ -172,7 +173,7 @@ public class HospitalManagementController {
     )
     public ResponseEntity<ApiResponse<HospitalResponse>> activateHospital(
             @Parameter(description = "ID único do hospital", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         hospitalService.enableHospital(id);
         HospitalResponse hospital = hospitalService.getHospitalById(id);
@@ -192,7 +193,7 @@ public class HospitalManagementController {
     )
     public ResponseEntity<ApiResponse<HospitalResponse>> deactivateHospital(
             @Parameter(description = "ID único do hospital", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         hospitalService.disableHospital(id);
         HospitalResponse hospital = hospitalService.getHospitalById(id);
@@ -211,7 +212,7 @@ public class HospitalManagementController {
     )
     public ResponseEntity<ApiResponse<HospitalResponse>> toggleHospitalStatus(
             @Parameter(description = "ID único do hospital", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         HospitalResponse currentHospital = hospitalService.getHospitalById(id);
         

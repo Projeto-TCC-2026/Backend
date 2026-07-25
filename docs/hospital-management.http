@@ -133,7 +133,7 @@ GET {{host}}/api/admin/hospital-management/{{hospital_id}}
 Authorization: Bearer {{admin_token}}
 
 ### Visualizar hospital inexistente (deve retornar 404)
-GET {{host}}/api/admin/hospital-management/9999
+GET {{host}}/api/admin/hospital-management/550e8400-e29b-41d4-a716-446655440000
 Authorization: Bearer {{admin_token}}
 
 ### Resumo executivo dos hospitais

@@ -17,6 +17,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.UUID;
+
 @Service
 public class DoctorServiceImpl implements DoctorService {
 
@@ -38,25 +40,20 @@ public class DoctorServiceImpl implements DoctorService {
     @Override
     @Transactional
     public DoctorResponse createDoctor(DoctorRequest request) {
-        // Validar se o usuário existe
         User user = userRepository.findById(request.userId())
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(request.userId())));
 
-        // Validar se o hospital existe (obrigatório)
         Hospital hospital = hospitalRepository.findById(request.hospitalId())
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.hospitalNotFoundById(request.hospitalId())));
 
-        // Validar CPF único
         if (doctorRepository.existsByCpf(request.cpf())) {
             throw new BusinessException(ErrorMessages.duplicateDoctorCpf(request.cpf()));
         }
 
-        // Validar CRM único
         if (doctorRepository.existsByCrm(request.crm())) {
             throw new BusinessException(ErrorMessages.duplicateDoctorCrm(request.crm()));
         }
 
-        // Verificar se o usuário já está associado a outro doutor
         if (doctorRepository.findByUserId(request.userId()).isPresent()) {
             throw new BusinessException(ErrorMessages.userAlreadyAssociatedWithDoctor());
         }
@@ -76,7 +73,7 @@ public class DoctorServiceImpl implements DoctorService {
 
     @Override
     @Transactional(readOnly = true)
-    public DoctorResponse getDoctorById(Long id) {
+    public DoctorResponse getDoctorById(UUID id) {
         Doctor doctor = doctorRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.doctorNotFoundById(id)));
         
@@ -85,21 +82,18 @@ public class DoctorServiceImpl implements DoctorService {
 
     @Override
     @Transactional
-    public DoctorResponse updateDoctor(Long id, DoctorRequest request) {
+    public DoctorResponse updateDoctor(UUID id, DoctorRequest request) {
         Doctor existingDoctor = doctorRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.doctorNotFoundById(id)));
 
-        // Validar se o hospital existe (obrigatório)
         Hospital hospital = hospitalRepository.findById(request.hospitalId())
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.hospitalNotFoundById(request.hospitalId())));
 
-        // Validar CPF único (exceto o próprio doutor)
         if (!existingDoctor.getCpf().equals(request.cpf()) && 
             doctorRepository.existsByCpf(request.cpf())) {
             throw new BusinessException(ErrorMessages.duplicateDoctorCpf(request.cpf()));
         }
 
-        // Validar CRM único (exceto o próprio doutor)
         if (!existingDoctor.getCrm().equals(request.crm()) && 
             doctorRepository.existsByCrm(request.crm())) {
             throw new BusinessException(ErrorMessages.duplicateDoctorCrm(request.crm()));
@@ -113,11 +107,10 @@ public class DoctorServiceImpl implements DoctorService {
 
     @Override
     @Transactional
-    public void deleteDoctor(Long id) {
+    public void deleteDoctor(UUID id) {
         Doctor doctor = doctorRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.doctorNotFoundById(id)));
 
-        // Verificar se há relacionamentos que impedem exclusão
         if (!doctor.getDoctorPatients().isEmpty()) {
             throw new BusinessException(ErrorMessages.doctorHasPatients(doctor.getDoctorPatients().size()));
         }
@@ -154,7 +147,7 @@ public class DoctorServiceImpl implements DoctorService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<DoctorResponse> filterDoctors(Long hospitalId, String specialty, String name, String crm, Pageable pageable) {
+    public Page<DoctorResponse> filterDoctors(UUID hospitalId, String specialty, String name, String crm, Pageable pageable) {
         return doctorRepository.findByFilters(hospitalId, specialty, name, crm, pageable)
                 .map(doctorMapper::toResponse);
     }

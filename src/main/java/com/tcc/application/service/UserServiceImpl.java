@@ -14,6 +14,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.UUID;
+
 @Service
 public class UserServiceImpl implements UserService {
 
@@ -62,7 +64,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional(readOnly = true)
-    public UserResponse getUserById(Long id) {
+    public UserResponse getUserById(UUID id) {
         User user = userRepository.findByIdAndActiveTrue(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(id)));
         return toResponse(user);
@@ -78,11 +80,10 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    public UserResponse updateUser(Long id, UserRequest request) {
+    public UserResponse updateUser(UUID id, UserRequest request) {
         User user = userRepository.findByIdAndActiveTrue(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(id)));
 
-        // Valida e-mail único (exceto o próprio usuário)
         if (!user.getEmail().equals(request.email()) && userRepository.existsByEmail(request.email())) {
             throw new BusinessException(ErrorMessages.duplicateUserEmail(request.email()));
         }
@@ -98,11 +99,10 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    public void deleteUser(Long id) {
+    public void deleteUser(UUID id) {
         User user = userRepository.findByIdAndActiveTrue(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(id)));
 
-        // Soft delete
         user.setActive(false);
         userRepository.save(user);
     }
@@ -133,7 +133,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    public void activateUser(Long id) {
+    public void activateUser(UUID id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(id)));
         
@@ -143,15 +143,13 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    public void deactivateUser(Long id) {
+    public void deactivateUser(UUID id) {
         User user = userRepository.findByIdAndActiveTrue(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(id)));
         
         user.setActive(false);
         userRepository.save(user);
     }
-
-    // --- Helpers ---
 
     private Role parseRole(String role) {
         try {

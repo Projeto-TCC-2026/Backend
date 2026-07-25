@@ -19,6 +19,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -40,10 +41,13 @@ class UserServiceImplTest {
     private User user;
     private UserRequest request;
 
+    private static final UUID USER_ID = UUID.randomUUID();
+    private static final UUID NONEXISTENT_ID = UUID.randomUUID();
+
     @BeforeEach
     void setUp() {
         user = new User("admin@test.com", "encodedPassword", Role.ADMIN);
-        user.setId(1L);
+        user.setId(USER_ID);
         user.setCreatedAt(LocalDateTime.now());
         user.setUpdatedAt(LocalDateTime.now());
 
@@ -101,10 +105,10 @@ class UserServiceImplTest {
         @Test
         @DisplayName("deve inativar usuario com sucesso (soft delete)")
         void shouldSoftDeleteUserSuccessfully() {
-            when(userRepository.findByIdAndActiveTrue(1L)).thenReturn(Optional.of(user));
+            when(userRepository.findByIdAndActiveTrue(USER_ID)).thenReturn(Optional.of(user));
             when(userRepository.save(user)).thenReturn(user);
 
-            userService.deleteUser(1L);
+            userService.deleteUser(USER_ID);
 
             assertThat(user.getActive()).isFalse();
             verify(userRepository).save(user);
@@ -113,9 +117,9 @@ class UserServiceImplTest {
         @Test
         @DisplayName("deve lancar excecao quando usuario nao encontrado")
         void shouldThrowWhenUserNotFound() {
-            when(userRepository.findByIdAndActiveTrue(99L)).thenReturn(Optional.empty());
+            when(userRepository.findByIdAndActiveTrue(NONEXISTENT_ID)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> userService.deleteUser(99L))
+            assertThatThrownBy(() -> userService.deleteUser(NONEXISTENT_ID))
                     .isInstanceOf(ResourceNotFoundException.class);
         }
     }
@@ -128,14 +132,14 @@ class UserServiceImplTest {
         @DisplayName("deve lancar excecao quando email duplicado em update")
         void shouldThrowWhenDuplicateEmailOnUpdate() {
             User existingUser = new User("old@test.com", "encoded", Role.ADMIN);
-            existingUser.setId(1L);
+            existingUser.setId(USER_ID);
 
             UserRequest updateRequest = new UserRequest("taken@test.com", "senha123", "ADMIN");
 
-            when(userRepository.findByIdAndActiveTrue(1L)).thenReturn(Optional.of(existingUser));
+            when(userRepository.findByIdAndActiveTrue(USER_ID)).thenReturn(Optional.of(existingUser));
             when(userRepository.existsByEmail("taken@test.com")).thenReturn(true);
 
-            assertThatThrownBy(() -> userService.updateUser(1L, updateRequest))
+            assertThatThrownBy(() -> userService.updateUser(USER_ID, updateRequest))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("e-mail");
 
@@ -146,13 +150,13 @@ class UserServiceImplTest {
         @DisplayName("deve lancar excecao quando role invalida em update")
         void shouldThrowWhenInvalidRoleOnUpdate() {
             User existingUser = new User("user@test.com", "encoded", Role.ADMIN);
-            existingUser.setId(1L);
+            existingUser.setId(USER_ID);
 
             UserRequest updateRequest = new UserRequest("user@test.com", "senha123", "INVALID");
 
-            when(userRepository.findByIdAndActiveTrue(1L)).thenReturn(Optional.of(existingUser));
+            when(userRepository.findByIdAndActiveTrue(USER_ID)).thenReturn(Optional.of(existingUser));
 
-            assertThatThrownBy(() -> userService.updateUser(1L, updateRequest))
+            assertThatThrownBy(() -> userService.updateUser(USER_ID, updateRequest))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("Role inválida");
         }

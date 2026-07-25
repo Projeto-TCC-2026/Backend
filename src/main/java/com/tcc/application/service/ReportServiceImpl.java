@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -32,12 +33,11 @@ public class ReportServiceImpl implements ReportService {
     @Override
     @Transactional(readOnly = true)
     public List<PatientsByHospitalResponse> getPatientsByHospital() {
-        // Usar agregação no banco de dados (GROUP BY)
         List<Object[]> results = patientRepository.countPatientsByHospital();
         
         return results.stream()
                 .map(row -> new PatientsByHospitalResponse(
-                        ((Number) row[0]).longValue(),  // hospitalId
+                        (UUID) row[0],                  // hospitalId
                         (String) row[1],                // hospitalName
                         ((Number) row[2]).longValue()   // totalPatients
                 ))
@@ -47,12 +47,11 @@ public class ReportServiceImpl implements ReportService {
     @Override
     @Transactional(readOnly = true)
     public List<DoctorsByHospitalResponse> getDoctorsByHospital() {
-        // Usar agregação no banco de dados (GROUP BY)
         List<Object[]> results = doctorRepository.countDoctorsByHospital();
         
         return results.stream()
                 .map(row -> new DoctorsByHospitalResponse(
-                        ((Number) row[0]).longValue(),  // hospitalId
+                        (UUID) row[0],                  // hospitalId
                         (String) row[1],                // hospitalName
                         ((Number) row[2]).longValue()   // totalDoctors
                 ))
@@ -62,12 +61,11 @@ public class ReportServiceImpl implements ReportService {
     @Override
     @Transactional(readOnly = true)
     public List<ProceduresByDoctorResponse> getProceduresByDoctor() {
-        // Usar agregação no banco de dados (GROUP BY)
         List<Object[]> results = procedureRepository.countProceduresByDoctor();
         
         return results.stream()
                 .map(row -> new ProceduresByDoctorResponse(
-                        ((Number) row[0]).longValue(),  // doctorId
+                        (UUID) row[0],                  // doctorId
                         (String) row[1],                // doctorName
                         (String) row[2],                // specialty
                         ((Number) row[3]).longValue()   // totalProcedures
@@ -78,7 +76,6 @@ public class ReportServiceImpl implements ReportService {
     @Override
     @Transactional(readOnly = true)
     public List<ProceduresByPeriodResponse> getProceduresByPeriod(LocalDateTime startDate, LocalDateTime endDate) {
-        // Validar datas
         if (startDate == null || endDate == null) {
             throw new IllegalArgumentException("As datas de início e fim são obrigatórias");
         }
@@ -87,7 +84,6 @@ public class ReportServiceImpl implements ReportService {
             throw new IllegalArgumentException("A data de início não pode ser posterior à data de fim");
         }
         
-        // Usar agregação no banco de dados (GROUP BY com DATE_FORMAT)
         List<Object[]> results = procedureRepository.countProceduresByPeriod(startDate, endDate);
         
         return results.stream()

@@ -1,9 +1,10 @@
 package com.tcc.application.dto.response;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 public record HospitalResponse(
-        Long id,
+        UUID id,
         String name,
         String cnpj,
         String phone,

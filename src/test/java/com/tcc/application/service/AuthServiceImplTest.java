@@ -30,6 +30,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -64,21 +65,27 @@ class AuthServiceImplTest {
     private User adminUser;
     private Doctor doctor;
 
+    private static final UUID DOCTOR_USER_ID = UUID.randomUUID();
+    private static final UUID ADMIN_USER_ID = UUID.randomUUID();
+    private static final UUID HOSPITAL_ID = UUID.randomUUID();
+    private static final UUID DOCTOR_ID = UUID.randomUUID();
+    private static final UUID TOKEN_ID = UUID.randomUUID();
+
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(authService, "refreshExpiration", 604800000L);
 
         doctorUser = new User("doctor@test.com", "encodedPassword", Role.DOCTOR);
-        doctorUser.setId(1L);
+        doctorUser.setId(DOCTOR_USER_ID);
 
         adminUser = new User("admin@test.com", "encodedPassword", Role.ADMIN);
-        adminUser.setId(2L);
+        adminUser.setId(ADMIN_USER_ID);
 
         Hospital hospital = new Hospital("Hospital Central", "12345678000100");
-        hospital.setId(1L);
+        hospital.setId(HOSPITAL_ID);
 
         doctor = new Doctor(doctorUser, hospital, "Dr. Carlos", "11122233344", "CRM12345");
-        doctor.setId(1L);
+        doctor.setId(DOCTOR_ID);
     }
 
     @Nested
@@ -141,7 +148,7 @@ class AuthServiceImplTest {
 
             when(userRepository.findByEmail("doctor@test.com")).thenReturn(Optional.of(doctorUser));
             when(passwordEncoder.matches("senha123", "encodedPassword")).thenReturn(true);
-            when(doctorRepository.findByUserId(1L)).thenReturn(Optional.of(doctor));
+            when(doctorRepository.findByUserId(DOCTOR_USER_ID)).thenReturn(Optional.of(doctor));
             when(jwtService.generateToken("doctor@test.com")).thenReturn("access-token");
             when(jwtService.generateRefreshToken()).thenReturn("refresh-token");
             when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(i -> i.getArgument(0));
@@ -149,7 +156,7 @@ class AuthServiceImplTest {
             DoctorAuthResponse result = authService.loginDoctor(request);
 
             assertThat(result.getAccessToken()).isEqualTo("access-token");
-            assertThat(result.getDoctorId()).isEqualTo(1L);
+            assertThat(result.getDoctorId()).isEqualTo(DOCTOR_ID);
             assertThat(result.getCrm()).isEqualTo("CRM12345");
         }
 
@@ -177,7 +184,7 @@ class AuthServiceImplTest {
             RefreshTokenRequest request = new RefreshTokenRequest("valid-token");
 
             RefreshToken existingToken = new RefreshToken(doctorUser, "valid-token", LocalDateTime.now().plusDays(7));
-            existingToken.setId(1L);
+            existingToken.setId(TOKEN_ID);
 
             when(refreshTokenRepository.findByToken("valid-token")).thenReturn(Optional.of(existingToken));
             when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(i -> i.getArgument(0));

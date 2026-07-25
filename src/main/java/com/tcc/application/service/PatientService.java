@@ -6,21 +6,22 @@ import com.tcc.application.dto.response.ProcedureExecutionResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.util.UUID;
+
 public interface PatientService {
     
     PatientResponse createPatient(PatientRequest request);
     
     Page<PatientResponse> getAllActivePatients(Pageable pageable);
     
-    PatientResponse getPatientById(Long id);
+    PatientResponse getPatientById(UUID id);
     
-    PatientResponse updatePatient(Long id, PatientRequest request);
+    PatientResponse updatePatient(UUID id, PatientRequest request);
     
-    void deletePatient(Long id);
+    void deletePatient(UUID id);
     
-    void inactivatePatient(Long id);
+    void inactivatePatient(UUID id);
     
-    // Buscas adicionais
     Page<PatientResponse> searchByName(String name, Pageable pageable);
     
     Page<PatientResponse> searchByCpf(String cpf, Pageable pageable);
@@ -29,15 +30,12 @@ public interface PatientService {
     
     Page<PatientResponse> searchByPhone(String phone, Pageable pageable);
     
-    // Filtros combinados
     Page<PatientResponse> filterPatients(String name, String gender, String city, String state, Pageable pageable);
     
-    // Métodos de relacionamento com Procedimentos Realizados
-    Page<ProcedureExecutionResponse> getPatientProcedureExecutions(Long patientId, Pageable pageable);
+    Page<ProcedureExecutionResponse> getPatientProcedureExecutions(UUID patientId, Pageable pageable);
     
-    Long countPatientProcedureExecutions(Long patientId);
+    Long countPatientProcedureExecutions(UUID patientId);
     
-    // Métodos para dashboard
     long countAllPatients();
     
     long countActivePatients();

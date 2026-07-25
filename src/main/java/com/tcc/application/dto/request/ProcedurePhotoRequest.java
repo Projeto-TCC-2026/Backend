@@ -3,11 +3,12 @@ package com.tcc.application.dto.request;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.util.UUID;
 
 public record ProcedurePhotoRequest(
 
         @NotNull(message = "ID da execução do procedimento é obrigatório")
-        Long procedureExecutionId,
+        UUID procedureExecutionId,
 
         @NotBlank(message = "URL da imagem é obrigatória")
         @Size(max = 500, message = "URL deve ter no máximo 500 caracteres")

@@ -3,14 +3,15 @@ package com.tcc.application.dto.request;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.util.UUID;
 
 public record DoctorRequest(
 
         @NotNull(message = "ID do usuário é obrigatório")
-        Long userId,
+        UUID userId,
 
         @NotNull(message = "ID do hospital é obrigatório")
-        Long hospitalId,
+        UUID hospitalId,
 
         @NotBlank(message = "Nome completo é obrigatório")
         @Size(max = 255, message = "Nome deve ter no máximo 255 caracteres")

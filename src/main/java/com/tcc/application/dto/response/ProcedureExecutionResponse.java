@@ -1,10 +1,11 @@
 package com.tcc.application.dto.response;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 public record ProcedureExecutionResponse(
-        Long id,
-        Long patientProcedureId,
+        UUID id,
+        UUID patientProcedureId,
         ProcedureSummary procedure,
         DoctorSummary doctor,
         PatientSummary patient,

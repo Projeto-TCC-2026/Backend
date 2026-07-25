@@ -27,6 +27,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -59,23 +60,27 @@ class PatientServiceImplTest {
     private PatientRequest request;
     private PatientResponse response;
 
+    private static final UUID USER_ID = UUID.randomUUID();
+    private static final UUID PATIENT_ID = UUID.randomUUID();
+    private static final UUID NONEXISTENT_ID = UUID.randomUUID();
+
     @BeforeEach
     void setUp() {
         user = new User("patient@test.com", "encoded", Role.PATIENT);
-        user.setId(1L);
+        user.setId(USER_ID);
 
         patient = new Patient(user, "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1));
-        patient.setId(1L);
+        patient.setId(PATIENT_ID);
         patient.setEmail("patient@test.com");
 
         request = new PatientRequest(
-                1L, "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1),
+                USER_ID, "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1),
                 "M", "11999999999", "patient@test.com", "Rua A",
                 "Sao Paulo", "SP", "01000000", "O+", 70.0, 1.75
         );
 
         response = new PatientResponse(
-                1L, null, "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1),
+                PATIENT_ID, null, "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1),
                 "M", "11999999999", "patient@test.com", "Rua A",
                 "Sao Paulo", "SP", "01000000", "O+", 70.0, 1.75,
                 true, null, null
@@ -89,9 +94,9 @@ class PatientServiceImplTest {
         @Test
         @DisplayName("deve criar paciente com sucesso")
         void shouldCreatePatientSuccessfully() {
-            when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
             when(patientRepository.existsByCpfAndActiveTrue("12345678901")).thenReturn(false);
-            when(patientRepository.findByUserId(1L)).thenReturn(Optional.empty());
+            when(patientRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
             when(patientRepository.existsByEmailAndActiveTrue("patient@test.com")).thenReturn(false);
             when(patientMapper.toEntity(request, user)).thenReturn(patient);
             when(patientRepository.save(patient)).thenReturn(patient);
@@ -106,7 +111,7 @@ class PatientServiceImplTest {
         @Test
         @DisplayName("deve lancar excecao quando CPF duplicado")
         void shouldThrowWhenDuplicateCpf() {
-            when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
             when(patientRepository.existsByCpfAndActiveTrue("12345678901")).thenReturn(true);
 
             assertThatThrownBy(() -> patientService.createPatient(request))
@@ -119,9 +124,9 @@ class PatientServiceImplTest {
         @Test
         @DisplayName("deve lancar excecao quando email duplicado")
         void shouldThrowWhenDuplicateEmail() {
-            when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
             when(patientRepository.existsByCpfAndActiveTrue("12345678901")).thenReturn(false);
-            when(patientRepository.findByUserId(1L)).thenReturn(Optional.empty());
+            when(patientRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
             when(patientRepository.existsByEmailAndActiveTrue("patient@test.com")).thenReturn(true);
 
             assertThatThrownBy(() -> patientService.createPatient(request))
@@ -134,9 +139,9 @@ class PatientServiceImplTest {
         @Test
         @DisplayName("deve lancar excecao quando usuario ja associado a outro paciente")
         void shouldThrowWhenUserAlreadyAssociated() {
-            when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
             when(patientRepository.existsByCpfAndActiveTrue("12345678901")).thenReturn(false);
-            when(patientRepository.findByUserId(1L)).thenReturn(Optional.of(patient));
+            when(patientRepository.findByUserId(USER_ID)).thenReturn(Optional.of(patient));
 
             assertThatThrownBy(() -> patientService.createPatient(request))
                     .isInstanceOf(BusinessException.class)
@@ -148,7 +153,7 @@ class PatientServiceImplTest {
         @Test
         @DisplayName("deve lancar excecao quando usuario nao encontrado")
         void shouldThrowWhenUserNotFound() {
-            when(userRepository.findById(1L)).thenReturn(Optional.empty());
+            when(userRepository.findById(USER_ID)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> patientService.createPatient(request))
                     .isInstanceOf(ResourceNotFoundException.class)
@@ -165,9 +170,9 @@ class PatientServiceImplTest {
         void shouldDeletePatientWithoutRelationships() {
             patient.setProcedureExecutions(new ArrayList<>());
             patient.setHealthReadings(new ArrayList<>());
-            when(patientRepository.findById(1L)).thenReturn(Optional.of(patient));
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
 
-            patientService.deletePatient(1L);
+            patientService.deletePatient(PATIENT_ID);
 
             verify(patientRepository).delete(patient);
         }
@@ -177,9 +182,9 @@ class PatientServiceImplTest {
         void shouldThrowWhenHasProcedureExecutions() {
             List<ProcedureExecution> executions = List.of(new ProcedureExecution());
             patient.setProcedureExecutions(new ArrayList<>(executions));
-            when(patientRepository.findById(1L)).thenReturn(Optional.of(patient));
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
 
-            assertThatThrownBy(() -> patientService.deletePatient(1L))
+            assertThatThrownBy(() -> patientService.deletePatient(PATIENT_ID))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("procedimento");
 
@@ -192,9 +197,9 @@ class PatientServiceImplTest {
             patient.setProcedureExecutions(new ArrayList<>());
             List<HealthReading> readings = List.of(new HealthReading());
             patient.setHealthReadings(new ArrayList<>(readings));
-            when(patientRepository.findById(1L)).thenReturn(Optional.of(patient));
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
 
-            assertThatThrownBy(() -> patientService.deletePatient(1L))
+            assertThatThrownBy(() -> patientService.deletePatient(PATIENT_ID))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("leituras de saúde");
 
@@ -204,9 +209,9 @@ class PatientServiceImplTest {
         @Test
         @DisplayName("deve lancar excecao quando paciente nao encontrado")
         void shouldThrowWhenPatientNotFound() {
-            when(patientRepository.findById(99L)).thenReturn(Optional.empty());
+            when(patientRepository.findById(NONEXISTENT_ID)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> patientService.deletePatient(99L))
+            assertThatThrownBy(() -> patientService.deletePatient(NONEXISTENT_ID))
                     .isInstanceOf(ResourceNotFoundException.class);
         }
     }
@@ -218,10 +223,10 @@ class PatientServiceImplTest {
         @Test
         @DisplayName("deve inativar paciente com sucesso")
         void shouldInactivatePatientSuccessfully() {
-            when(patientRepository.findByIdAndActiveTrue(1L)).thenReturn(Optional.of(patient));
+            when(patientRepository.findByIdAndActiveTrue(PATIENT_ID)).thenReturn(Optional.of(patient));
             when(patientRepository.save(patient)).thenReturn(patient);
 
-            patientService.inactivatePatient(1L);
+            patientService.inactivatePatient(PATIENT_ID);
 
             assertThat(patient.getActive()).isFalse();
             verify(patientRepository).save(patient);
@@ -230,9 +235,9 @@ class PatientServiceImplTest {
         @Test
         @DisplayName("deve lancar excecao quando paciente nao encontrado")
         void shouldThrowWhenPatientNotFound() {
-            when(patientRepository.findByIdAndActiveTrue(99L)).thenReturn(Optional.empty());
+            when(patientRepository.findByIdAndActiveTrue(NONEXISTENT_ID)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> patientService.inactivatePatient(99L))
+            assertThatThrownBy(() -> patientService.inactivatePatient(NONEXISTENT_ID))
                     .isInstanceOf(ResourceNotFoundException.class);
         }
     }

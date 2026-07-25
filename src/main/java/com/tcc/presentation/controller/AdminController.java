@@ -26,6 +26,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -113,7 +114,7 @@ public class AdminController {
     )
     public ResponseEntity<ApiResponse<HospitalResponse>> getHospitalById(
             @Parameter(description = "ID do hospital", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         HospitalResponse hospital = hospitalService.getHospitalById(id);
         ApiResponse<HospitalResponse> response = ApiResponse.success(hospital);
@@ -128,7 +129,7 @@ public class AdminController {
     )
     public ResponseEntity<ApiResponse<HospitalResponse>> updateHospital(
             @Parameter(description = "ID do hospital", example = "1", required = true)
-            @PathVariable Long id,
+            @PathVariable UUID id,
             @Valid @RequestBody HospitalRequest request) {
         
         HospitalResponse hospital = hospitalService.updateHospital(id, request);
@@ -144,7 +145,7 @@ public class AdminController {
     )
     public ResponseEntity<ApiResponse<Void>> deleteHospital(
             @Parameter(description = "ID do hospital", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         hospitalService.deleteHospital(id);
         ApiResponse<Void> response = ApiResponse.success();
@@ -159,7 +160,7 @@ public class AdminController {
     )
     public ResponseEntity<ApiResponse<Void>> enableHospital(
             @Parameter(description = "ID do hospital", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         hospitalService.enableHospital(id);
         ApiResponse<Void> response = ApiResponse.success();
@@ -174,7 +175,7 @@ public class AdminController {
     )
     public ResponseEntity<ApiResponse<Void>> disableHospital(
             @Parameter(description = "ID do hospital", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         hospitalService.disableHospital(id);
         ApiResponse<Void> response = ApiResponse.success();
@@ -235,7 +236,7 @@ public class AdminController {
     )
     public ResponseEntity<ApiResponse<UserResponse>> getUserById(
             @Parameter(description = "ID do usuário", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         UserResponse user = userService.getUserById(id);
         ApiResponse<UserResponse> response = ApiResponse.success(user);
@@ -250,7 +251,7 @@ public class AdminController {
     )
     public ResponseEntity<ApiResponse<UserResponse>> updateUser(
             @Parameter(description = "ID do usuário", example = "1", required = true)
-            @PathVariable Long id,
+            @PathVariable UUID id,
             @Valid @RequestBody UserRequest request) {
         
         UserResponse user = userService.updateUser(id, request);
@@ -266,7 +267,7 @@ public class AdminController {
     )
     public ResponseEntity<ApiResponse<Void>> deleteUser(
             @Parameter(description = "ID do usuário", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         userService.deleteUser(id);
         ApiResponse<Void> response = ApiResponse.success();
@@ -281,7 +282,7 @@ public class AdminController {
     )
     public ResponseEntity<ApiResponse<Void>> activateUser(
             @Parameter(description = "ID do usuário", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         userService.activateUser(id);
         ApiResponse<Void> response = ApiResponse.success();
@@ -296,7 +297,7 @@ public class AdminController {
     )
     public ResponseEntity<ApiResponse<Void>> deactivateUser(
             @Parameter(description = "ID do usuário", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         userService.deactivateUser(id);
         ApiResponse<Void> response = ApiResponse.success();

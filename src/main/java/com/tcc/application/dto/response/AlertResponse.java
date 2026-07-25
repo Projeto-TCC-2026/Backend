@@ -1,11 +1,12 @@
 package com.tcc.application.dto.response;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 public record AlertResponse(
-        Long id,
+        UUID id,
         PatientSummary patient,
-        Long healthReadingId,
+        UUID healthReadingId,
         String severity,
         String title,
         String description,

@@ -1,12 +1,13 @@
 package com.tcc.application.dto.response;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 public record HealthReadingResponse(
-        Long id,
+        UUID id,
         PatientSummary patient,
-        Long patientDeviceId,
-        Long readingImportId,
+        UUID patientDeviceId,
+        UUID readingImportId,
         String readingType,
         String value,
         String unit,

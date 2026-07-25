@@ -3,13 +3,14 @@ package com.tcc.application.dto.request;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.util.UUID;
 
 public record AlertRequest(
 
         @NotNull(message = "ID do paciente é obrigatório")
-        Long patientId,
+        UUID patientId,
 
-        Long healthReadingId,
+        UUID healthReadingId,
 
         @NotBlank(message = "Severidade é obrigatória")
         @Size(max = 50, message = "Severidade deve ter no máximo 50 caracteres")

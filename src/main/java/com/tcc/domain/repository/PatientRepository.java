@@ -10,46 +10,38 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
-public interface PatientRepository extends JpaRepository<Patient, Long> {
+public interface PatientRepository extends JpaRepository<Patient, UUID> {
     
-    Optional<Patient> findByUserId(Long userId);
+    Optional<Patient> findByUserId(UUID userId);
     
     Optional<Patient> findByCpf(String cpf);
     
     boolean existsByCpf(String cpf);
     
-    // Buscar apenas pacientes ativos (sem paginação)
     List<Patient> findByActiveTrue();
     
-    // Buscar apenas pacientes ativos (com paginação)
     @Query("SELECT p FROM Patient p WHERE p.active = true")
     Page<Patient> findPagedByActiveTrue(Pageable pageable);
     
-    // Buscar paciente ativo por ID
-    Optional<Patient> findByIdAndActiveTrue(Long id);
+    Optional<Patient> findByIdAndActiveTrue(UUID id);
     
-    // Verificar se CPF já existe em paciente ativo
     boolean existsByCpfAndActiveTrue(String cpf);
     
-    // Buscar por nome (parcial, case-insensitive) - apenas ativos
     Page<Patient> findByFullNameContainingIgnoreCaseAndActiveTrue(String name, Pageable pageable);
     
-    // Buscar por CPF - apenas ativos
     Page<Patient> findByCpfContainingAndActiveTrue(String cpf, Pageable pageable);
     
-    // Buscar por email - apenas ativos
     Page<Patient> findByEmailContainingIgnoreCaseAndActiveTrue(String email, Pageable pageable);
     
     Optional<Patient> findByEmailAndActiveTrue(String email);
     
     boolean existsByEmailAndActiveTrue(String email);
     
-    // Buscar por telefone - apenas ativos
     Page<Patient> findByPhoneContainingAndActiveTrue(String phone, Pageable pageable);
     
-    // Filtro avançado com múltiplos critérios
     @Query("SELECT p FROM Patient p WHERE p.active = true " +
            "AND (:name IS NULL OR LOWER(p.fullName) LIKE LOWER(CONCAT('%', :name, '%'))) " +
            "AND (:gender IS NULL OR p.gender = :gender) " +
@@ -61,27 +53,23 @@ public interface PatientRepository extends JpaRepository<Patient, Long> {
                                  @Param("state") String state,
                                  Pageable pageable);
                                  
-    // Métodos de contagem para dashboard
     long countByActiveTrue();
     
-    // Dashboard queries - Consultas otimizadas com COUNT
     @Query("SELECT COUNT(p) FROM Patient p WHERE p.active = true")
     Long countActivePatientsTotal();
     
     @Query("SELECT COUNT(DISTINCT dp.patient) FROM DoctorPatient dp " +
            "WHERE dp.doctor.hospital.id = :hospitalId " +
            "AND dp.patient.active = true")
-    Long countActivePatientsByHospitalId(@Param("hospitalId") Long hospitalId);
+    Long countActivePatientsByHospitalId(@Param("hospitalId") UUID hospitalId);
     
-    // Buscar últimos pacientes de um hospital
     @Query("SELECT DISTINCT p FROM Patient p " +
            "JOIN p.doctorPatients dp " +
            "WHERE dp.doctor.hospital.id = :hospitalId " +
            "AND p.active = true " +
            "ORDER BY p.createdAt DESC")
-    List<Patient> findLatestPatientsByHospitalId(@Param("hospitalId") Long hospitalId, Pageable pageable);
+    List<Patient> findLatestPatientsByHospitalId(@Param("hospitalId") UUID hospitalId, Pageable pageable);
     
-    // Report queries
     @Query("SELECT dp.doctor.hospital.id as hospitalId, dp.doctor.hospital.name as hospitalName, " +
            "COUNT(DISTINCT dp.patient) as totalPatients " +
            "FROM DoctorPatient dp " +
@@ -90,5 +78,3 @@ public interface PatientRepository extends JpaRepository<Patient, Long> {
            "ORDER BY totalPatients DESC")
     List<Object[]> countPatientsByHospital();
 }
-
-

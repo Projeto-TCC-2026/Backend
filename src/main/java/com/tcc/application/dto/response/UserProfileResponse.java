@@ -1,17 +1,18 @@
 package com.tcc.application.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import java.util.UUID;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class UserProfileResponse {
 
-    private Long id;
+    private UUID id;
     private String email;
     private String role;
     private String fullName;
 
     // Doctor-specific fields
-    private Long doctorId;
+    private UUID doctorId;
     private String crm;
     private String specialty;
     private String hospitalName;
@@ -19,15 +20,15 @@ public class UserProfileResponse {
     public UserProfileResponse() {}
 
     // Constructor for ADMIN
-    public UserProfileResponse(Long id, String email, String role) {
+    public UserProfileResponse(UUID id, String email, String role) {
         this.id = id;
         this.email = email;
         this.role = role;
     }
 
     // Constructor for DOCTOR
-    public UserProfileResponse(Long id, String email, String role, String fullName,
-                               Long doctorId, String crm, String specialty, String hospitalName) {
+    public UserProfileResponse(UUID id, String email, String role, String fullName,
+                               UUID doctorId, String crm, String specialty, String hospitalName) {
         this.id = id;
         this.email = email;
         this.role = role;
@@ -38,9 +39,8 @@ public class UserProfileResponse {
         this.hospitalName = hospitalName;
     }
 
-    // Getters and Setters
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
@@ -51,8 +51,8 @@ public class UserProfileResponse {
     public String getFullName() { return fullName; }
     public void setFullName(String fullName) { this.fullName = fullName; }
 
-    public Long getDoctorId() { return doctorId; }
-    public void setDoctorId(Long doctorId) { this.doctorId = doctorId; }
+    public UUID getDoctorId() { return doctorId; }
+    public void setDoctorId(UUID doctorId) { this.doctorId = doctorId; }
 
     public String getCrm() { return crm; }
     public void setCrm(String crm) { this.crm = crm; }

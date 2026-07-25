@@ -3,14 +3,15 @@ package com.tcc.application.dto.request;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.util.UUID;
 
 public record NotificationRequest(
 
         @NotNull(message = "ID do alerta é obrigatório")
-        Long alertId,
+        UUID alertId,
 
         @NotNull(message = "ID do médico é obrigatório")
-        Long doctorId,
+        UUID doctorId,
 
         @NotBlank(message = "Mensagem é obrigatória")
         String message,

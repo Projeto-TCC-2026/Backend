@@ -44,13 +44,13 @@ Authorization: Bearer {{token}}
 ### ============================================
 ### 3. GET - Buscar paciente por ID
 ### ============================================
-GET {{baseUrl}}/api/patients/1
+GET {{baseUrl}}/api/patients/550e8400-e29b-41d4-a716-446655440001
 Authorization: Bearer {{token}}
 
 ### ============================================
 ### 4. PUT - Atualizar paciente
 ### ============================================
-PUT {{baseUrl}}/api/patients/1
+PUT {{baseUrl}}/api/patients/550e8400-e29b-41d4-a716-446655440001
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -75,13 +75,13 @@ Content-Type: application/json
 ### 5. DELETE - Excluir paciente (hard delete)
 ### ============================================
 ### ⚠️ ATENÇÃO: Esta operação é IRREVERSÍVEL!
-DELETE {{baseUrl}}/api/patients/1
+DELETE {{baseUrl}}/api/patients/550e8400-e29b-41d4-a716-446655440001
 Authorization: Bearer {{token}}
 
 ### ============================================
 ### 6. PATCH - Inativar paciente (soft delete)
 ### ============================================
-PATCH {{baseUrl}}/api/patients/1/inactive
+PATCH {{baseUrl}}/api/patients/550e8400-e29b-41d4-a716-446655440001/inactive
 Authorization: Bearer {{token}}
 
 ### ============================================
@@ -145,7 +145,7 @@ Authorization: Bearer {{token}}
 ### ============================================
 ### 12. GET - Listar procedimentos realizados de um paciente
 ### ============================================
-GET {{baseUrl}}/api/patients/1/procedures?page=0&size=10&sort=executionDate,desc
+GET {{baseUrl}}/api/patients/550e8400-e29b-41d4-a716-446655440001/procedures?page=0&size=10&sort=executionDate,desc
 Authorization: Bearer {{token}}
 
 ### 12.1 - Listar com paginação diferente

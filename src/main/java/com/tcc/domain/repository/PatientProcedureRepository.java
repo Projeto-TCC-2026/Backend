@@ -5,17 +5,18 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.UUID;
 
 @Repository
-public interface PatientProcedureRepository extends JpaRepository<PatientProcedure, Long> {
+public interface PatientProcedureRepository extends JpaRepository<PatientProcedure, UUID> {
     
-    List<PatientProcedure> findByPatientId(Long patientId);
+    List<PatientProcedure> findByPatientId(UUID patientId);
     
-    List<PatientProcedure> findByDoctorId(Long doctorId);
+    List<PatientProcedure> findByDoctorId(UUID doctorId);
     
-    List<PatientProcedure> findByProcedureId(Long procedureId);
+    List<PatientProcedure> findByProcedureId(UUID procedureId);
     
     List<PatientProcedure> findByStatus(String status);
     
-    List<PatientProcedure> findByPatientIdAndStatus(Long patientId, String status);
+    List<PatientProcedure> findByPatientIdAndStatus(UUID patientId, String status);
 }

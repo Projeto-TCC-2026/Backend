@@ -1,6 +1,7 @@
 package com.tcc.application.dto.request;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -9,12 +10,12 @@ import jakarta.validation.constraints.Size;
 public record HealthReadingRequest(
 
         @NotNull(message = "ID do paciente é obrigatório")
-        Long patientId,
+        UUID patientId,
 
         @NotNull(message = "ID do dispositivo é obrigatório")
-        Long patientDeviceId,
+        UUID patientDeviceId,
 
-        Long readingImportId,
+        UUID readingImportId,
 
         @NotBlank(message = "Tipo de leitura é obrigatório")
         @Size(max = 100, message = "Tipo de leitura deve ter no máximo 100 caracteres")

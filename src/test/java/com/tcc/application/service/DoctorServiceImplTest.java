@@ -26,6 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -56,21 +57,26 @@ class DoctorServiceImplTest {
     private DoctorRequest request;
     private DoctorResponse response;
 
+    private static final UUID USER_ID = UUID.randomUUID();
+    private static final UUID HOSPITAL_ID = UUID.randomUUID();
+    private static final UUID DOCTOR_ID = UUID.randomUUID();
+    private static final UUID NONEXISTENT_ID = UUID.randomUUID();
+
     @BeforeEach
     void setUp() {
         user = new User("doctor@test.com", "encoded", Role.DOCTOR);
-        user.setId(1L);
+        user.setId(USER_ID);
 
         hospital = new Hospital("Hospital Central", "12345678000100");
-        hospital.setId(1L);
+        hospital.setId(HOSPITAL_ID);
 
         doctor = new Doctor(user, hospital, "Dr. Carlos", "11122233344", "CRM12345");
-        doctor.setId(1L);
+        doctor.setId(DOCTOR_ID);
         doctor.setSpecialty("Cardiologia");
 
-        request = new DoctorRequest(1L, 1L, "Dr. Carlos", "11122233344", "CRM12345", "Cardiologia", "11988887777");
+        request = new DoctorRequest(USER_ID, HOSPITAL_ID, "Dr. Carlos", "11122233344", "CRM12345", "Cardiologia", "11988887777");
 
-        response = new DoctorResponse(1L, null, null, "Dr. Carlos", "11122233344", "CRM12345", "Cardiologia", "11988887777", null, null);
+        response = new DoctorResponse(DOCTOR_ID, null, null, "Dr. Carlos", "11122233344", "CRM12345", "Cardiologia", "11988887777", null, null);
     }
 
     @Nested
@@ -80,11 +86,11 @@ class DoctorServiceImplTest {
         @Test
         @DisplayName("deve criar doutor com sucesso")
         void shouldCreateDoctorSuccessfully() {
-            when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-            when(hospitalRepository.findById(1L)).thenReturn(Optional.of(hospital));
+            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+            when(hospitalRepository.findById(HOSPITAL_ID)).thenReturn(Optional.of(hospital));
             when(doctorRepository.existsByCpf("11122233344")).thenReturn(false);
             when(doctorRepository.existsByCrm("CRM12345")).thenReturn(false);
-            when(doctorRepository.findByUserId(1L)).thenReturn(Optional.empty());
+            when(doctorRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
             when(doctorMapper.toEntity(request, user, hospital)).thenReturn(doctor);
             when(doctorRepository.save(doctor)).thenReturn(doctor);
             when(doctorMapper.toResponse(doctor)).thenReturn(response);
@@ -98,8 +104,8 @@ class DoctorServiceImplTest {
         @Test
         @DisplayName("deve lancar excecao quando CPF duplicado")
         void shouldThrowWhenDuplicateCpf() {
-            when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-            when(hospitalRepository.findById(1L)).thenReturn(Optional.of(hospital));
+            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+            when(hospitalRepository.findById(HOSPITAL_ID)).thenReturn(Optional.of(hospital));
             when(doctorRepository.existsByCpf("11122233344")).thenReturn(true);
 
             assertThatThrownBy(() -> doctorService.createDoctor(request))
@@ -112,8 +118,8 @@ class DoctorServiceImplTest {
         @Test
         @DisplayName("deve lancar excecao quando CRM duplicado")
         void shouldThrowWhenDuplicateCrm() {
-            when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-            when(hospitalRepository.findById(1L)).thenReturn(Optional.of(hospital));
+            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+            when(hospitalRepository.findById(HOSPITAL_ID)).thenReturn(Optional.of(hospital));
             when(doctorRepository.existsByCpf("11122233344")).thenReturn(false);
             when(doctorRepository.existsByCrm("CRM12345")).thenReturn(true);
 
@@ -127,11 +133,11 @@ class DoctorServiceImplTest {
         @Test
         @DisplayName("deve lancar excecao quando usuario ja associado a outro doutor")
         void shouldThrowWhenUserAlreadyAssociated() {
-            when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-            when(hospitalRepository.findById(1L)).thenReturn(Optional.of(hospital));
+            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+            when(hospitalRepository.findById(HOSPITAL_ID)).thenReturn(Optional.of(hospital));
             when(doctorRepository.existsByCpf("11122233344")).thenReturn(false);
             when(doctorRepository.existsByCrm("CRM12345")).thenReturn(false);
-            when(doctorRepository.findByUserId(1L)).thenReturn(Optional.of(doctor));
+            when(doctorRepository.findByUserId(USER_ID)).thenReturn(Optional.of(doctor));
 
             assertThatThrownBy(() -> doctorService.createDoctor(request))
                     .isInstanceOf(BusinessException.class)
@@ -143,7 +149,7 @@ class DoctorServiceImplTest {
         @Test
         @DisplayName("deve lancar excecao quando usuario nao encontrado")
         void shouldThrowWhenUserNotFound() {
-            when(userRepository.findById(1L)).thenReturn(Optional.empty());
+            when(userRepository.findById(USER_ID)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> doctorService.createDoctor(request))
                     .isInstanceOf(ResourceNotFoundException.class)
@@ -153,8 +159,8 @@ class DoctorServiceImplTest {
         @Test
         @DisplayName("deve lancar excecao quando hospital nao encontrado")
         void shouldThrowWhenHospitalNotFound() {
-            when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-            when(hospitalRepository.findById(1L)).thenReturn(Optional.empty());
+            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+            when(hospitalRepository.findById(HOSPITAL_ID)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> doctorService.createDoctor(request))
                     .isInstanceOf(ResourceNotFoundException.class)
@@ -171,9 +177,9 @@ class DoctorServiceImplTest {
         void shouldDeleteDoctorWithoutRelationships() {
             doctor.setDoctorPatients(new ArrayList<>());
             doctor.setProcedures(new ArrayList<>());
-            when(doctorRepository.findById(1L)).thenReturn(Optional.of(doctor));
+            when(doctorRepository.findById(DOCTOR_ID)).thenReturn(Optional.of(doctor));
 
-            doctorService.deleteDoctor(1L);
+            doctorService.deleteDoctor(DOCTOR_ID);
 
             verify(doctorRepository).delete(doctor);
         }
@@ -184,9 +190,9 @@ class DoctorServiceImplTest {
             List<DoctorPatient> patients = List.of(new DoctorPatient());
             doctor.setDoctorPatients(new ArrayList<>(patients));
             doctor.setProcedures(new ArrayList<>());
-            when(doctorRepository.findById(1L)).thenReturn(Optional.of(doctor));
+            when(doctorRepository.findById(DOCTOR_ID)).thenReturn(Optional.of(doctor));
 
-            assertThatThrownBy(() -> doctorService.deleteDoctor(1L))
+            assertThatThrownBy(() -> doctorService.deleteDoctor(DOCTOR_ID))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("pacientes associados");
 
@@ -199,9 +205,9 @@ class DoctorServiceImplTest {
             doctor.setDoctorPatients(new ArrayList<>());
             List<Procedure> procedures = List.of(new Procedure());
             doctor.setProcedures(new ArrayList<>(procedures));
-            when(doctorRepository.findById(1L)).thenReturn(Optional.of(doctor));
+            when(doctorRepository.findById(DOCTOR_ID)).thenReturn(Optional.of(doctor));
 
-            assertThatThrownBy(() -> doctorService.deleteDoctor(1L))
+            assertThatThrownBy(() -> doctorService.deleteDoctor(DOCTOR_ID))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("procedimentos associados");
 
@@ -211,9 +217,9 @@ class DoctorServiceImplTest {
         @Test
         @DisplayName("deve lancar excecao quando doutor nao encontrado")
         void shouldThrowWhenDoctorNotFound() {
-            when(doctorRepository.findById(99L)).thenReturn(Optional.empty());
+            when(doctorRepository.findById(NONEXISTENT_ID)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> doctorService.deleteDoctor(99L))
+            assertThatThrownBy(() -> doctorService.deleteDoctor(NONEXISTENT_ID))
                     .isInstanceOf(ResourceNotFoundException.class);
         }
     }

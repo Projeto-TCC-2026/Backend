@@ -6,21 +6,22 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Repository
-public interface HealthReadingRepository extends JpaRepository<HealthReading, Long> {
+public interface HealthReadingRepository extends JpaRepository<HealthReading, UUID> {
     
-    List<HealthReading> findByPatientId(Long patientId);
+    List<HealthReading> findByPatientId(UUID patientId);
     
-    List<HealthReading> findByPatientDeviceId(Long patientDeviceId);
+    List<HealthReading> findByPatientDeviceId(UUID patientDeviceId);
     
-    List<HealthReading> findByReadingImportId(Long readingImportId);
+    List<HealthReading> findByReadingImportId(UUID readingImportId);
     
     List<HealthReading> findByReadingType(String readingType);
     
-    List<HealthReading> findByPatientIdAndReadingType(Long patientId, String readingType);
+    List<HealthReading> findByPatientIdAndReadingType(UUID patientId, String readingType);
     
-    List<HealthReading> findByPatientIdAndMeasuredAtBetween(Long patientId, LocalDateTime startDate, LocalDateTime endDate);
+    List<HealthReading> findByPatientIdAndMeasuredAtBetween(UUID patientId, LocalDateTime startDate, LocalDateTime endDate);
     
-    List<HealthReading> findByPatientIdOrderByMeasuredAtDesc(Long patientId);
+    List<HealthReading> findByPatientIdOrderByMeasuredAtDesc(UUID patientId);
 }

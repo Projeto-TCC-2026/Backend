@@ -5,13 +5,14 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.UUID;
 
 @Repository
-public interface ReadingImportRepository extends JpaRepository<ReadingImport, Long> {
+public interface ReadingImportRepository extends JpaRepository<ReadingImport, UUID> {
     
-    List<ReadingImport> findByPatientId(Long patientId);
+    List<ReadingImport> findByPatientId(UUID patientId);
     
-    List<ReadingImport> findByPatientDeviceId(Long patientDeviceId);
+    List<ReadingImport> findByPatientDeviceId(UUID patientDeviceId);
     
-    List<ReadingImport> findByPatientIdOrderByImportedAtDesc(Long patientId);
+    List<ReadingImport> findByPatientIdOrderByImportedAtDesc(UUID patientId);
 }

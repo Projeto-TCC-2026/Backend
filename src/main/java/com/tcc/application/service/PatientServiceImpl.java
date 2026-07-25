@@ -18,6 +18,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.UUID;
+
 @Service
 public class PatientServiceImpl implements PatientService {
 
@@ -42,21 +44,17 @@ public class PatientServiceImpl implements PatientService {
     @Override
     @Transactional
     public PatientResponse createPatient(PatientRequest request) {
-        // Verificar se o usuário existe
         User user = userRepository.findById(request.userId())
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(request.userId())));
 
-        // Verificar se já existe paciente com esse CPF ativo
         if (patientRepository.existsByCpfAndActiveTrue(request.cpf())) {
             throw new BusinessException(ErrorMessages.duplicateActivePatientCpf(request.cpf()));
         }
 
-        // Verificar se o usuário já está associado a outro paciente
         if (patientRepository.findByUserId(request.userId()).isPresent()) {
             throw new BusinessException(ErrorMessages.userAlreadyAssociatedWithPatient());
         }
 
-        // Verificar se já existe paciente com esse e-mail ativo (se fornecido)
         if (request.email() != null && !request.email().trim().isEmpty()) {
             if (patientRepository.existsByEmailAndActiveTrue(request.email())) {
                 throw new BusinessException(ErrorMessages.duplicateActivePatientEmail(request.email()));
@@ -78,7 +76,7 @@ public class PatientServiceImpl implements PatientService {
 
     @Override
     @Transactional(readOnly = true)
-    public PatientResponse getPatientById(Long id) {
+    public PatientResponse getPatientById(UUID id) {
         Patient patient = patientRepository.findByIdAndActiveTrue(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.patientNotFoundById(id)));
         
@@ -87,17 +85,15 @@ public class PatientServiceImpl implements PatientService {
 
     @Override
     @Transactional
-    public PatientResponse updatePatient(Long id, PatientRequest request) {
+    public PatientResponse updatePatient(UUID id, PatientRequest request) {
         Patient existingPatient = patientRepository.findByIdAndActiveTrue(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.patientNotFoundById(id)));
 
-        // Verificar se o CPF já existe em outro paciente ativo (exceto o atual)
         if (!existingPatient.getCpf().equals(request.cpf()) && 
             patientRepository.existsByCpfAndActiveTrue(request.cpf())) {
             throw new BusinessException(ErrorMessages.duplicateActivePatientCpf(request.cpf()));
         }
 
-        // Verificar se o e-mail já existe em outro paciente ativo (exceto o atual)
         if (request.email() != null && !request.email().trim().isEmpty()) {
             if (existingPatient.getEmail() == null || !existingPatient.getEmail().equals(request.email())) {
                 if (patientRepository.existsByEmailAndActiveTrue(request.email())) {
@@ -106,7 +102,6 @@ public class PatientServiceImpl implements PatientService {
             }
         }
 
-        // Verificar se o usuário mudou e se já está associado a outro paciente
         if (!existingPatient.getUser().getId().equals(request.userId())) {
             User newUser = userRepository.findById(request.userId())
                     .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(request.userId())));
@@ -126,17 +121,15 @@ public class PatientServiceImpl implements PatientService {
 
     @Override
     @Transactional
-    public void deletePatient(Long id) {
+    public void deletePatient(UUID id) {
         Patient patient = patientRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.patientNotFoundById(id)));
 
-        // Verificar se há procedimentos realizados associados
         if (patient.hasProcedureExecutions()) {
             throw new BusinessException(ErrorMessages.patientHasProcedureExecutions(
                     patient.countProcedureExecutions()));
         }
 
-        // Verificar outros relacionamentos críticos se necessário
         if (!patient.getHealthReadings().isEmpty()) {
             throw new BusinessException(ErrorMessages.PATIENT_HAS_HEALTH_READINGS);
         }
@@ -146,7 +139,7 @@ public class PatientServiceImpl implements PatientService {
 
     @Override
     @Transactional
-    public void inactivatePatient(Long id) {
+    public void inactivatePatient(UUID id) {
         Patient patient = patientRepository.findByIdAndActiveTrue(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.patientNotFoundById(id)));
 
@@ -191,24 +184,20 @@ public class PatientServiceImpl implements PatientService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ProcedureExecutionResponse> getPatientProcedureExecutions(Long patientId, Pageable pageable) {
-        // Verificar se o paciente existe e está ativo
-        Patient patient = patientRepository.findByIdAndActiveTrue(patientId)
+    public Page<ProcedureExecutionResponse> getPatientProcedureExecutions(UUID patientId, Pageable pageable) {
+        patientRepository.findByIdAndActiveTrue(patientId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.patientNotFoundById(patientId)));
 
-        // Buscar os procedimentos realizados do paciente com paginação
         return procedureExecutionRepository.findPagedByPatientId(patientId, pageable)
                 .map(procedureExecutionMapper::toResponse);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Long countPatientProcedureExecutions(Long patientId) {
-        // Verificar se o paciente existe e está ativo
-        Patient patient = patientRepository.findByIdAndActiveTrue(patientId)
+    public Long countPatientProcedureExecutions(UUID patientId) {
+        patientRepository.findByIdAndActiveTrue(patientId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.patientNotFoundById(patientId)));
 
-        // Contar os procedimentos realizados do paciente
         return procedureExecutionRepository.countByPatientId(patientId);
     }
 

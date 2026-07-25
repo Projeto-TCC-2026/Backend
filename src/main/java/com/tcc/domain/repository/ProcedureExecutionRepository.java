@@ -10,50 +10,45 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Repository
-public interface ProcedureExecutionRepository extends JpaRepository<ProcedureExecution, Long> {
+public interface ProcedureExecutionRepository extends JpaRepository<ProcedureExecution, UUID> {
     
-    // Métodos de busca simples
-    List<ProcedureExecution> findByPatientProcedureId(Long patientProcedureId);
+    List<ProcedureExecution> findByPatientProcedureId(UUID patientProcedureId);
     
-    List<ProcedureExecution> findByPatientId(Long patientId);
+    List<ProcedureExecution> findByPatientId(UUID patientId);
     
-    List<ProcedureExecution> findByDoctorId(Long doctorId);
+    List<ProcedureExecution> findByDoctorId(UUID doctorId);
     
-    List<ProcedureExecution> findByProcedureId(Long procedureId);
+    List<ProcedureExecution> findByProcedureId(UUID procedureId);
     
     List<ProcedureExecution> findByStatus(String status);
     
     List<ProcedureExecution> findByExecutionDateBetween(LocalDateTime startDate, LocalDateTime endDate);
     
-    // Métodos com paginação
     @Query("SELECT pe FROM ProcedureExecution pe WHERE pe.patient.id = :patientId")
-    Page<ProcedureExecution> findPagedByPatientId(@Param("patientId") Long patientId, Pageable pageable);
+    Page<ProcedureExecution> findPagedByPatientId(@Param("patientId") UUID patientId, Pageable pageable);
     
     @Query("SELECT pe FROM ProcedureExecution pe WHERE pe.patient.id = :patientId AND pe.status = :status")
-    Page<ProcedureExecution> findPagedByPatientIdAndStatus(@Param("patientId") Long patientId, @Param("status") String status, Pageable pageable);
+    Page<ProcedureExecution> findPagedByPatientIdAndStatus(@Param("patientId") UUID patientId, @Param("status") String status, Pageable pageable);
     
     @Query("SELECT pe FROM ProcedureExecution pe WHERE pe.doctor.id = :doctorId")
-    Page<ProcedureExecution> findPagedByDoctorId(@Param("doctorId") Long doctorId, Pageable pageable);
+    Page<ProcedureExecution> findPagedByDoctorId(@Param("doctorId") UUID doctorId, Pageable pageable);
     
-    // Métodos de contagem
-    long countByPatientId(Long patientId);
+    long countByPatientId(UUID patientId);
     
-    long countByPatientIdAndStatus(Long patientId, String status);
+    long countByPatientIdAndStatus(UUID patientId, String status);
     
-    // Verificações de existência
-    boolean existsByPatientId(Long patientId);
+    boolean existsByPatientId(UUID patientId);
     
-    boolean existsByPatientIdAndStatus(Long patientId, String status);
+    boolean existsByPatientIdAndStatus(UUID patientId, String status);
     
-    // Consultas personalizadas
     @Query("SELECT pe FROM ProcedureExecution pe WHERE pe.patient.id = :patientId AND pe.executionDate BETWEEN :startDate AND :endDate")
-    List<ProcedureExecution> findByPatientIdAndDateRange(@Param("patientId") Long patientId, 
+    List<ProcedureExecution> findByPatientIdAndDateRange(@Param("patientId") UUID patientId, 
                                                           @Param("startDate") LocalDateTime startDate, 
                                                           @Param("endDate") LocalDateTime endDate);
     
     @Query("SELECT pe FROM ProcedureExecution pe WHERE pe.patient.id = :patientId ORDER BY pe.executionDate DESC")
-    List<ProcedureExecution> findLatestByPatientId(@Param("patientId") Long patientId, Pageable pageable);
+    List<ProcedureExecution> findLatestByPatientId(@Param("patientId") UUID patientId, Pageable pageable);
 }
-

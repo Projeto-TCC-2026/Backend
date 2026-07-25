@@ -1,8 +1,10 @@
 package com.tcc.application.dto.response;
 
+import java.util.UUID;
+
 public class HospitalSummary {
 
-    private Long id;
+    private UUID id;
     private String name;
     private String cnpj;
     private String city;
@@ -14,7 +16,7 @@ public class HospitalSummary {
 
     public HospitalSummary() {}
 
-    public HospitalSummary(Long id, String name, String cnpj, String city, String state, 
+    public HospitalSummary(UUID id, String name, String cnpj, String city, String state, 
                           String phone, String email, Long totalDoctors, Boolean active) {
         this.id = id;
         this.name = name;
@@ -27,12 +29,11 @@ public class HospitalSummary {
         this.active = active;
     }
 
-    // Getters and Setters
-    public Long getId() {
+    public UUID getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(UUID id) {
         this.id = id;
     }
 

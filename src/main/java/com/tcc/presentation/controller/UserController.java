@@ -18,6 +18,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.UUID;
+
 @RestController
 @RequestMapping("/api/users")
 @Tag(name = "Usuários", description = "CRUD de Usuários - Apenas administradores")
@@ -62,7 +64,7 @@ public class UserController {
     )
     public ResponseEntity<ApiResponse<UserResponse>> getUserById(
             @Parameter(description = "ID do usuário", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         UserResponse user = userService.getUserById(id);
         return ResponseEntity.ok(ApiResponse.success(user));
     }
@@ -75,7 +77,7 @@ public class UserController {
     )
     public ResponseEntity<ApiResponse<UserResponse>> updateUser(
             @Parameter(description = "ID do usuário", required = true)
-            @PathVariable Long id,
+            @PathVariable UUID id,
             @Valid @RequestBody UserRequest request) {
         UserResponse user = userService.updateUser(id, request);
         return ResponseEntity.ok(ApiResponse.success(user));
@@ -89,7 +91,7 @@ public class UserController {
     )
     public ResponseEntity<ApiResponse<Void>> deleteUser(
             @Parameter(description = "ID do usuário", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         userService.deleteUser(id);
         return ResponseEntity.ok(ApiResponse.success());
     }

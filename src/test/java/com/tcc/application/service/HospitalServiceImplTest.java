@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -42,14 +43,17 @@ class HospitalServiceImplTest {
     private HospitalRequest request;
     private HospitalResponse response;
 
+    private static final UUID HOSPITAL_ID = UUID.randomUUID();
+    private static final UUID NONEXISTENT_ID = UUID.randomUUID();
+
     @BeforeEach
     void setUp() {
         hospital = new Hospital("Hospital Central", "12345678000100");
-        hospital.setId(1L);
+        hospital.setId(HOSPITAL_ID);
 
         request = new HospitalRequest("Hospital Central", "12345678000100", "1133334444", "contato@hospital.com", "Rua B", "Sao Paulo", "SP");
 
-        response = new HospitalResponse(1L, "Hospital Central", "12345678000100", "1133334444", "contato@hospital.com", "Rua B", "Sao Paulo", "SP", true, null, null);
+        response = new HospitalResponse(HOSPITAL_ID, "Hospital Central", "12345678000100", "1133334444", "contato@hospital.com", "Rua B", "Sao Paulo", "SP", true, null, null);
     }
 
     @Nested
@@ -91,9 +95,9 @@ class HospitalServiceImplTest {
         @DisplayName("deve excluir hospital sem doutores associados")
         void shouldDeleteHospitalWithoutDoctors() {
             hospital.setDoctors(new ArrayList<>());
-            when(hospitalRepository.findById(1L)).thenReturn(Optional.of(hospital));
+            when(hospitalRepository.findById(HOSPITAL_ID)).thenReturn(Optional.of(hospital));
 
-            hospitalService.deleteHospital(1L);
+            hospitalService.deleteHospital(HOSPITAL_ID);
 
             verify(hospitalRepository).delete(hospital);
         }
@@ -103,9 +107,9 @@ class HospitalServiceImplTest {
         void shouldThrowWhenHasAssociatedDoctors() {
             List<Doctor> doctors = List.of(new Doctor());
             hospital.setDoctors(new ArrayList<>(doctors));
-            when(hospitalRepository.findById(1L)).thenReturn(Optional.of(hospital));
+            when(hospitalRepository.findById(HOSPITAL_ID)).thenReturn(Optional.of(hospital));
 
-            assertThatThrownBy(() -> hospitalService.deleteHospital(1L))
+            assertThatThrownBy(() -> hospitalService.deleteHospital(HOSPITAL_ID))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("doutores associados");
 
@@ -115,9 +119,9 @@ class HospitalServiceImplTest {
         @Test
         @DisplayName("deve lancar excecao quando hospital nao encontrado")
         void shouldThrowWhenHospitalNotFound() {
-            when(hospitalRepository.findById(99L)).thenReturn(Optional.empty());
+            when(hospitalRepository.findById(NONEXISTENT_ID)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> hospitalService.deleteHospital(99L))
+            assertThatThrownBy(() -> hospitalService.deleteHospital(NONEXISTENT_ID))
                     .isInstanceOf(ResourceNotFoundException.class);
         }
     }

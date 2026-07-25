@@ -1,9 +1,10 @@
 package com.tcc.application.dto.response;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 public record PatientDeviceResponse(
-        Long id,
+        UUID id,
         PatientSummary patient,
         String deviceIdentifier,
         String deviceType,

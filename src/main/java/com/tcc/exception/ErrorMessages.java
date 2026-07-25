@@ -1,5 +1,7 @@
 package com.tcc.exception;
 
+import java.util.UUID;
+
 public final class ErrorMessages {
 
     public static final String INVALID_ROLE =
@@ -10,7 +12,7 @@ public final class ErrorMessages {
     private ErrorMessages() {
     }
 
-    public static String userNotFoundById(Long id) {
+    public static String userNotFoundById(UUID id) {
         return "Usuário não encontrado com ID: " + id;
     }
 
@@ -18,11 +20,11 @@ public final class ErrorMessages {
         return "Usuário não encontrado com e-mail: " + email;
     }
 
-    public static String patientNotFoundById(Long id) {
+    public static String patientNotFoundById(UUID id) {
         return "Paciente não encontrado com ID: " + id;
     }
 
-    public static String doctorNotFoundById(Long id) {
+    public static String doctorNotFoundById(UUID id) {
         return "Doutor não encontrado com ID: " + id;
     }
 
@@ -30,7 +32,7 @@ public final class ErrorMessages {
         return "Doutor não encontrado com CRM: " + crm;
     }
 
-    public static String hospitalNotFoundById(Long id) {
+    public static String hospitalNotFoundById(UUID id) {
         return "Hospital não encontrado com ID: " + id;
     }
 
@@ -49,6 +51,7 @@ public final class ErrorMessages {
     public static String duplicateDoctorCpf(String cpf) {
         return "Já existe um doutor cadastrado com o CPF: " + cpf;
     }
+
     public static String duplicateDoctorCrm(String crm) {
         return "Já existe um doutor cadastrado com o CRM: " + crm;
     }

@@ -1,18 +1,20 @@
 package com.tcc.application.dto.response;
 
+import java.util.UUID;
+
 public class DoctorAuthResponse {
 
     private String accessToken;
     private String refreshToken;
     private String role;
-    private Long doctorId;
+    private UUID doctorId;
     private String fullName;
     private String crm;
     private String email;
 
     public DoctorAuthResponse() {}
 
-    public DoctorAuthResponse(String accessToken, String refreshToken, String role, Long doctorId, String fullName, String crm, String email) {
+    public DoctorAuthResponse(String accessToken, String refreshToken, String role, UUID doctorId, String fullName, String crm, String email) {
         this.accessToken = accessToken;
         this.refreshToken = refreshToken;
         this.role = role;
@@ -31,8 +33,8 @@ public class DoctorAuthResponse {
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
 
-    public Long getDoctorId() { return doctorId; }
-    public void setDoctorId(Long doctorId) { this.doctorId = doctorId; }
+    public UUID getDoctorId() { return doctorId; }
+    public void setDoctorId(UUID doctorId) { this.doctorId = doctorId; }
 
     public String getFullName() { return fullName; }
     public void setFullName(String fullName) { this.fullName = fullName; }

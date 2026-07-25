@@ -10,50 +10,46 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
-public interface DoctorRepository extends JpaRepository<Doctor, Long> {
+public interface DoctorRepository extends JpaRepository<Doctor, UUID> {
     
-    Optional<Doctor> findByUserId(Long userId);
+    Optional<Doctor> findByUserId(UUID userId);
     
     Optional<Doctor> findByCpf(String cpf);
     
     Optional<Doctor> findByCrm(String crm);
     
-    List<Doctor> findByHospitalId(Long hospitalId);
+    List<Doctor> findByHospitalId(UUID hospitalId);
     
     boolean existsByCpf(String cpf);
     
     boolean existsByCrm(String crm);
     
-    // Busca por nome (case-insensitive, busca parcial)
     Page<Doctor> findByFullNameContainingIgnoreCase(String fullName, Pageable pageable);
     
-    // Busca por especialidade (case-insensitive, busca parcial)
     Page<Doctor> findBySpecialtyContainingIgnoreCase(String specialty, Pageable pageable);
     
-    // Filtros combinados
     @Query("SELECT d FROM Doctor d WHERE " +
            "(:hospitalId IS NULL OR d.hospital.id = :hospitalId) AND " +
            "(:specialty IS NULL OR LOWER(d.specialty) LIKE LOWER(CONCAT('%', :specialty, '%'))) AND " +
            "(:name IS NULL OR LOWER(d.fullName) LIKE LOWER(CONCAT('%', :name, '%'))) AND " +
            "(:crm IS NULL OR LOWER(d.crm) LIKE LOWER(CONCAT('%', :crm, '%')))")
     Page<Doctor> findByFilters(
-        @Param("hospitalId") Long hospitalId,
+        @Param("hospitalId") UUID hospitalId,
         @Param("specialty") String specialty,
         @Param("name") String name,
         @Param("crm") String crm,
         Pageable pageable
     );
     
-    // Dashboard queries - Consultas otimizadas com COUNT
     @Query("SELECT COUNT(d) FROM Doctor d")
     Long countTotalDoctors();
     
     @Query("SELECT COUNT(d) FROM Doctor d WHERE d.hospital.id = :hospitalId")
-    Long countByHospitalId(@Param("hospitalId") Long hospitalId);
+    Long countByHospitalId(@Param("hospitalId") UUID hospitalId);
     
-    // Report queries
     @Query("SELECT d.hospital.id as hospitalId, d.hospital.name as hospitalName, COUNT(d) as totalDoctors " +
            "FROM Doctor d " +
            "GROUP BY d.hospital.id, d.hospital.name " +

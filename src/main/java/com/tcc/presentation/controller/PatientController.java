@@ -19,6 +19,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.UUID;
+
 @RestController
 @RequestMapping("/api/patients")
 @Tag(name = "Pacientes", description = "CRUD de Pacientes - Acesso restrito a Doutores")
@@ -70,7 +72,7 @@ public class PatientController {
     )
     public ResponseEntity<ApiResponse<PatientResponse>> getPatientById(
             @Parameter(description = "ID do paciente", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         PatientResponse patient = patientService.getPatientById(id);
         ApiResponse<PatientResponse> response = ApiResponse.success(patient);
@@ -86,7 +88,7 @@ public class PatientController {
     )
     public ResponseEntity<ApiResponse<PatientResponse>> updatePatient(
             @Parameter(description = "ID do paciente", example = "1", required = true)
-            @PathVariable Long id,
+            @PathVariable UUID id,
             @Valid @RequestBody PatientRequest request) {
         
         PatientResponse patient = patientService.updatePatient(id, request);
@@ -104,7 +106,7 @@ public class PatientController {
     )
     public ResponseEntity<ApiResponse<Void>> deletePatient(
             @Parameter(description = "ID do paciente", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         patientService.deletePatient(id);
         ApiResponse<Void> response = ApiResponse.success();
@@ -120,7 +122,7 @@ public class PatientController {
     )
     public ResponseEntity<ApiResponse<Void>> inactivatePatient(
             @Parameter(description = "ID do paciente", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         patientService.inactivatePatient(id);
         ApiResponse<Void> response = ApiResponse.success();
@@ -238,7 +240,7 @@ public class PatientController {
     )
     public ResponseEntity<ApiResponse<Page<ProcedureExecutionResponse>>> getPatientProcedures(
             @Parameter(description = "ID do paciente", example = "1", required = true)
-            @PathVariable Long id,
+            @PathVariable UUID id,
             @PageableDefault(size = 10, sort = "executionDate", direction = Sort.Direction.DESC) Pageable pageable) {
         
         Page<ProcedureExecutionResponse> procedures = patientService.getPatientProcedureExecutions(id, pageable);
@@ -255,7 +257,7 @@ public class PatientController {
     )
     public ResponseEntity<ApiResponse<Long>> countPatientProcedures(
             @Parameter(description = "ID do paciente", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         Long count = patientService.countPatientProcedureExecutions(id);
         ApiResponse<Long> response = ApiResponse.success(count);

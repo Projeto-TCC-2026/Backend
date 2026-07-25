@@ -1,7 +1,9 @@
 package com.tcc.application.dto.response;
 
+import java.util.UUID;
+
 public record PatientsByHospitalResponse(
-        Long hospitalId,
+        UUID hospitalId,
         String hospitalName,
         Long totalPatients
 ) {}

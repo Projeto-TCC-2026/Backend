@@ -6,6 +6,8 @@ import com.tcc.domain.model.Role;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.util.UUID;
+
 public interface UserService {
 
     UserResponse createUser(UserRequest request);
@@ -14,15 +16,14 @@ public interface UserService {
     
     Page<UserResponse> getAllUsers(Role role, Pageable pageable);
 
-    UserResponse getUserById(Long id);
+    UserResponse getUserById(UUID id);
     
     UserResponse getUserByEmail(String email);
 
-    UserResponse updateUser(Long id, UserRequest request);
+    UserResponse updateUser(UUID id, UserRequest request);
 
-    void deleteUser(Long id);
+    void deleteUser(UUID id);
     
-    // Métodos administrativos
     long countUsers();
     
     long countUsersByRole(Role role);
@@ -31,7 +32,7 @@ public interface UserService {
     
     long countInactiveUsersByRole(Role role);
     
-    void activateUser(Long id);
+    void activateUser(UUID id);
     
-    void deactivateUser(Long id);
+    void deactivateUser(UUID id);
 }

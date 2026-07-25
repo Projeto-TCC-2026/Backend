@@ -18,6 +18,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.UUID;
+
 @RestController
 @RequestMapping("/api/hospitals")
 @Tag(name = "Hospitais", description = "CRUD de Hospitais - Gerenciamento de hospitais do sistema")
@@ -69,7 +71,7 @@ public class HospitalController {
     )
     public ResponseEntity<ApiResponse<HospitalResponse>> getHospitalById(
             @Parameter(description = "ID do hospital", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         HospitalResponse hospital = hospitalService.getHospitalById(id);
         ApiResponse<HospitalResponse> response = ApiResponse.success(hospital);
@@ -85,7 +87,7 @@ public class HospitalController {
     )
     public ResponseEntity<ApiResponse<HospitalResponse>> updateHospital(
             @Parameter(description = "ID do hospital", example = "1", required = true)
-            @PathVariable Long id,
+            @PathVariable UUID id,
             @Valid @RequestBody HospitalRequest request) {
         
         HospitalResponse hospital = hospitalService.updateHospital(id, request);
@@ -103,7 +105,7 @@ public class HospitalController {
     )
     public ResponseEntity<ApiResponse<Void>> deleteHospital(
             @Parameter(description = "ID do hospital", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         hospitalService.deleteHospital(id);
         ApiResponse<Void> response = ApiResponse.success();

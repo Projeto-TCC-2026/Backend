@@ -5,14 +5,15 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Entity
 @Table(name = "patients")
 public class Patient {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false, unique = true)
@@ -57,14 +58,14 @@ public class Patient {
     @Column
     private Double height;
 
+    @Column(nullable = false)
+    private Boolean active = true;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @Column(nullable = false)
     private LocalDateTime updatedAt;
-
-    @Column(nullable = false)
-    private Boolean active = true;
 
     @OneToMany(mappedBy = "patient", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<DoctorPatient> doctorPatients = new ArrayList<>();
@@ -107,11 +108,11 @@ public class Patient {
     }
 
     // Getters and Setters
-    public Long getId() {
+    public UUID getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(UUID id) {
         this.id = id;
     }
 
@@ -227,6 +228,14 @@ public class Patient {
         this.height = height;
     }
 
+    public Boolean getActive() {
+        return active;
+    }
+
+    public void setActive(Boolean active) {
+        this.active = active;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -291,14 +300,6 @@ public class Patient {
         this.procedureExecutions = procedureExecutions;
     }
 
-    public Boolean getActive() {
-        return active;
-    }
-
-    public void setActive(Boolean active) {
-        this.active = active;
-    }
-
     // Business methods
     public void inactivate() {
         this.active = false;
@@ -308,7 +309,6 @@ public class Patient {
         return active != null && active;
     }
 
-    // Métodos de negócio para Procedimentos Realizados
     public void addProcedureExecution(ProcedureExecution procedureExecution) {
         this.procedureExecutions.add(procedureExecution);
         procedureExecution.setPatient(this);
@@ -320,7 +320,6 @@ public class Patient {
     }
 
     public List<ProcedureExecution> getActiveProcedureExecutions() {
-        // Retorna apenas procedimentos não cancelados
         return procedureExecutions.stream()
                 .filter(pe -> !"CANCELLED".equals(pe.getStatus()))
                 .toList();

@@ -3,11 +3,12 @@ package com.tcc.application.dto.request;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.util.UUID;
 
 public record PatientDeviceRequest(
 
         @NotNull(message = "ID do paciente é obrigatório")
-        Long patientId,
+        UUID patientId,
 
         @NotBlank(message = "Identificador do dispositivo é obrigatório")
         @Size(max = 255, message = "Identificador deve ter no máximo 255 caracteres")

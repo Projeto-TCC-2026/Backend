@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -51,14 +52,11 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     @Transactional(readOnly = true)
     public AdminDashboardResponse getAdminDashboard() {
-        // Usar COUNT diretamente no banco para melhor performance
         Long totalHospitals = hospitalRepository.countTotalHospitals();
         Long totalDoctors = doctorRepository.countTotalDoctors();
         Long totalPatients = patientRepository.countActivePatientsTotal();
         Long totalProcedures = procedureRepository.countActiveProceduresTotal();
         
-        // Como Hospital não tem campo active, todos são considerados ativos
-        // Se precisar adicionar lógica de ativo/inativo, adicione o campo na entidade Hospital
         Long activeHospitals = totalHospitals;
         Long inactiveHospitals = 0L;
 
@@ -74,12 +72,12 @@ public class DashboardServiceImpl implements DashboardService {
 
     @Override
     @Transactional(readOnly = true)
-    public HospitalDashboardResponse getHospitalDashboard(Long hospitalId, String requesterEmail) {
+    public HospitalDashboardResponse getHospitalDashboard(UUID hospitalId, String requesterEmail) {
         User requester = userRepository.findByEmail(requesterEmail)
                 .orElseThrow(() -> new UnauthorizedException("Usuário autenticado não encontrado"));
 
         if (requester.getRole() == Role.DOCTOR) {
-            Long requesterHospitalId = doctorRepository.findByUserId(requester.getId())
+            UUID requesterHospitalId = doctorRepository.findByUserId(requester.getId())
                     .orElseThrow(() -> new UnauthorizedException("Perfil de médico não encontrado"))
                     .getHospital().getId();
 
@@ -88,16 +86,13 @@ public class DashboardServiceImpl implements DashboardService {
             }
         }
 
-        // Verificar se o hospital existe
         Hospital hospital = hospitalRepository.findById(hospitalId)
                 .orElseThrow(() -> new ResourceNotFoundException("Hospital não encontrado com ID: " + hospitalId));
 
-        // Usar COUNT diretamente no banco
         Long totalDoctors = doctorRepository.countByHospitalId(hospitalId);
         Long totalPatients = patientRepository.countActivePatientsByHospitalId(hospitalId);
         Long totalProcedures = procedureRepository.countActiveProceduresByHospitalId(hospitalId);
 
-        // Buscar procedimentos por período (últimos 12 meses)
         LocalDateTime endDate = LocalDateTime.now();
         LocalDateTime startDate = endDate.minusMonths(12);
         
@@ -111,7 +106,6 @@ public class DashboardServiceImpl implements DashboardService {
                 ))
                 .collect(Collectors.toList());
 
-        // Buscar últimos 10 pacientes
         List<Patient> latestPatientsEntities = patientRepository.findLatestPatientsByHospitalId(
                 hospitalId, PageRequest.of(0, 10));
         

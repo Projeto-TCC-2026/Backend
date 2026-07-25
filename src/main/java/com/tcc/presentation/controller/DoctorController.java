@@ -18,6 +18,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.UUID;
+
 @RestController
 @RequestMapping("/api/doctors")
 @Tag(name = "Doutores", description = "CRUD de Doutores - Gerenciamento de doutores do sistema")
@@ -71,7 +73,7 @@ public class DoctorController {
     )
     public ResponseEntity<ApiResponse<DoctorResponse>> getDoctorById(
             @Parameter(description = "ID do doutor", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         DoctorResponse doctor = doctorService.getDoctorById(id);
         ApiResponse<DoctorResponse> response = ApiResponse.success(doctor);
@@ -88,7 +90,7 @@ public class DoctorController {
     )
     public ResponseEntity<ApiResponse<DoctorResponse>> updateDoctor(
             @Parameter(description = "ID do doutor", example = "1", required = true)
-            @PathVariable Long id,
+            @PathVariable UUID id,
             @Valid @RequestBody DoctorRequest request) {
         
         DoctorResponse doctor = doctorService.updateDoctor(id, request);
@@ -106,7 +108,7 @@ public class DoctorController {
     )
     public ResponseEntity<ApiResponse<Void>> deleteDoctor(
             @Parameter(description = "ID do doutor", example = "1", required = true)
-            @PathVariable Long id) {
+            @PathVariable UUID id) {
         
         doctorService.deleteDoctor(id);
         ApiResponse<Void> response = ApiResponse.success();
@@ -176,7 +178,7 @@ public class DoctorController {
     )
     public ResponseEntity<ApiResponse<Page<DoctorResponse>>> filterDoctors(
             @Parameter(description = "ID do hospital")
-            @RequestParam(required = false) Long hospitalId,
+            @RequestParam(required = false) UUID hospitalId,
             
             @Parameter(description = "Especialidade médica (busca parcial)")
             @RequestParam(required = false) String specialty,

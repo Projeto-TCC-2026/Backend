@@ -1,7 +1,9 @@
 package com.tcc.application.dto.response;
 
+import java.util.UUID;
+
 public record ProceduresByDoctorResponse(
-        Long doctorId,
+        UUID doctorId,
         String doctorName,
         String specialty,
         Long totalProcedures

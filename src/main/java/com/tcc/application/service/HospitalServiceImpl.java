@@ -14,6 +14,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.UUID;
+
 @Service
 public class HospitalServiceImpl implements HospitalService {
 
@@ -29,7 +31,6 @@ public class HospitalServiceImpl implements HospitalService {
     @Override
     @Transactional
     public HospitalResponse createHospital(HospitalRequest request) {
-        // Validar CNPJ único
         if (hospitalRepository.existsByCnpj(request.cnpj())) {
             throw new BusinessException(ErrorMessages.duplicateHospitalCnpj(request.cnpj()));
         }
@@ -49,7 +50,7 @@ public class HospitalServiceImpl implements HospitalService {
 
     @Override
     @Transactional(readOnly = true)
-    public HospitalResponse getHospitalById(Long id) {
+    public HospitalResponse getHospitalById(UUID id) {
         Hospital hospital = hospitalRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.hospitalNotFoundById(id)));
         
@@ -58,11 +59,10 @@ public class HospitalServiceImpl implements HospitalService {
 
     @Override
     @Transactional
-    public HospitalResponse updateHospital(Long id, HospitalRequest request) {
+    public HospitalResponse updateHospital(UUID id, HospitalRequest request) {
         Hospital existingHospital = hospitalRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.hospitalNotFoundById(id)));
 
-        // Validar CNPJ único (exceto o próprio hospital)
         if (!existingHospital.getCnpj().equals(request.cnpj()) && 
             hospitalRepository.existsByCnpj(request.cnpj())) {
             throw new BusinessException(ErrorMessages.duplicateHospitalCnpj(request.cnpj()));
@@ -76,11 +76,10 @@ public class HospitalServiceImpl implements HospitalService {
 
     @Override
     @Transactional
-    public void deleteHospital(Long id) {
+    public void deleteHospital(UUID id) {
         Hospital hospital = hospitalRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.hospitalNotFoundById(id)));
 
-        // Verificar se há doutores associados
         if (!hospital.getDoctors().isEmpty()) {
             throw new BusinessException(ErrorMessages.hospitalHasDoctors(hospital.getDoctors().size()));
         }
@@ -122,7 +121,7 @@ public class HospitalServiceImpl implements HospitalService {
 
     @Override
     @Transactional
-    public void enableHospital(Long id) {
+    public void enableHospital(UUID id) {
         Hospital hospital = hospitalRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.hospitalNotFoundById(id)));
         
@@ -132,7 +131,7 @@ public class HospitalServiceImpl implements HospitalService {
 
     @Override
     @Transactional
-    public void disableHospital(Long id) {
+    public void disableHospital(UUID id) {
         Hospital hospital = hospitalRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.hospitalNotFoundById(id)));
         

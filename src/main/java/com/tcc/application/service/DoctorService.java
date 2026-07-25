@@ -5,17 +5,19 @@ import com.tcc.application.dto.response.DoctorResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.util.UUID;
+
 public interface DoctorService {
     
     DoctorResponse createDoctor(DoctorRequest request);
     
     Page<DoctorResponse> getAllDoctors(Pageable pageable);
     
-    DoctorResponse getDoctorById(Long id);
+    DoctorResponse getDoctorById(UUID id);
     
-    DoctorResponse updateDoctor(Long id, DoctorRequest request);
+    DoctorResponse updateDoctor(UUID id, DoctorRequest request);
     
-    void deleteDoctor(Long id);
+    void deleteDoctor(UUID id);
     
     Page<DoctorResponse> searchByName(String name, Pageable pageable);
     
@@ -23,5 +25,5 @@ public interface DoctorService {
     
     Page<DoctorResponse> searchBySpecialty(String specialty, Pageable pageable);
     
-    Page<DoctorResponse> filterDoctors(Long hospitalId, String specialty, String name, String crm, Pageable pageable);
+    Page<DoctorResponse> filterDoctors(UUID hospitalId, String specialty, String name, String crm, Pageable pageable);
 }

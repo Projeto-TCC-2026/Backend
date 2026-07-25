@@ -1,6 +1,7 @@
 package com.tcc.application.dto.request;
 
 import java.time.LocalDate;
+import java.util.UUID;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -12,7 +13,7 @@ import jakarta.validation.constraints.Size;
 public record PatientRequest(
 
         @NotNull(message = "ID do usuário é obrigatório")
-        Long userId,
+        UUID userId,
 
         @NotBlank(message = "Nome completo é obrigatório")
         @Size(max = 255, message = "Nome deve ter no máximo 255 caracteres")
