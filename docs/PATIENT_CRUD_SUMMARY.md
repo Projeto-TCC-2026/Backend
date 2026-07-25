@@ -217,7 +217,7 @@ Page<PatientResponse> searchByCpf(String cpf, Pageable pageable);
 ## 🎯 Padrões Seguidos
 
 ### Arquitetura
-✅ **Clean Architecture** - Separação em camadas (Domain, Application, Presentation)  
+✅ **Arquitetura em camadas** - Separação entre apresentação, aplicação, persistência e entidades JPA  
 ✅ **DDD** - Regras de negócio no domínio  
 ✅ **Repository Pattern** - Acesso a dados abstraído  
 ✅ **Service Pattern** - Lógica de negócio centralizada  
@@ -328,7 +328,7 @@ O **CRUD de Pacientes** foi **implementado com sucesso** e está **100% funciona
 - ✅ **Segurança** com JWT + role-based access
 - ✅ **Documentação completa** (Swagger + Markdown)
 - ✅ **Padrão consistente** com módulos Hospital e Doctor
-- ✅ **Código limpo** seguindo Clean Architecture e DDD
+- ✅ **Código limpo** seguindo arquitetura em camadas e DDD simplificado
 - ✅ **Testado e funcionando** (aplicação iniciada com sucesso)
 
 ### Todos os dados do paciente contemplados:

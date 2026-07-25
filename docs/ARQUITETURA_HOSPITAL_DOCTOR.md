@@ -487,4 +487,4 @@ Esta arquitetura segue os princípios:
 - ✅ **Single Responsibility** - Cada classe tem um propósito único
 - ✅ **Open/Closed** - Aberto para extensão, fechado para modificação
 - ✅ **DRY** - Não há duplicação de código
-- ✅ **Clean Architecture** - Camadas bem definidas e desacopladas
+- ✅ **Arquitetura em camadas** - Fluxo Controller → Service → Repository → Entity JPA

@@ -208,7 +208,7 @@ Todos os scripts estão em `src/main/resources/db/migration/`:
 ## 🎯 Estado de Implementação
 
 ### ✅ Implementado
-- Arquitetura em camadas (Clean Architecture / DDD)
+- Arquitetura em camadas, com responsabilidades organizadas por pacote
 - 14 Entidades JPA com relacionamentos completos
 - 14 Repositories com queries customizadas
 - 14 Migrations Flyway (V1–V14)

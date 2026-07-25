@@ -7,6 +7,7 @@ import com.tcc.application.mapper.HospitalMapper;
 import com.tcc.domain.model.Hospital;
 import com.tcc.domain.repository.HospitalRepository;
 import com.tcc.exception.BusinessException;
+import com.tcc.exception.ErrorMessages;
 import com.tcc.exception.ResourceNotFoundException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -30,7 +31,7 @@ public class HospitalServiceImpl implements HospitalService {
     public HospitalResponse createHospital(HospitalRequest request) {
         // Validar CNPJ único
         if (hospitalRepository.existsByCnpj(request.cnpj())) {
-            throw new BusinessException("Já existe um hospital cadastrado com o CNPJ: " + request.cnpj());
+            throw new BusinessException(ErrorMessages.duplicateHospitalCnpj(request.cnpj()));
         }
 
         Hospital hospital = hospitalMapper.toEntity(request);
@@ -50,7 +51,7 @@ public class HospitalServiceImpl implements HospitalService {
     @Transactional(readOnly = true)
     public HospitalResponse getHospitalById(Long id) {
         Hospital hospital = hospitalRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Hospital não encontrado com ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.hospitalNotFoundById(id)));
         
         return hospitalMapper.toResponse(hospital);
     }
@@ -59,12 +60,12 @@ public class HospitalServiceImpl implements HospitalService {
     @Transactional
     public HospitalResponse updateHospital(Long id, HospitalRequest request) {
         Hospital existingHospital = hospitalRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Hospital não encontrado com ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.hospitalNotFoundById(id)));
 
         // Validar CNPJ único (exceto o próprio hospital)
         if (!existingHospital.getCnpj().equals(request.cnpj()) && 
             hospitalRepository.existsByCnpj(request.cnpj())) {
-            throw new BusinessException("Já existe um hospital cadastrado com o CNPJ: " + request.cnpj());
+            throw new BusinessException(ErrorMessages.duplicateHospitalCnpj(request.cnpj()));
         }
 
         hospitalMapper.updateEntity(existingHospital, request);
@@ -77,12 +78,11 @@ public class HospitalServiceImpl implements HospitalService {
     @Transactional
     public void deleteHospital(Long id) {
         Hospital hospital = hospitalRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Hospital não encontrado com ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.hospitalNotFoundById(id)));
 
         // Verificar se há doutores associados
         if (!hospital.getDoctors().isEmpty()) {
-            throw new BusinessException("Não é possível excluir o hospital. Existem " + 
-                    hospital.getDoctors().size() + " doutores associados.");
+            throw new BusinessException(ErrorMessages.hospitalHasDoctors(hospital.getDoctors().size()));
         }
 
         hospitalRepository.delete(hospital);
@@ -124,7 +124,7 @@ public class HospitalServiceImpl implements HospitalService {
     @Transactional
     public void enableHospital(Long id) {
         Hospital hospital = hospitalRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Hospital não encontrado com ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.hospitalNotFoundById(id)));
         
         hospital.setActive(true);
         hospitalRepository.save(hospital);
@@ -134,7 +134,7 @@ public class HospitalServiceImpl implements HospitalService {
     @Transactional
     public void disableHospital(Long id) {
         Hospital hospital = hospitalRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Hospital não encontrado com ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.hospitalNotFoundById(id)));
         
         hospital.setActive(false);
         hospitalRepository.save(hospital);

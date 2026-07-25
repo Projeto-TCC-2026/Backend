@@ -402,4 +402,4 @@ Não há nada dando errado. A implementação foi concluída com sucesso seguind
 
 ---
 
-**Desenvolvido com excelência seguindo Clean Code, Clean Architecture e Spring Boot Best Practices** ⭐
+**Desenvolvido com foco em código limpo, arquitetura em camadas e boas práticas do Spring Boot** ⭐

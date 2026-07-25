@@ -11,6 +11,7 @@ import com.tcc.domain.repository.PatientRepository;
 import com.tcc.domain.repository.ProcedureExecutionRepository;
 import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.BusinessException;
+import com.tcc.exception.ErrorMessages;
 import com.tcc.exception.ResourceNotFoundException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -43,22 +44,22 @@ public class PatientServiceImpl implements PatientService {
     public PatientResponse createPatient(PatientRequest request) {
         // Verificar se o usuário existe
         User user = userRepository.findById(request.userId())
-                .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado com ID: " + request.userId()));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(request.userId())));
 
         // Verificar se já existe paciente com esse CPF ativo
         if (patientRepository.existsByCpfAndActiveTrue(request.cpf())) {
-            throw new BusinessException("Já existe um paciente ativo cadastrado com o CPF: " + request.cpf());
+            throw new BusinessException(ErrorMessages.duplicateActivePatientCpf(request.cpf()));
         }
 
         // Verificar se o usuário já está associado a outro paciente
         if (patientRepository.findByUserId(request.userId()).isPresent()) {
-            throw new BusinessException("Usuário já está associado a um paciente");
+            throw new BusinessException(ErrorMessages.userAlreadyAssociatedWithPatient());
         }
 
         // Verificar se já existe paciente com esse e-mail ativo (se fornecido)
         if (request.email() != null && !request.email().trim().isEmpty()) {
             if (patientRepository.existsByEmailAndActiveTrue(request.email())) {
-                throw new BusinessException("Já existe um paciente ativo cadastrado com o e-mail: " + request.email());
+                throw new BusinessException(ErrorMessages.duplicateActivePatientEmail(request.email()));
             }
         }
 
@@ -79,7 +80,7 @@ public class PatientServiceImpl implements PatientService {
     @Transactional(readOnly = true)
     public PatientResponse getPatientById(Long id) {
         Patient patient = patientRepository.findByIdAndActiveTrue(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Paciente não encontrado com ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.patientNotFoundById(id)));
         
         return patientMapper.toResponse(patient);
     }
@@ -88,19 +89,19 @@ public class PatientServiceImpl implements PatientService {
     @Transactional
     public PatientResponse updatePatient(Long id, PatientRequest request) {
         Patient existingPatient = patientRepository.findByIdAndActiveTrue(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Paciente não encontrado com ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.patientNotFoundById(id)));
 
         // Verificar se o CPF já existe em outro paciente ativo (exceto o atual)
         if (!existingPatient.getCpf().equals(request.cpf()) && 
             patientRepository.existsByCpfAndActiveTrue(request.cpf())) {
-            throw new BusinessException("Já existe um paciente ativo cadastrado com o CPF: " + request.cpf());
+            throw new BusinessException(ErrorMessages.duplicateActivePatientCpf(request.cpf()));
         }
 
         // Verificar se o e-mail já existe em outro paciente ativo (exceto o atual)
         if (request.email() != null && !request.email().trim().isEmpty()) {
             if (existingPatient.getEmail() == null || !existingPatient.getEmail().equals(request.email())) {
                 if (patientRepository.existsByEmailAndActiveTrue(request.email())) {
-                    throw new BusinessException("Já existe um paciente ativo cadastrado com o e-mail: " + request.email());
+                    throw new BusinessException(ErrorMessages.duplicateActivePatientEmail(request.email()));
                 }
             }
         }
@@ -108,10 +109,10 @@ public class PatientServiceImpl implements PatientService {
         // Verificar se o usuário mudou e se já está associado a outro paciente
         if (!existingPatient.getUser().getId().equals(request.userId())) {
             User newUser = userRepository.findById(request.userId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado com ID: " + request.userId()));
+                    .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(request.userId())));
             
             if (patientRepository.findByUserId(request.userId()).isPresent()) {
-                throw new BusinessException("Usuário já está associado a um paciente");
+                throw new BusinessException(ErrorMessages.userAlreadyAssociatedWithPatient());
             }
             
             existingPatient.setUser(newUser);
@@ -127,18 +128,17 @@ public class PatientServiceImpl implements PatientService {
     @Transactional
     public void deletePatient(Long id) {
         Patient patient = patientRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Paciente não encontrado com ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.patientNotFoundById(id)));
 
         // Verificar se há procedimentos realizados associados
         if (patient.hasProcedureExecutions()) {
-            throw new BusinessException("Não é possível excluir o paciente. Existem " + 
-                    patient.countProcedureExecutions() + " procedimento(s) realizado(s) associado(s). " +
-                    "Use a inativação ao invés da exclusão para manter o histórico.");
+            throw new BusinessException(ErrorMessages.patientHasProcedureExecutions(
+                    patient.countProcedureExecutions()));
         }
 
         // Verificar outros relacionamentos críticos se necessário
         if (!patient.getHealthReadings().isEmpty()) {
-            throw new BusinessException("Não é possível excluir o paciente. Existem leituras de saúde associadas.");
+            throw new BusinessException(ErrorMessages.PATIENT_HAS_HEALTH_READINGS);
         }
 
         patientRepository.delete(patient);
@@ -148,7 +148,7 @@ public class PatientServiceImpl implements PatientService {
     @Transactional
     public void inactivatePatient(Long id) {
         Patient patient = patientRepository.findByIdAndActiveTrue(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Paciente não encontrado com ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.patientNotFoundById(id)));
 
         patient.inactivate();
         patientRepository.save(patient);
@@ -194,7 +194,7 @@ public class PatientServiceImpl implements PatientService {
     public Page<ProcedureExecutionResponse> getPatientProcedureExecutions(Long patientId, Pageable pageable) {
         // Verificar se o paciente existe e está ativo
         Patient patient = patientRepository.findByIdAndActiveTrue(patientId)
-                .orElseThrow(() -> new ResourceNotFoundException("Paciente não encontrado com ID: " + patientId));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.patientNotFoundById(patientId)));
 
         // Buscar os procedimentos realizados do paciente com paginação
         return procedureExecutionRepository.findPagedByPatientId(patientId, pageable)
@@ -206,7 +206,7 @@ public class PatientServiceImpl implements PatientService {
     public Long countPatientProcedureExecutions(Long patientId) {
         // Verificar se o paciente existe e está ativo
         Patient patient = patientRepository.findByIdAndActiveTrue(patientId)
-                .orElseThrow(() -> new ResourceNotFoundException("Paciente não encontrado com ID: " + patientId));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.patientNotFoundById(patientId)));
 
         // Contar os procedimentos realizados do paciente
         return procedureExecutionRepository.countByPatientId(patientId);

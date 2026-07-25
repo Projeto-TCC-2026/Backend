@@ -439,7 +439,7 @@ Backend/
 ## ✅ Conclusão
 
 O módulo CRUD de Pacientes foi implementado com sucesso seguindo:
-- ✅ **Clean Architecture** - Separação clara de responsabilidades  
+- ✅ **Arquitetura em camadas** - Separação clara de responsabilidades
 - ✅ **Domain-Driven Design** - Regras de negócio no domínio
 - ✅ **Security First** - Controle rigoroso de acesso
 - ✅ **API RESTful** - Padrões HTTP corretos

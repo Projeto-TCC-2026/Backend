@@ -83,7 +83,7 @@ O módulo administrativo foi **100% implementado** seguindo os requisitos especi
 
 ## 🛠 **Arquitetura Implementada**
 
-### **Clean Architecture**
+### **Arquitetura em camadas**
 - **Controllers**: `AdminController` com 18 métodos
 - **Services**: `HospitalService`, `UserService`, `AuthService` estendidos
 - **Repositories**: Consultas otimizadas com índices

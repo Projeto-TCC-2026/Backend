@@ -235,7 +235,7 @@ O endpoint `PATCH /doctors/{id}/inactive` **não está funcional** porque:
 - ✅ Validações implementadas
 - ✅ Código documentado
 - ✅ Seguindo padrão do projeto
-- ✅ Clean Architecture respeitada
+- ✅ Arquitetura em camadas respeitada
 
 ---
 

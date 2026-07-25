@@ -10,6 +10,7 @@ import com.tcc.domain.repository.DoctorRepository;
 import com.tcc.domain.repository.HospitalRepository;
 import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.BusinessException;
+import com.tcc.exception.ErrorMessages;
 import com.tcc.exception.ResourceNotFoundException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -39,25 +40,25 @@ public class DoctorServiceImpl implements DoctorService {
     public DoctorResponse createDoctor(DoctorRequest request) {
         // Validar se o usuário existe
         User user = userRepository.findById(request.userId())
-                .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado com ID: " + request.userId()));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(request.userId())));
 
         // Validar se o hospital existe (obrigatório)
         Hospital hospital = hospitalRepository.findById(request.hospitalId())
-                .orElseThrow(() -> new ResourceNotFoundException("Hospital não encontrado com ID: " + request.hospitalId()));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.hospitalNotFoundById(request.hospitalId())));
 
         // Validar CPF único
         if (doctorRepository.existsByCpf(request.cpf())) {
-            throw new BusinessException("Já existe um doutor cadastrado com o CPF: " + request.cpf());
+            throw new BusinessException(ErrorMessages.duplicateDoctorCpf(request.cpf()));
         }
 
         // Validar CRM único
         if (doctorRepository.existsByCrm(request.crm())) {
-            throw new BusinessException("Já existe um doutor cadastrado com o CRM: " + request.crm());
+            throw new BusinessException(ErrorMessages.duplicateDoctorCrm(request.crm()));
         }
 
         // Verificar se o usuário já está associado a outro doutor
         if (doctorRepository.findByUserId(request.userId()).isPresent()) {
-            throw new BusinessException("Usuário já está associado a um doutor");
+            throw new BusinessException(ErrorMessages.userAlreadyAssociatedWithDoctor());
         }
 
         Doctor doctor = doctorMapper.toEntity(request, user, hospital);
@@ -77,7 +78,7 @@ public class DoctorServiceImpl implements DoctorService {
     @Transactional(readOnly = true)
     public DoctorResponse getDoctorById(Long id) {
         Doctor doctor = doctorRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Doutor não encontrado com ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.doctorNotFoundById(id)));
         
         return doctorMapper.toResponse(doctor);
     }
@@ -86,22 +87,22 @@ public class DoctorServiceImpl implements DoctorService {
     @Transactional
     public DoctorResponse updateDoctor(Long id, DoctorRequest request) {
         Doctor existingDoctor = doctorRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Doutor não encontrado com ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.doctorNotFoundById(id)));
 
         // Validar se o hospital existe (obrigatório)
         Hospital hospital = hospitalRepository.findById(request.hospitalId())
-                .orElseThrow(() -> new ResourceNotFoundException("Hospital não encontrado com ID: " + request.hospitalId()));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.hospitalNotFoundById(request.hospitalId())));
 
         // Validar CPF único (exceto o próprio doutor)
         if (!existingDoctor.getCpf().equals(request.cpf()) && 
             doctorRepository.existsByCpf(request.cpf())) {
-            throw new BusinessException("Já existe um doutor cadastrado com o CPF: " + request.cpf());
+            throw new BusinessException(ErrorMessages.duplicateDoctorCpf(request.cpf()));
         }
 
         // Validar CRM único (exceto o próprio doutor)
         if (!existingDoctor.getCrm().equals(request.crm()) && 
             doctorRepository.existsByCrm(request.crm())) {
-            throw new BusinessException("Já existe um doutor cadastrado com o CRM: " + request.crm());
+            throw new BusinessException(ErrorMessages.duplicateDoctorCrm(request.crm()));
         }
 
         doctorMapper.updateEntity(existingDoctor, request, hospital);
@@ -114,17 +115,15 @@ public class DoctorServiceImpl implements DoctorService {
     @Transactional
     public void deleteDoctor(Long id) {
         Doctor doctor = doctorRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Doutor não encontrado com ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.doctorNotFoundById(id)));
 
         // Verificar se há relacionamentos que impedem exclusão
         if (!doctor.getDoctorPatients().isEmpty()) {
-            throw new BusinessException("Não é possível excluir o doutor. Existem " + 
-                    doctor.getDoctorPatients().size() + " pacientes associados.");
+            throw new BusinessException(ErrorMessages.doctorHasPatients(doctor.getDoctorPatients().size()));
         }
 
         if (!doctor.getProcedures().isEmpty()) {
-            throw new BusinessException("Não é possível excluir o doutor. Existem " + 
-                    doctor.getProcedures().size() + " procedimentos associados.");
+            throw new BusinessException(ErrorMessages.doctorHasProcedures(doctor.getProcedures().size()));
         }
 
         doctorRepository.delete(doctor);
@@ -141,7 +140,7 @@ public class DoctorServiceImpl implements DoctorService {
     @Transactional(readOnly = true)
     public DoctorResponse searchByCrm(String crm) {
         Doctor doctor = doctorRepository.findByCrm(crm)
-                .orElseThrow(() -> new ResourceNotFoundException("Doutor não encontrado com CRM: " + crm));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.doctorNotFoundByCrm(crm)));
         
         return doctorMapper.toResponse(doctor);
     }

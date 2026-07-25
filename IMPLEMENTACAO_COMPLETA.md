@@ -364,4 +364,4 @@ A implementação foi **100% concluída** com sucesso!
 
 ---
 
-**Desenvolvido seguindo Clean Architecture e Spring Boot Best Practices** 🚀
+**Desenvolvido seguindo uma arquitetura em camadas e boas práticas do Spring Boot** 🚀

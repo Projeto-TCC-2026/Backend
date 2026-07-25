@@ -1,6 +1,6 @@
 # TCC Saúde - Backend
 
-Backend do projeto de extensão TCC Saúde, desenvolvido com Spring Boot seguindo princípios de Clean Architecture e DDD estratégico simplificado.
+Backend do projeto de extensão TCC Saúde, desenvolvido com Spring Boot em uma arquitetura em camadas, inspirada em princípios de separação de responsabilidades e DDD simplificado.
 
 ## Tecnologias
 
@@ -77,32 +77,31 @@ Resposta:
 
 ```
 src/main/java/com/tcc
+├── presentation
+│   └── controller        # Endpoints REST, validação e autorização
+│
 ├── application
 │   ├── dto
 │   │   ├── request       # DTOs de entrada
 │   │   └── response      # DTOs de saída (inclui ApiResponse)
-│   ├── mapper            # Interfaces MapStruct
-│   └── service           # Lógica de aplicação e regras de negócio
+│   ├── mapper            # Componentes de conversão Entity ↔ DTO
+│   └── service           # Casos de uso e regras de negócio
 │
 ├── domain
-│   ├── model             # Entidades do domínio
-│   └── repository        # Interfaces de repositório (contratos)
+│   ├── model             # Entidades JPA
+│   └── repository        # Repositories Spring Data JPA
 │
 ├── infrastructure
-│   ├── persistence
-│   │   └── repository    # Implementações JPA dos repositórios
-│   ├── security          # JWT, Filters, SecurityConfig
-│   └── config            # Configurações globais (CORS, Swagger)
-│
-├── presentation
-│   └── controller        # Endpoints REST
+│   ├── security          # JWT, filtros e SecurityConfig
+│   └── config            # Configurações técnicas, como OpenAPI
 │
 ├── exception             # Exceções customizadas e GlobalExceptionHandler
-│
-└── util                  # Classes utilitárias
+└── TccApplication.java
 
 src/main/resources
 ├── application.properties
+├── application-dev.properties
+├── application-prod.properties
 └── db/migration          # Scripts Flyway
 ```
 
@@ -138,22 +137,27 @@ Centralizado no `GlobalExceptionHandler`:
 
 ## Camadas — Responsabilidades
 
-### Domain
-- Entidades puras do domínio
-- Interfaces de repositório (contratos)
-- **Não** depende de nenhuma outra camada
-
-### Application
-- Casos de uso e regras de negócio
-- Conversões DTO ↔ Entity via mappers
-- **Não** contém código HTTP ou anotações de controller
-
-### Infrastructure
-- Implementações técnicas (JPA, Security, configs)
-- Implementa os contratos definidos em Domain
+O fluxo principal é `Controller → Service → Repository → Entity JPA`.
 
 ### Presentation
-- Recebe requisições HTTP
-- Valida entrada
-- Delega para services
-- **Não** contém regras de negócio ou SQL
+- Recebe e valida requisições HTTP
+- Aplica as regras de autorização dos endpoints
+- Delega a execução aos services
+
+### Application
+- Implementa casos de uso, transações e regras de negócio
+- Mantém DTOs e mappers para não expor entidades pela API
+- Não contém consultas SQL nem detalhes de resposta de erro
+
+### Domain
+- Contém as entidades anotadas com JPA
+- Contém repositories que estendem interfaces do Spring Data, como `JpaRepository`
+- Possui, portanto, dependência explícita das tecnologias de persistência
+
+### Infrastructure
+- Reúne configurações técnicas de segurança, JWT e OpenAPI
+- Dá suporte transversal às demais camadas
+
+## Decisão Arquitetural
+
+A arquitetura em camadas foi escolhida conscientemente por pragmatismo, considerando o escopo do TCC, o prazo e a facilidade de implementação e manutenção. O projeto aplica separação de responsabilidades, mas não busca isolar o domínio dos frameworks de persistência.

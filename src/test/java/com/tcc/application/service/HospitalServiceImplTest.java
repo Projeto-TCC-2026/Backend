@@ -49,7 +49,7 @@ class HospitalServiceImplTest {
 
         request = new HospitalRequest("Hospital Central", "12345678000100", "1133334444", "contato@hospital.com", "Rua B", "Sao Paulo", "SP");
 
-        response = new HospitalResponse(1L, "Hospital Central", "12345678000100", "1133334444", "contato@hospital.com", "Rua B", "Sao Paulo", "SP", null, null);
+        response = new HospitalResponse(1L, "Hospital Central", "12345678000100", "1133334444", "contato@hospital.com", "Rua B", "Sao Paulo", "SP", true, null, null);
     }
 
     @Nested

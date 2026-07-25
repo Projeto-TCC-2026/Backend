@@ -6,6 +6,7 @@ import com.tcc.domain.model.Role;
 import com.tcc.domain.model.User;
 import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.BusinessException;
+import com.tcc.exception.ErrorMessages;
 import com.tcc.exception.ResourceNotFoundException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -28,7 +29,7 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public UserResponse createUser(UserRequest request) {
         if (userRepository.existsByEmail(request.email())) {
-            throw new BusinessException("Já existe um usuário cadastrado com o e-mail: " + request.email());
+            throw new BusinessException(ErrorMessages.duplicateUserEmail(request.email()));
         }
 
         Role role = parseRole(request.role());
@@ -63,7 +64,7 @@ public class UserServiceImpl implements UserService {
     @Transactional(readOnly = true)
     public UserResponse getUserById(Long id) {
         User user = userRepository.findByIdAndActiveTrue(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado com ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(id)));
         return toResponse(user);
     }
 
@@ -71,7 +72,7 @@ public class UserServiceImpl implements UserService {
     @Transactional(readOnly = true)
     public UserResponse getUserByEmail(String email) {
         User user = userRepository.findByEmailAndActiveTrue(email)
-                .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado com e-mail: " + email));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundByEmail(email)));
         return toResponse(user);
     }
 
@@ -79,11 +80,11 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public UserResponse updateUser(Long id, UserRequest request) {
         User user = userRepository.findByIdAndActiveTrue(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado com ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(id)));
 
         // Valida e-mail único (exceto o próprio usuário)
         if (!user.getEmail().equals(request.email()) && userRepository.existsByEmail(request.email())) {
-            throw new BusinessException("Já existe um usuário cadastrado com o e-mail: " + request.email());
+            throw new BusinessException(ErrorMessages.duplicateUserEmail(request.email()));
         }
 
         validateRole(request.role());
@@ -99,7 +100,7 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public void deleteUser(Long id) {
         User user = userRepository.findByIdAndActiveTrue(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado com ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(id)));
 
         // Soft delete
         user.setActive(false);
@@ -134,7 +135,7 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public void activateUser(Long id) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado com ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(id)));
         
         user.setActive(true);
         userRepository.save(user);
@@ -144,7 +145,7 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public void deactivateUser(Long id) {
         User user = userRepository.findByIdAndActiveTrue(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado com ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(id)));
         
         user.setActive(false);
         userRepository.save(user);
@@ -156,7 +157,7 @@ public class UserServiceImpl implements UserService {
         try {
             return Role.valueOf(role.toUpperCase());
         } catch (IllegalArgumentException e) {
-            throw new BusinessException("Role inválida. Valores aceitos: ADMIN, DOCTOR, PATIENT");
+            throw new BusinessException(ErrorMessages.INVALID_ROLE);
         }
     }
 

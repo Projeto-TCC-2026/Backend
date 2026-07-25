@@ -427,4 +427,4 @@ A Sprint foi implementada com sucesso! Todos os requisitos foram atendidos segui
 
 ---
 
-**Desenvolvido com ❤️ seguindo Clean Architecture e Spring Boot Best Practices**
+**Desenvolvido com ❤️ seguindo uma arquitetura em camadas e boas práticas do Spring Boot**
