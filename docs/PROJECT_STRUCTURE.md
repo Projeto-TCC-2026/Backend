@@ -38,8 +38,7 @@ tcc/
 │   │   │   │
 │   │   │   ├── presentation/          # Camada de Apresentação
 │   │   │   │   └── controller/
-│   │   │   │       ├── DoctorController.java    ✅ CRUD completo (5 endpoints)
-│   │   │   │       └── ExampleController.java   ✅ Health check manual (legado)
+│   │   │   │       └── DoctorController.java    ✅ CRUD completo (5 endpoints)
 │   │   │   │
 │   │   │   ├── util/                  # Classes utilitárias
 │   │   │   └── TccApplication.java    # Classe principal
@@ -116,8 +115,7 @@ spring.jpa.show-sql=false
 
 ## 🏥 Health Check — Actuator (✅ implementado)
 
-O health check manual (`ExampleController`) foi mantido por compatibilidade, mas
-o endpoint canônico agora é provido pelo Spring Boot Actuator:
+O endpoint de health check é provido pelo Spring Boot Actuator:
 
 ```
 GET /actuator/health
@@ -194,7 +192,6 @@ Todos os scripts estão em `src/main/resources/db/migration/`:
 | Endpoint | Descrição |
 |---|---|
 | `GET /actuator/health` | Health check (Actuator) ✅ |
-| `GET /api/health` | Health check manual — `ExampleController` (legado) |
 | `GET /swagger-ui.html` | Swagger UI |
 | `GET /api-docs` | OpenAPI JSON |
 | `POST /doctors` | Criar médico |

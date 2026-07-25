@@ -59,20 +59,6 @@ A documentação detalhada do projeto está organizada na pasta [`docs/`](docs/)
 - [`docs/USAGE_EXAMPLES.md`](docs/USAGE_EXAMPLES.md) — Exemplos de uso das entidades
 - [`docs/doctors.http`](docs/doctors.http) — Casos de teste HTTP
 
-
-
-```
-GET /api/health
-```
-
-Resposta:
-```json
-{
-  "success": true,
-  "data": "API is running"
-}
-```
-
 ## Estrutura do Projeto
 
 ```
