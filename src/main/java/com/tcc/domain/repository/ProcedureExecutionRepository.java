@@ -28,11 +28,14 @@ public interface ProcedureExecutionRepository extends JpaRepository<ProcedureExe
     List<ProcedureExecution> findByExecutionDateBetween(LocalDateTime startDate, LocalDateTime endDate);
     
     // Métodos com paginação
-    Page<ProcedureExecution> findByPatientId(Long patientId, Pageable pageable);
+    @Query("SELECT pe FROM ProcedureExecution pe WHERE pe.patient.id = :patientId")
+    Page<ProcedureExecution> findPagedByPatientId(@Param("patientId") Long patientId, Pageable pageable);
     
-    Page<ProcedureExecution> findByPatientIdAndStatus(Long patientId, String status, Pageable pageable);
+    @Query("SELECT pe FROM ProcedureExecution pe WHERE pe.patient.id = :patientId AND pe.status = :status")
+    Page<ProcedureExecution> findPagedByPatientIdAndStatus(@Param("patientId") Long patientId, @Param("status") String status, Pageable pageable);
     
-    Page<ProcedureExecution> findByDoctorId(Long doctorId, Pageable pageable);
+    @Query("SELECT pe FROM ProcedureExecution pe WHERE pe.doctor.id = :doctorId")
+    Page<ProcedureExecution> findPagedByDoctorId(@Param("doctorId") Long doctorId, Pageable pageable);
     
     // Métodos de contagem
     long countByPatientId(Long patientId);

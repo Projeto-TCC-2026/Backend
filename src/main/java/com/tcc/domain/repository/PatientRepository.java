@@ -24,7 +24,8 @@ public interface PatientRepository extends JpaRepository<Patient, Long> {
     List<Patient> findByActiveTrue();
     
     // Buscar apenas pacientes ativos (com paginação)
-    Page<Patient> findByActiveTrue(Pageable pageable);
+    @Query("SELECT p FROM Patient p WHERE p.active = true")
+    Page<Patient> findPagedByActiveTrue(Pageable pageable);
     
     // Buscar paciente ativo por ID
     Optional<Patient> findByIdAndActiveTrue(Long id);
@@ -62,6 +63,32 @@ public interface PatientRepository extends JpaRepository<Patient, Long> {
                                  
     // Métodos de contagem para dashboard
     long countByActiveTrue();
+    
+    // Dashboard queries - Consultas otimizadas com COUNT
+    @Query("SELECT COUNT(p) FROM Patient p WHERE p.active = true")
+    Long countActivePatientsTotal();
+    
+    @Query("SELECT COUNT(DISTINCT dp.patient) FROM DoctorPatient dp " +
+           "WHERE dp.doctor.hospital.id = :hospitalId " +
+           "AND dp.patient.active = true")
+    Long countActivePatientsByHospitalId(@Param("hospitalId") Long hospitalId);
+    
+    // Buscar últimos pacientes de um hospital
+    @Query("SELECT DISTINCT p FROM Patient p " +
+           "JOIN p.doctorPatients dp " +
+           "WHERE dp.doctor.hospital.id = :hospitalId " +
+           "AND p.active = true " +
+           "ORDER BY p.createdAt DESC")
+    List<Patient> findLatestPatientsByHospitalId(@Param("hospitalId") Long hospitalId, Pageable pageable);
+    
+    // Report queries
+    @Query("SELECT dp.doctor.hospital.id as hospitalId, dp.doctor.hospital.name as hospitalName, " +
+           "COUNT(DISTINCT dp.patient) as totalPatients " +
+           "FROM DoctorPatient dp " +
+           "WHERE dp.patient.active = true " +
+           "GROUP BY dp.doctor.hospital.id, dp.doctor.hospital.name " +
+           "ORDER BY totalPatients DESC")
+    List<Object[]> countPatientsByHospital();
 }
 
 

@@ -45,4 +45,8 @@ public interface HospitalRepository extends JpaRepository<Hospital, Long> {
            "FROM Hospital h LEFT JOIN h.doctors d " +
            "GROUP BY h.id, h.name, h.cnpj, h.city, h.state, h.phone, h.email, h.active")
     Page<HospitalSummary> findHospitalsSummary(Pageable pageable);
+    
+    // Dashboard queries - Consultas otimizadas com COUNT
+    @Query("SELECT COUNT(h) FROM Hospital h")
+    Long countTotalHospitals();
 }

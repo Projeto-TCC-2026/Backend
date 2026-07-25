@@ -71,7 +71,7 @@ public class PatientServiceImpl implements PatientService {
     @Override
     @Transactional(readOnly = true)
     public Page<PatientResponse> getAllActivePatients(Pageable pageable) {
-        return patientRepository.findByActiveTrue(pageable)
+        return patientRepository.findPagedByActiveTrue(pageable)
                 .map(patientMapper::toResponse);
     }
 
@@ -197,7 +197,7 @@ public class PatientServiceImpl implements PatientService {
                 .orElseThrow(() -> new ResourceNotFoundException("Paciente não encontrado com ID: " + patientId));
 
         // Buscar os procedimentos realizados do paciente com paginação
-        return procedureExecutionRepository.findByPatientId(patientId, pageable)
+        return procedureExecutionRepository.findPagedByPatientId(patientId, pageable)
                 .map(procedureExecutionMapper::toResponse);
     }
 

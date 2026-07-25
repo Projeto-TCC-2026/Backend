@@ -123,7 +123,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public RefreshTokenResponse refresh(RefreshTokenRequest request) {
-        RefreshToken refreshToken = refreshTokenRepository.findByToken(request.getRefreshToken())
+        RefreshToken refreshToken = refreshTokenRepository.findByToken(request.refreshToken())
                 .orElseThrow(() -> new InvalidTokenException("Refresh token inválido"));
 
         if (refreshToken.getRevoked()) {
@@ -147,7 +147,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void logout(RefreshTokenRequest request) {
-        RefreshToken refreshToken = refreshTokenRepository.findByToken(request.getRefreshToken())
+        RefreshToken refreshToken = refreshTokenRepository.findByToken(request.refreshToken())
                 .orElseThrow(() -> new InvalidTokenException("Refresh token inválido"));
 
         refreshTokenRepository.revokeAllByUserId(refreshToken.getUser().getId());
@@ -177,10 +177,10 @@ public class AuthServiceImpl implements AuthService {
     // --- Helpers ---
 
     private User findAndValidateUser(LoginRequest request) {
-        User user = userRepository.findByEmail(request.getEmail())
+        User user = userRepository.findByEmail(request.email())
                 .orElseThrow(() -> new UnauthorizedException("Credenciais inválidas"));
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new UnauthorizedException("Credenciais inválidas");
         }
 

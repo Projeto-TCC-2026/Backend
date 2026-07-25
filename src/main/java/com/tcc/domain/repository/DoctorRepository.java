@@ -45,4 +45,18 @@ public interface DoctorRepository extends JpaRepository<Doctor, Long> {
         @Param("crm") String crm,
         Pageable pageable
     );
+    
+    // Dashboard queries - Consultas otimizadas com COUNT
+    @Query("SELECT COUNT(d) FROM Doctor d")
+    Long countTotalDoctors();
+    
+    @Query("SELECT COUNT(d) FROM Doctor d WHERE d.hospital.id = :hospitalId")
+    Long countByHospitalId(@Param("hospitalId") Long hospitalId);
+    
+    // Report queries
+    @Query("SELECT d.hospital.id as hospitalId, d.hospital.name as hospitalName, COUNT(d) as totalDoctors " +
+           "FROM Doctor d " +
+           "GROUP BY d.hospital.id, d.hospital.name " +
+           "ORDER BY totalDoctors DESC")
+    List<Object[]> countDoctorsByHospital();
 }
