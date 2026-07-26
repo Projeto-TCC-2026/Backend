@@ -37,29 +37,34 @@ docker run --name postgres-tcc \
   -d postgres:15
 ```
 
-### 2. Configurar application.properties
+### 2. Configurar variáveis de ambiente
 
-Edite `src/main/resources/application.properties`:
+A aplicação exige `JWT_SECRET` em todos os perfis. Cada ambiente deve possuir sua própria chave:
 
-```properties
-# Database
-spring.datasource.url=jdbc:postgresql://localhost:5432/tcc_db
-spring.datasource.username=tcc_user
-spring.datasource.password=tcc_password
+- **desenvolvimento:** pode usar uma única chave de teste compartilhada pela equipe;
+- **homologação:** deve usar outra chave;
+- **produção:** deve usar uma chave exclusiva e protegida.
 
-# JPA
-spring.jpa.hibernate.ddl-auto=update
-spring.jpa.show-sql=true
-spring.jpa.properties.hibernate.format_sql=true
+A chave de desenvolvimento precisa ser gerada apenas uma vez pelo responsável e distribuída à equipe por um canal privado. Cada desenvolvedor deve colocá-la no arquivo `.env` local. O `.env` nunca deve ser enviado ao Git.
 
-# Flyway
-spring.flyway.enabled=true
-spring.flyway.baseline-on-migrate=true
+#### Gerar a chave compartilhada de desenvolvimento — executar apenas uma vez
 
-# JWT
-jwt.secret=YOUR_SECRET_KEY_HERE_CHANGE_IN_PRODUCTION
-jwt.expiration=86400000
+No PowerShell:
+
+```powershell
+$bytes = New-Object byte[] 32
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
+$env:JWT_SECRET = [Convert]::ToBase64String($bytes)
 ```
+
+No Git Bash, Linux ou macOS:
+
+```bash
+export JWT_SECRET="$(openssl rand -base64 32)"
+```
+
+Para Docker Compose, grave `JWT_SECRET` no arquivo `.env`, que é ignorado pelo Git. Em homologação e produção, cadastre chaves próprias no secret manager ou nas variáveis protegidas da plataforma. Não coloque nenhuma chave em `application*.properties`.
 
 ---
 
