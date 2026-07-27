@@ -4,6 +4,7 @@ import com.tcc.application.dto.request.LoginRequest;
 import com.tcc.application.dto.request.RefreshTokenRequest;
 import com.tcc.application.dto.response.AuthResponse;
 import com.tcc.application.dto.response.DoctorAuthResponse;
+import com.tcc.application.dto.response.HospitalAuthResponse;
 import com.tcc.application.dto.response.PatientAuthResponse;
 import com.tcc.application.dto.response.RefreshTokenResponse;
 import com.tcc.application.dto.response.UserProfileResponse;
@@ -122,6 +123,32 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
+    public HospitalAuthResponse loginHospital(LoginRequest request) {
+        User user = findAndValidateUser(request);
+
+        if (user.getRole() != Role.HOSPITAL) {
+            throw new UnauthorizedException("Credenciais inválidas - Acesso restrito a gestores de hospital");
+        }
+
+        if (user.getHospital() == null) {
+            throw new UnauthorizedException("Usuário não está vinculado a nenhum hospital");
+        }
+
+        if (!user.getHospital().getActive()) {
+            throw new UnauthorizedException("Hospital inativo. Entre em contato com o administrador");
+        }
+
+        String accessToken = jwtService.generateToken(user.getEmail());
+        String refreshToken = createRefreshToken(user);
+
+        return new HospitalAuthResponse(
+                accessToken, refreshToken, user.getRole().name(),
+                user.getHospital().getId(), user.getHospital().getName(), user.getEmail()
+        );
+    }
+
+    @Override
+    @Transactional
     public RefreshTokenResponse refresh(RefreshTokenRequest request) {
         RefreshToken refreshToken = refreshTokenRepository.findByToken(request.refreshToken())
                 .orElseThrow(() -> new InvalidTokenException("Refresh token inválido"));
@@ -167,6 +194,16 @@ public class AuthServiceImpl implements AuthService {
             return new UserProfileResponse(
                     user.getId(), user.getEmail(), user.getRole().name(), doctor.getFullName(),
                     doctor.getId(), doctor.getCrm(), doctor.getSpecialty(), hospitalName
+            );
+        }
+
+        if (user.getRole() == Role.HOSPITAL) {
+            if (user.getHospital() == null) {
+                return new UserProfileResponse(user.getId(), user.getEmail(), user.getRole().name());
+            }
+            return new UserProfileResponse(
+                    user.getId(), user.getEmail(), user.getRole().name(),
+                    user.getHospital().getId(), user.getHospital().getName()
             );
         }
 

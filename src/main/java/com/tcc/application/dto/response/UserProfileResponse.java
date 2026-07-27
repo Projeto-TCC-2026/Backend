@@ -17,6 +17,9 @@ public class UserProfileResponse {
     private String specialty;
     private String hospitalName;
 
+    // Hospital-specific fields
+    private UUID hospitalId;
+
     public UserProfileResponse() {}
 
     // Constructor for ADMIN
@@ -36,6 +39,16 @@ public class UserProfileResponse {
         this.doctorId = doctorId;
         this.crm = crm;
         this.specialty = specialty;
+        this.hospitalName = hospitalName;
+    }
+
+    // Constructor for HOSPITAL
+    public UserProfileResponse(UUID id, String email, String role,
+                               UUID hospitalId, String hospitalName) {
+        this.id = id;
+        this.email = email;
+        this.role = role;
+        this.hospitalId = hospitalId;
         this.hospitalName = hospitalName;
     }
 
@@ -62,4 +75,7 @@ public class UserProfileResponse {
 
     public String getHospitalName() { return hospitalName; }
     public void setHospitalName(String hospitalName) { this.hospitalName = hospitalName; }
+
+    public UUID getHospitalId() { return hospitalId; }
+    public void setHospitalId(UUID hospitalId) { this.hospitalId = hospitalId; }
 }
