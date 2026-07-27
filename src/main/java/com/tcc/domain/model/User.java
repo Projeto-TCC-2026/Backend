@@ -37,6 +37,11 @@ public class User {
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Patient patient;
 
+    // Preenchido apenas quando role = HOSPITAL. UNIQUE garante um gestor por hospital.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "hospital_id", unique = true)
+    private Hospital hospital;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -130,5 +135,13 @@ public class User {
 
     public void setPatient(Patient patient) {
         this.patient = patient;
+    }
+
+    public Hospital getHospital() {
+        return hospital;
+    }
+
+    public void setHospital(Hospital hospital) {
+        this.hospital = hospital;
     }
 }
