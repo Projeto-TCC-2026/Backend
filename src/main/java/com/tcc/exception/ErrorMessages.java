@@ -5,9 +5,11 @@ import java.util.UUID;
 public final class ErrorMessages {
 
     public static final String INVALID_ROLE =
-            "Role inválida. Valores aceitos: ADMIN, DOCTOR, PATIENT";
+            "Role inválida. Valores aceitos: ADMIN, DOCTOR, PATIENT, HOSPITAL";
     public static final String PATIENT_HAS_HEALTH_READINGS =
             "Não é possível excluir o paciente. Existem leituras de saúde associadas.";
+    public static final String HOSPITAL_ALREADY_HAS_USER =
+            "Este hospital já possui um usuário gestor vinculado.";
 
     private ErrorMessages() {
     }
