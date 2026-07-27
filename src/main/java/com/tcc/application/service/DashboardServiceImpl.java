@@ -86,6 +86,12 @@ public class DashboardServiceImpl implements DashboardService {
             }
         }
 
+        if (requester.getRole() == Role.HOSPITAL) {
+            if (requester.getHospital() == null || !hospitalId.equals(requester.getHospital().getId())) {
+                throw new UnauthorizedException("Você não tem permissão para acessar dados deste hospital");
+            }
+        }
+
         Hospital hospital = hospitalRepository.findById(hospitalId)
                 .orElseThrow(() -> new ResourceNotFoundException("Hospital não encontrado com ID: " + hospitalId));
 
