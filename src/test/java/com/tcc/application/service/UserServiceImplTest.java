@@ -4,6 +4,7 @@ import com.tcc.application.dto.request.UserRequest;
 import com.tcc.application.dto.response.UserResponse;
 import com.tcc.domain.model.Role;
 import com.tcc.domain.model.User;
+import com.tcc.domain.repository.HospitalRepository;
 import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.BusinessException;
 import com.tcc.exception.ResourceNotFoundException;
@@ -33,6 +34,9 @@ class UserServiceImplTest {
     private UserRepository userRepository;
 
     @Mock
+    private HospitalRepository hospitalRepository;
+
+    @Mock
     private PasswordEncoder passwordEncoder;
 
     @InjectMocks
@@ -51,7 +55,7 @@ class UserServiceImplTest {
         user.setCreatedAt(LocalDateTime.now());
         user.setUpdatedAt(LocalDateTime.now());
 
-        request = new UserRequest("admin@test.com", "senha123", "ADMIN");
+        request = new UserRequest("admin@test.com", "senha123", "ADMIN", null);
     }
 
     @Nested
@@ -87,7 +91,7 @@ class UserServiceImplTest {
         @Test
         @DisplayName("deve lancar excecao quando role invalida")
         void shouldThrowWhenInvalidRole() {
-            UserRequest invalidRequest = new UserRequest("user@test.com", "senha123", "INVALID_ROLE");
+            UserRequest invalidRequest = new UserRequest("user@test.com", "senha123", "INVALID_ROLE", null);
             when(userRepository.existsByEmail("user@test.com")).thenReturn(false);
 
             assertThatThrownBy(() -> userService.createUser(invalidRequest))
@@ -134,7 +138,7 @@ class UserServiceImplTest {
             User existingUser = new User("old@test.com", "encoded", Role.ADMIN);
             existingUser.setId(USER_ID);
 
-            UserRequest updateRequest = new UserRequest("taken@test.com", "senha123", "ADMIN");
+            UserRequest updateRequest = new UserRequest("taken@test.com", "senha123", "ADMIN", null);
 
             when(userRepository.findByIdAndActiveTrue(USER_ID)).thenReturn(Optional.of(existingUser));
             when(userRepository.existsByEmail("taken@test.com")).thenReturn(true);
@@ -152,7 +156,7 @@ class UserServiceImplTest {
             User existingUser = new User("user@test.com", "encoded", Role.ADMIN);
             existingUser.setId(USER_ID);
 
-            UserRequest updateRequest = new UserRequest("user@test.com", "senha123", "INVALID");
+            UserRequest updateRequest = new UserRequest("user@test.com", "senha123", "INVALID", null);
 
             when(userRepository.findByIdAndActiveTrue(USER_ID)).thenReturn(Optional.of(existingUser));
 
