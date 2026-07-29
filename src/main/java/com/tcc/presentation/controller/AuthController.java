@@ -5,6 +5,7 @@ import com.tcc.application.dto.request.RefreshTokenRequest;
 import com.tcc.application.dto.response.ApiResponse;
 import com.tcc.application.dto.response.AuthResponse;
 import com.tcc.application.dto.response.DoctorAuthResponse;
+import com.tcc.application.dto.response.HospitalAuthResponse;
 import com.tcc.application.dto.response.PatientAuthResponse;
 import com.tcc.application.dto.response.RefreshTokenResponse;
 import com.tcc.application.dto.response.UserProfileResponse;
@@ -54,6 +55,12 @@ public class AuthController {
     @Operation(summary = "Login administrador", description = "Autentica um administrador e retorna tokens com dados do perfil")
     public ResponseEntity<AuthResponse> loginAdmin(@RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.loginAdmin(request));
+    }
+
+    @PostMapping("/hospital/login")
+    @Operation(summary = "Login hospital", description = "Autentica um gestor de hospital e retorna tokens com dados do hospital")
+    public ResponseEntity<ApiResponse<HospitalAuthResponse>> loginHospital(@Valid @RequestBody LoginRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(authService.loginHospital(request)));
     }
 
     @PostMapping("/refresh")

@@ -3,6 +3,7 @@ package com.tcc.application.dto.request;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import java.util.UUID;
 
 public record UserRequest(
 
@@ -17,5 +18,8 @@ public record UserRequest(
 
         @NotBlank(message = "Role é obrigatória")
         @Size(max = 50, message = "Role deve ter no máximo 50 caracteres")
-        String role
+        String role,
+
+        // Obrigatório apenas quando role = HOSPITAL
+        UUID hospitalId
 ) {}

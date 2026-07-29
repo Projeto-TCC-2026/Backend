@@ -2,8 +2,10 @@ package com.tcc.application.service;
 
 import com.tcc.application.dto.request.UserRequest;
 import com.tcc.application.dto.response.UserResponse;
+import com.tcc.domain.model.Hospital;
 import com.tcc.domain.model.Role;
 import com.tcc.domain.model.User;
+import com.tcc.domain.repository.HospitalRepository;
 import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.BusinessException;
 import com.tcc.exception.ErrorMessages;
@@ -20,10 +22,14 @@ import java.util.UUID;
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
+    private final HospitalRepository hospitalRepository;
     private final PasswordEncoder passwordEncoder;
 
-    public UserServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public UserServiceImpl(UserRepository userRepository,
+                           HospitalRepository hospitalRepository,
+                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
+        this.hospitalRepository = hospitalRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -41,6 +47,26 @@ public class UserServiceImpl implements UserService {
                 passwordEncoder.encode(request.password()),
                 role
         );
+
+        if (role == Role.HOSPITAL) {
+            if (request.hospitalId() == null) {
+                throw new BusinessException("hospitalId é obrigatório para usuários com role HOSPITAL");
+            }
+
+            Hospital hospital = hospitalRepository.findById(request.hospitalId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            ErrorMessages.hospitalNotFoundById(request.hospitalId())));
+
+            if (!hospital.getActive()) {
+                throw new BusinessException("Não é possível vincular usuário a um hospital inativo");
+            }
+
+            if (userRepository.existsByHospitalId(hospital.getId())) {
+                throw new BusinessException(ErrorMessages.HOSPITAL_ALREADY_HAS_USER);
+            }
+
+            user.setHospital(hospital);
+        }
 
         return toResponse(userRepository.save(user));
     }

@@ -4,6 +4,7 @@ import com.tcc.application.dto.request.LoginRequest;
 import com.tcc.application.dto.request.RefreshTokenRequest;
 import com.tcc.application.dto.response.AuthResponse;
 import com.tcc.application.dto.response.DoctorAuthResponse;
+import com.tcc.application.dto.response.HospitalAuthResponse;
 import com.tcc.application.dto.response.PatientAuthResponse;
 import com.tcc.application.dto.response.RefreshTokenResponse;
 import com.tcc.application.dto.response.UserProfileResponse;
@@ -17,6 +18,8 @@ public interface AuthService {
     PatientAuthResponse loginPatient(LoginRequest request);
 
     AuthResponse loginAdmin(LoginRequest request);
+
+    HospitalAuthResponse loginHospital(LoginRequest request);
 
     RefreshTokenResponse refresh(RefreshTokenRequest request);
 
