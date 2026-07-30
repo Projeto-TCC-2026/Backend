@@ -66,7 +66,19 @@ public class HospitalPortalServiceImpl implements HospitalPortalService {
     @Transactional(readOnly = true)
     public Page<DoctorResponse> listDoctors(String email, Pageable pageable) {
         Hospital hospital = resolveHospital(email);
-        return doctorService.filterDoctors(hospital.getId(), null, null, null, pageable);
+        return doctorRepository.findByHospitalId(hospital.getId(), pageable)
+                .map(doctor -> new DoctorResponse(
+                        doctor.getId(),
+                        null,
+                        null,
+                        doctor.getFullName(),
+                        doctor.getCpf(),
+                        doctor.getCrm(),
+                        doctor.getSpecialty(),
+                        doctor.getPhone(),
+                        doctor.getCreatedAt(),
+                        doctor.getUpdatedAt()
+                ));
     }
 
     @Override
