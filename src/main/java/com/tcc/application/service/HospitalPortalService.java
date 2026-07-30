@@ -1,6 +1,7 @@
 package com.tcc.application.service;
 
 import com.tcc.application.dto.request.DoctorRequest;
+import com.tcc.application.dto.request.HospitalRequest;
 import com.tcc.application.dto.response.DoctorResponse;
 import com.tcc.application.dto.response.HospitalDashboardResponse;
 import com.tcc.application.dto.response.HospitalResponse;
@@ -13,6 +14,9 @@ public interface HospitalPortalService {
 
     /** Dados do próprio hospital (perfil). */
     HospitalResponse getOwnHospital(String email);
+
+    /** Atualiza os dados do próprio hospital. */
+    HospitalResponse updateOwnHospital(String email, HospitalRequest request);
 
     /** Dashboard com estatísticas do próprio hospital. */
     HospitalDashboardResponse getDashboard(String email);

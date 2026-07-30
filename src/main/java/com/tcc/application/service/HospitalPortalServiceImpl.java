@@ -1,6 +1,7 @@
 package com.tcc.application.service;
 
 import com.tcc.application.dto.request.DoctorRequest;
+import com.tcc.application.dto.request.HospitalRequest;
 import com.tcc.application.dto.response.DoctorResponse;
 import com.tcc.application.dto.response.HospitalDashboardResponse;
 import com.tcc.application.dto.response.HospitalResponse;
@@ -45,6 +46,13 @@ public class HospitalPortalServiceImpl implements HospitalPortalService {
     public HospitalResponse getOwnHospital(String email) {
         Hospital hospital = resolveHospital(email);
         return hospitalService.getHospitalById(hospital.getId());
+    }
+
+    @Override
+    @Transactional
+    public HospitalResponse updateOwnHospital(String email, HospitalRequest request) {
+        Hospital hospital = resolveHospital(email);
+        return hospitalService.updateHospital(hospital.getId(), request);
     }
 
     @Override

@@ -1,6 +1,7 @@
 package com.tcc.presentation.controller;
 
 import com.tcc.application.dto.request.DoctorRequest;
+import com.tcc.application.dto.request.HospitalRequest;
 import com.tcc.application.dto.response.ApiResponse;
 import com.tcc.application.dto.response.DoctorResponse;
 import com.tcc.application.dto.response.HospitalDashboardResponse;
@@ -45,6 +46,18 @@ public class HospitalPortalController {
     public ResponseEntity<ApiResponse<HospitalResponse>> getProfile(Authentication authentication) {
         String email = extractEmail(authentication);
         return ResponseEntity.ok(ApiResponse.success(hospitalPortalService.getOwnHospital(email)));
+    }
+
+    @PutMapping("/profile")
+    @Operation(
+        summary = "Atualizar perfil do hospital",
+        description = "Atualiza os dados cadastrais do hospital vinculado ao usuário autenticado"
+    )
+    public ResponseEntity<ApiResponse<HospitalResponse>> updateProfile(
+            Authentication authentication,
+            @Valid @RequestBody HospitalRequest request) {
+        String email = extractEmail(authentication);
+        return ResponseEntity.ok(ApiResponse.success(hospitalPortalService.updateOwnHospital(email, request)));
     }
 
     @GetMapping("/dashboard")
