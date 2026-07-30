@@ -7,16 +7,14 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+/**
+ * O paciente vem pela URL e o médico é derivado do token do usuário autenticado,
+ * por isso nenhum dos dois aparece aqui.
+ */
 public record PatientProcedureRequest(
-
-        @NotNull(message = "ID do paciente é obrigatório")
-        UUID patientId,
 
         @NotNull(message = "ID do procedimento é obrigatório")
         UUID procedureId,
-
-        @NotNull(message = "ID do médico é obrigatório")
-        UUID doctorId,
 
         @NotNull(message = "Data de início é obrigatória")
         LocalDate startDate,

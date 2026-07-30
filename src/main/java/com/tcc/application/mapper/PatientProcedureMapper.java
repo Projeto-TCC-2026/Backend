@@ -16,7 +16,9 @@ public class PatientProcedureMapper {
     private final ProcedureMapper procedureMapper;
     private final DoctorMapper doctorMapper;
 
-    public PatientProcedureMapper(PatientMapper patientMapper, ProcedureMapper procedureMapper, DoctorMapper doctorMapper) {
+    public PatientProcedureMapper(PatientMapper patientMapper,
+                                  ProcedureMapper procedureMapper,
+                                  DoctorMapper doctorMapper) {
         this.patientMapper = patientMapper;
         this.procedureMapper = procedureMapper;
         this.doctorMapper = doctorMapper;
@@ -36,7 +38,10 @@ public class PatientProcedureMapper {
         );
     }
 
-    public PatientProcedure toEntity(PatientProcedureRequest request, Patient patient, Procedure procedure, Doctor doctor) {
+    public PatientProcedure toEntity(PatientProcedureRequest request,
+                                     Patient patient,
+                                     Procedure procedure,
+                                     Doctor doctor) {
         if (request == null) return null;
         PatientProcedure patientProcedure = new PatientProcedure();
         patientProcedure.setPatient(patient);
@@ -49,6 +54,10 @@ public class PatientProcedureMapper {
         return patientProcedure;
     }
 
+    /**
+     * O procedimento atribuído não muda no update: para trocar de procedimento,
+     * remova a atribuição e crie outra.
+     */
     public void updateEntity(PatientProcedure patientProcedure, PatientProcedureRequest request) {
         patientProcedure.setStartDate(request.startDate());
         patientProcedure.setEndDate(request.endDate());

@@ -1,41 +1,53 @@
 package com.tcc.application.service;
 
+import java.util.UUID;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.tcc.application.dto.request.PatientRequest;
 import com.tcc.application.dto.response.PatientResponse;
 import com.tcc.application.dto.response.ProcedureExecutionResponse;
 import com.tcc.application.mapper.PatientMapper;
 import com.tcc.application.mapper.ProcedureExecutionMapper;
+import com.tcc.domain.model.Doctor;
+import com.tcc.domain.model.DoctorPatient;
 import com.tcc.domain.model.Patient;
 import com.tcc.domain.model.User;
+import com.tcc.domain.repository.DoctorPatientRepository;
+import com.tcc.domain.repository.DoctorRepository;
 import com.tcc.domain.repository.PatientRepository;
 import com.tcc.domain.repository.ProcedureExecutionRepository;
 import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.BusinessException;
 import com.tcc.exception.ErrorMessages;
 import com.tcc.exception.ResourceNotFoundException;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.UUID;
+import com.tcc.exception.UnauthorizedException;
 
 @Service
 public class PatientServiceImpl implements PatientService {
 
     private final PatientRepository patientRepository;
     private final UserRepository userRepository;
+    private final DoctorRepository doctorRepository;
+    private final DoctorPatientRepository doctorPatientRepository;
     private final ProcedureExecutionRepository procedureExecutionRepository;
     private final PatientMapper patientMapper;
     private final ProcedureExecutionMapper procedureExecutionMapper;
 
     public PatientServiceImpl(PatientRepository patientRepository, 
                              UserRepository userRepository,
+                             DoctorRepository doctorRepository,
+                             DoctorPatientRepository doctorPatientRepository,
                              ProcedureExecutionRepository procedureExecutionRepository,
                              PatientMapper patientMapper,
                              ProcedureExecutionMapper procedureExecutionMapper) {
         this.patientRepository = patientRepository;
         this.userRepository = userRepository;
+        this.doctorRepository = doctorRepository;
+        this.doctorPatientRepository = doctorPatientRepository;
         this.procedureExecutionRepository = procedureExecutionRepository;
         this.patientMapper = patientMapper;
         this.procedureExecutionMapper = procedureExecutionMapper;
@@ -43,7 +55,9 @@ public class PatientServiceImpl implements PatientService {
 
     @Override
     @Transactional
-    public PatientResponse createPatient(PatientRequest request) {
+    public PatientResponse createPatient(String email, PatientRequest request) {
+        Doctor doctor = resolveDoctor(email);
+
         User user = userRepository.findById(request.userId())
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(request.userId())));
 
@@ -63,8 +77,18 @@ public class PatientServiceImpl implements PatientService {
 
         Patient patient = patientMapper.toEntity(request, user);
         Patient savedPatient = patientRepository.save(patient);
-        
+
+        doctorPatientRepository.save(new DoctorPatient(doctor, savedPatient));
+
         return patientMapper.toResponse(savedPatient);
+    }
+
+    private Doctor resolveDoctor(String email) {
+        User doctorUser = userRepository.findByEmailAndActiveTrue(email)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundByEmail(email)));
+
+        return doctorRepository.findByUserId(doctorUser.getId())
+                .orElseThrow(() -> new UnauthorizedException(ErrorMessages.doctorProfileNotFound()));
     }
 
     @Override

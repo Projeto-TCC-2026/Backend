@@ -1,15 +1,7 @@
 package com.tcc.presentation.controller;
 
-import com.tcc.application.dto.request.PatientRequest;
-import com.tcc.application.dto.response.ApiResponse;
-import com.tcc.application.dto.response.PatientResponse;
-import com.tcc.application.dto.response.ProcedureExecutionResponse;
-import com.tcc.application.service.PatientService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
+import java.util.UUID;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -17,9 +9,30 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.util.UUID;
+import com.tcc.application.dto.request.PatientRequest;
+import com.tcc.application.dto.response.ApiResponse;
+import com.tcc.application.dto.response.PatientResponse;
+import com.tcc.application.dto.response.ProcedureExecutionResponse;
+import com.tcc.application.service.PatientService;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/patients")
@@ -37,12 +50,16 @@ public class PatientController {
     @PreAuthorize("hasRole('DOCTOR')")
     @Operation(
         summary = "Cadastrar novo paciente",
-        description = "Criar um novo paciente no sistema. Apenas doutores podem cadastrar pacientes."
+        description = "Criar um novo paciente no sistema e vinculá-lo ao médico autenticado. " +
+                      "Apenas doutores podem cadastrar pacientes, e o paciente criado fica sob " +
+                      "responsabilidade de quem o cadastrou."
     )
     public ResponseEntity<ApiResponse<PatientResponse>> createPatient(
+            Authentication authentication,
             @Valid @RequestBody PatientRequest request) {
-        
-        PatientResponse patient = patientService.createPatient(request);
+
+        String email = extractEmail(authentication);
+        PatientResponse patient = patientService.createPatient(email, request);
         ApiResponse<PatientResponse> response = ApiResponse.success(patient);
         
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -263,5 +280,11 @@ public class PatientController {
         ApiResponse<Long> response = ApiResponse.success(count);
         
         return ResponseEntity.ok(response);
+    }
+
+    // --- Helper ---
+
+    private String extractEmail(Authentication authentication) {
+        return ((UserDetails) authentication.getPrincipal()).getUsername();
     }
 }

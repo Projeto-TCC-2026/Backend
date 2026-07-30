@@ -1,0 +1,140 @@
+### Catálogo de procedimentos do hospital
+### Todos os endpoints exigem token de um usuário com role HOSPITAL.
+### O hospital é derivado do token; não é enviado no corpo nem na URL.
+
+@baseUrl = http://localhost:8080
+@procedureId = 00000000-0000-0000-0000-000000000000
+@doctorId = 00000000-0000-0000-0000-000000000000
+
+### 1. Login como gestor de hospital (obtenha o accessToken aqui)
+POST {{baseUrl}}/auth/hospital/login
+Content-Type: application/json
+
+{
+  "email": "hospital@tcc.com",
+  "password": "123456"
+}
+
+> {% client.global.set("hospitalToken", response.body.data.accessToken); %}
+
+### 2. Cadastrar procedimento
+POST {{baseUrl}}/api/hospital/procedures
+Content-Type: application/json
+Authorization: Bearer {{hospitalToken}}
+
+{
+  "title": "Cirurgia de joelho",
+  "description": "Artroplastia total de joelho",
+  "estimatedDuration": 120,
+  "active": true
+}
+
+### 3. Cadastrar segundo procedimento
+POST {{baseUrl}}/api/hospital/procedures
+Content-Type: application/json
+Authorization: Bearer {{hospitalToken}}
+
+{
+  "title": "Cirurgia de mão",
+  "description": "Correção de túnel do carpo",
+  "estimatedDuration": 60
+}
+
+### 4. Listar procedimentos ativos (paginado)
+GET {{baseUrl}}/api/hospital/procedures?page=0&size=10&sort=title,asc
+Authorization: Bearer {{hospitalToken}}
+
+### 5. Listar incluindo procedimentos inativos
+GET {{baseUrl}}/api/hospital/procedures?includeInactive=true
+Authorization: Bearer {{hospitalToken}}
+
+### 6. Buscar procedimento por ID
+GET {{baseUrl}}/api/hospital/procedures/{{procedureId}}
+Authorization: Bearer {{hospitalToken}}
+
+### 7. Atualizar procedimento
+PUT {{baseUrl}}/api/hospital/procedures/{{procedureId}}
+Content-Type: application/json
+Authorization: Bearer {{hospitalToken}}
+
+{
+  "title": "Cirurgia de joelho",
+  "description": "Artroplastia total de joelho - revisada",
+  "estimatedDuration": 150,
+  "active": true
+}
+
+### 8. Inativar procedimento (soft delete, o registro é mantido)
+DELETE {{baseUrl}}/api/hospital/procedures/{{procedureId}}
+Authorization: Bearer {{hospitalToken}}
+
+### 9. Atrelar médico ao procedimento
+POST {{baseUrl}}/api/hospital/procedures/{{procedureId}}/doctors
+Content-Type: application/json
+Authorization: Bearer {{hospitalToken}}
+
+{
+  "doctorId": "{{doctorId}}"
+}
+
+### 10. Listar médicos autorizados no procedimento
+GET {{baseUrl}}/api/hospital/procedures/{{procedureId}}/doctors
+Authorization: Bearer {{hospitalToken}}
+
+### 11. Desatrelar médico do procedimento
+DELETE {{baseUrl}}/api/hospital/procedures/{{procedureId}}/doctors/{{doctorId}}
+Authorization: Bearer {{hospitalToken}}
+
+### --- Cenários de erro ---
+
+### 12. Título duplicado no mesmo hospital -> 400
+POST {{baseUrl}}/api/hospital/procedures
+Content-Type: application/json
+Authorization: Bearer {{hospitalToken}}
+
+{
+  "title": "Cirurgia de joelho",
+  "estimatedDuration": 120
+}
+
+### 13. Título em branco -> 400 (validação)
+POST {{baseUrl}}/api/hospital/procedures
+Content-Type: application/json
+Authorization: Bearer {{hospitalToken}}
+
+{
+  "title": "",
+  "estimatedDuration": 120
+}
+
+### 14. Duração negativa -> 400 (validação)
+POST {{baseUrl}}/api/hospital/procedures
+Content-Type: application/json
+Authorization: Bearer {{hospitalToken}}
+
+{
+  "title": "Procedimento inválido",
+  "estimatedDuration": -10
+}
+
+### 15. Procedimento de outro hospital -> 401
+GET {{baseUrl}}/api/hospital/procedures/11111111-1111-1111-1111-111111111111
+Authorization: Bearer {{hospitalToken}}
+
+### 16. Sem token -> 401
+GET {{baseUrl}}/api/hospital/procedures
+
+### 17. Token de médico em rota de hospital -> 403
+POST {{baseUrl}}/auth/doctor/login
+Content-Type: application/json
+
+{
+  "email": "doctor@tcc.com",
+  "password": "123456"
+}
+
+> {% client.global.set("doctorToken", response.body.data.accessToken); %}
+
+###
+GET {{baseUrl}}/api/hospital/procedures
+Authorization: Bearer {{doctorToken}}

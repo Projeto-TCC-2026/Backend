@@ -1,10 +1,22 @@
 package com.tcc.domain.model;
 
-import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "procedures")
@@ -15,8 +27,8 @@ public class Procedure {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "doctor_id", nullable = false)
-    private Doctor doctor;
+    @JoinColumn(name = "hospital_id", nullable = false)
+    private Hospital hospital;
 
     @Column(nullable = false, length = 255)
     private String title;
@@ -34,6 +46,9 @@ public class Procedure {
     private LocalDateTime createdAt;
 
     @OneToMany(mappedBy = "procedure", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<DoctorProcedure> doctorProcedures = new ArrayList<>();
+
+    @OneToMany(mappedBy = "procedure", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<PatientProcedure> patientProcedures = new ArrayList<>();
 
     @OneToMany(mappedBy = "procedure", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
@@ -48,8 +63,8 @@ public class Procedure {
     public Procedure() {
     }
 
-    public Procedure(Doctor doctor, String title) {
-        this.doctor = doctor;
+    public Procedure(Hospital hospital, String title) {
+        this.hospital = hospital;
         this.title = title;
     }
 
@@ -62,12 +77,12 @@ public class Procedure {
         this.id = id;
     }
 
-    public Doctor getDoctor() {
-        return doctor;
+    public Hospital getHospital() {
+        return hospital;
     }
 
-    public void setDoctor(Doctor doctor) {
-        this.doctor = doctor;
+    public void setHospital(Hospital hospital) {
+        this.hospital = hospital;
     }
 
     public String getTitle() {
@@ -108,6 +123,14 @@ public class Procedure {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public List<DoctorProcedure> getDoctorProcedures() {
+        return doctorProcedures;
+    }
+
+    public void setDoctorProcedures(List<DoctorProcedure> doctorProcedures) {
+        this.doctorProcedures = doctorProcedures;
     }
 
     public List<PatientProcedure> getPatientProcedures() {

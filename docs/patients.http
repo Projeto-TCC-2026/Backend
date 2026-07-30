@@ -9,6 +9,9 @@
 
 ### ============================================
 ### 1. POST - Criar novo paciente
+### O paciente é vinculado automaticamente ao médico autenticado (doctor_patients),
+### usando o e-mail do token. O vínculo é pré-requisito para atribuir procedimentos
+### ao paciente — ver docs/patient-procedures.http
 ### ============================================
 POST {{baseUrl}}/api/patients
 Authorization: Bearer {{token}}

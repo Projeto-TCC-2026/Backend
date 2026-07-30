@@ -1,5 +1,12 @@
 package com.tcc.application.service;
 
+import java.util.UUID;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.tcc.application.dto.request.DoctorRequest;
 import com.tcc.application.dto.response.DoctorResponse;
 import com.tcc.application.mapper.DoctorMapper;
@@ -12,12 +19,6 @@ import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.BusinessException;
 import com.tcc.exception.ErrorMessages;
 import com.tcc.exception.ResourceNotFoundException;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.UUID;
 
 @Service
 public class DoctorServiceImpl implements DoctorService {
@@ -115,8 +116,8 @@ public class DoctorServiceImpl implements DoctorService {
             throw new BusinessException(ErrorMessages.doctorHasPatients(doctor.getDoctorPatients().size()));
         }
 
-        if (!doctor.getProcedures().isEmpty()) {
-            throw new BusinessException(ErrorMessages.doctorHasProcedures(doctor.getProcedures().size()));
+        if (!doctor.getDoctorProcedures().isEmpty()) {
+            throw new BusinessException(ErrorMessages.doctorHasProcedures(doctor.getDoctorProcedures().size()));
         }
 
         doctorRepository.delete(doctor);

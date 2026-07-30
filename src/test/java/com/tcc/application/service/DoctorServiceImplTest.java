@@ -1,28 +1,5 @@
 package com.tcc.application.service;
 
-import com.tcc.application.dto.request.DoctorRequest;
-import com.tcc.application.dto.response.DoctorResponse;
-import com.tcc.application.mapper.DoctorMapper;
-import com.tcc.domain.model.Doctor;
-import com.tcc.domain.model.DoctorPatient;
-import com.tcc.domain.model.Hospital;
-import com.tcc.domain.model.Procedure;
-import com.tcc.domain.model.Role;
-import com.tcc.domain.model.User;
-import com.tcc.domain.repository.DoctorRepository;
-import com.tcc.domain.repository.HospitalRepository;
-import com.tcc.domain.repository.UserRepository;
-import com.tcc.exception.BusinessException;
-import com.tcc.exception.ResourceNotFoundException;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -30,8 +7,33 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import com.tcc.application.dto.request.DoctorRequest;
+import com.tcc.application.dto.response.DoctorResponse;
+import com.tcc.application.mapper.DoctorMapper;
+import com.tcc.domain.model.Doctor;
+import com.tcc.domain.model.DoctorPatient;
+import com.tcc.domain.model.DoctorProcedure;
+import com.tcc.domain.model.Hospital;
+import com.tcc.domain.model.Role;
+import com.tcc.domain.model.User;
+import com.tcc.domain.repository.DoctorRepository;
+import com.tcc.domain.repository.HospitalRepository;
+import com.tcc.domain.repository.UserRepository;
+import com.tcc.exception.BusinessException;
+import com.tcc.exception.ResourceNotFoundException;
 
 @ExtendWith(MockitoExtension.class)
 class DoctorServiceImplTest {
@@ -176,7 +178,7 @@ class DoctorServiceImplTest {
         @DisplayName("deve excluir doutor sem relacionamentos")
         void shouldDeleteDoctorWithoutRelationships() {
             doctor.setDoctorPatients(new ArrayList<>());
-            doctor.setProcedures(new ArrayList<>());
+            doctor.setDoctorProcedures(new ArrayList<>());
             when(doctorRepository.findById(DOCTOR_ID)).thenReturn(Optional.of(doctor));
 
             doctorService.deleteDoctor(DOCTOR_ID);
@@ -189,7 +191,7 @@ class DoctorServiceImplTest {
         void shouldThrowWhenHasAssociatedPatients() {
             List<DoctorPatient> patients = List.of(new DoctorPatient());
             doctor.setDoctorPatients(new ArrayList<>(patients));
-            doctor.setProcedures(new ArrayList<>());
+            doctor.setDoctorProcedures(new ArrayList<>());
             when(doctorRepository.findById(DOCTOR_ID)).thenReturn(Optional.of(doctor));
 
             assertThatThrownBy(() -> doctorService.deleteDoctor(DOCTOR_ID))
@@ -203,8 +205,8 @@ class DoctorServiceImplTest {
         @DisplayName("deve lancar excecao quando ha procedimentos associados")
         void shouldThrowWhenHasAssociatedProcedures() {
             doctor.setDoctorPatients(new ArrayList<>());
-            List<Procedure> procedures = List.of(new Procedure());
-            doctor.setProcedures(new ArrayList<>(procedures));
+            List<DoctorProcedure> doctorProcedures = List.of(new DoctorProcedure());
+            doctor.setDoctorProcedures(new ArrayList<>(doctorProcedures));
             when(doctorRepository.findById(DOCTOR_ID)).thenReturn(Optional.of(doctor));
 
             assertThatThrownBy(() -> doctorService.deleteDoctor(DOCTOR_ID))
