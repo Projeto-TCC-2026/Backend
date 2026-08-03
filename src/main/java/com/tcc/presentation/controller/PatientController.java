@@ -34,10 +34,10 @@ public class PatientController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('DOCTOR')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('DOCTOR')")
     @Operation(
         summary = "Cadastrar novo paciente",
-        description = "Criar um novo paciente no sistema. Apenas doutores podem cadastrar pacientes."
+        description = "Criar um novo paciente no sistema. Doutores e Administradores podem cadastrar pacientes."
     )
     public ResponseEntity<ApiResponse<PatientResponse>> createPatient(
             @Valid @RequestBody PatientRequest request) {
@@ -49,11 +49,11 @@ public class PatientController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('DOCTOR')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('DOCTOR')")
     @Operation(
         summary = "Listar todos os pacientes ativos",
         description = "Retorna uma lista paginada de todos os pacientes ativos cadastrados no sistema. " +
-                      "Suporta paginação (page, size) e ordenação (sort)."
+                      "Suporta paginação (page, size) e ordenação (sort). Acesso para Doutores e Administradores."
     )
     public ResponseEntity<ApiResponse<Page<PatientResponse>>> getAllPatients(
             @PageableDefault(size = 10, sort = "fullName", direction = Sort.Direction.ASC) Pageable pageable) {
@@ -65,7 +65,7 @@ public class PatientController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('DOCTOR')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('DOCTOR')")
     @Operation(
         summary = "Buscar paciente por ID",
         description = "Retorna os dados de um paciente específico pelo seu ID"
@@ -81,7 +81,7 @@ public class PatientController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('DOCTOR')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('DOCTOR')")
     @Operation(
         summary = "Atualizar dados do paciente",
         description = "Atualiza todas as informações de um paciente existente"
@@ -98,11 +98,11 @@ public class PatientController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('DOCTOR')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(
         summary = "Excluir paciente",
         description = "Remove um paciente do sistema permanentemente (hard delete). " +
-                      "Use com cautela, pois esta ação é irreversível."
+                      "Apenas Administradores podem excluir pacientes. Use com cautela, pois esta ação é irreversível."
     )
     public ResponseEntity<ApiResponse<Void>> deletePatient(
             @Parameter(description = "ID do paciente", example = "1", required = true)
@@ -115,7 +115,7 @@ public class PatientController {
     }
 
     @PatchMapping("/{id}/inactive")
-    @PreAuthorize("hasRole('DOCTOR')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('DOCTOR')")
     @Operation(
         summary = "Inativar paciente",
         description = "Marca um paciente como inativo no sistema (soft delete)"
@@ -131,7 +131,7 @@ public class PatientController {
     }
 
     @GetMapping("/search/name")
-    @PreAuthorize("hasRole('DOCTOR')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('DOCTOR')")
     @Operation(
         summary = "Buscar pacientes por nome",
         description = "Pesquisa pacientes pelo nome completo (busca parcial, case-insensitive). " +
@@ -149,7 +149,7 @@ public class PatientController {
     }
 
     @GetMapping("/search/cpf")
-    @PreAuthorize("hasRole('DOCTOR')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('DOCTOR')")
     @Operation(
         summary = "Buscar pacientes por CPF",
         description = "Pesquisa pacientes pelo CPF (busca parcial). " +
@@ -167,7 +167,7 @@ public class PatientController {
     }
 
     @GetMapping("/search/email")
-    @PreAuthorize("hasRole('DOCTOR')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('DOCTOR')")
     @Operation(
         summary = "Buscar pacientes por e-mail",
         description = "Pesquisa pacientes pelo e-mail (busca parcial, case-insensitive). " +
@@ -185,7 +185,7 @@ public class PatientController {
     }
 
     @GetMapping("/search/phone")
-    @PreAuthorize("hasRole('DOCTOR')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('DOCTOR')")
     @Operation(
         summary = "Buscar pacientes por telefone",
         description = "Pesquisa pacientes pelo telefone (busca parcial). " +
@@ -203,7 +203,7 @@ public class PatientController {
     }
 
     @GetMapping("/filter")
-    @PreAuthorize("hasRole('DOCTOR')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('DOCTOR')")
     @Operation(
         summary = "Filtrar pacientes",
         description = "Filtra pacientes por múltiplos critérios: nome, gênero, cidade e estado. " +
@@ -232,7 +232,7 @@ public class PatientController {
     }
 
     @GetMapping("/{id}/procedures")
-    @PreAuthorize("hasRole('DOCTOR')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('DOCTOR')")
     @Operation(
         summary = "Listar procedimentos realizados de um paciente",
         description = "Retorna todos os procedimentos realizados (ProcedureExecution) associados a um paciente específico. " +
@@ -250,7 +250,7 @@ public class PatientController {
     }
 
     @GetMapping("/{id}/procedures/count")
-    @PreAuthorize("hasRole('DOCTOR')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('DOCTOR')")
     @Operation(
         summary = "Contar procedimentos realizados de um paciente",
         description = "Retorna o total de procedimentos realizados associados a um paciente específico"
