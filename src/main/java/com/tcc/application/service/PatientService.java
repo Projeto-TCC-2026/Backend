@@ -1,16 +1,22 @@
 package com.tcc.application.service;
 
-import com.tcc.application.dto.request.PatientRequest;
-import com.tcc.application.dto.response.PatientResponse;
-import com.tcc.application.dto.response.ProcedureExecutionResponse;
+import java.util.UUID;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
-import java.util.UUID;
+import com.tcc.application.dto.request.PatientRequest;
+import com.tcc.application.dto.response.PatientResponse;
+import com.tcc.application.dto.response.ProcedureExecutionResponse;
 
 public interface PatientService {
-    
-    PatientResponse createPatient(PatientRequest request);
+
+    /**
+     * Cria o paciente e o vincula ao médico autenticado, identificado pelo e-mail do token.
+     * O vínculo é criado na mesma transação: paciente cadastrado por um médico nunca fica
+     * sem médico responsável.
+     */
+    PatientResponse createPatient(String email, PatientRequest request);
     
     Page<PatientResponse> getAllActivePatients(Pageable pageable);
     

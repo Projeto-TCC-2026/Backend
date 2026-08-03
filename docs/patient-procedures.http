@@ -1,0 +1,131 @@
+### Procedimentos atribuídos a pacientes (fluxo do médico)
+### Todos os endpoints exigem token de um usuário com role DOCTOR.
+### O médico é derivado do token; nunca é enviado no corpo nem na URL.
+
+@baseUrl = http://localhost:8080
+@patientId = 00000000-0000-0000-0000-000000000000
+@procedureId = 00000000-0000-0000-0000-000000000000
+@assignmentId = 00000000-0000-0000-0000-000000000000
+
+### 1. Login como médico (obtenha o accessToken aqui)
+POST {{baseUrl}}/auth/doctor/login
+Content-Type: application/json
+
+{
+  "email": "doctor@tcc.com",
+  "password": "123456"
+}
+
+> {% client.global.set("doctorToken", response.body.data.accessToken); %}
+
+### 2. Ver os procedimentos que o hospital me autorizou
+### Retorna apenas os ativos atrelados a este médico em doctor_procedures.
+GET {{baseUrl}}/api/doctor/procedures
+Authorization: Bearer {{doctorToken}}
+
+### 3. Atribuir procedimento ao paciente
+POST {{baseUrl}}/api/patients/{{patientId}}/assigned-procedures
+Content-Type: application/json
+Authorization: Bearer {{doctorToken}}
+
+{
+  "procedureId": "{{procedureId}}",
+  "startDate": "2026-08-10",
+  "status": "EM_ANDAMENTO",
+  "notes": "Primeira sessão agendada"
+}
+
+### 4. Listar procedimentos atribuídos ao paciente
+GET {{baseUrl}}/api/patients/{{patientId}}/assigned-procedures?page=0&size=10&sort=startDate,desc
+Authorization: Bearer {{doctorToken}}
+
+### 5. Atualizar a atribuição (status, datas, observações)
+PUT {{baseUrl}}/api/patients/{{patientId}}/assigned-procedures/{{assignmentId}}
+Content-Type: application/json
+Authorization: Bearer {{doctorToken}}
+
+{
+  "procedureId": "{{procedureId}}",
+  "startDate": "2026-08-10",
+  "endDate": "2026-09-15",
+  "status": "CONCLUIDO",
+  "notes": "Tratamento concluído sem intercorrências"
+}
+
+### 6. Remover a atribuição
+DELETE {{baseUrl}}/api/patients/{{patientId}}/assigned-procedures/{{assignmentId}}
+Authorization: Bearer {{doctorToken}}
+
+### --- Cenários de erro ---
+
+### 7. Procedimento que o hospital NÃO atribuiu a este médico -> 401
+POST {{baseUrl}}/api/patients/{{patientId}}/assigned-procedures
+Content-Type: application/json
+Authorization: Bearer {{doctorToken}}
+
+{
+  "procedureId": "11111111-1111-1111-1111-111111111111",
+  "startDate": "2026-08-10",
+  "status": "EM_ANDAMENTO"
+}
+
+### 8. Paciente não vinculado a este médico -> 401
+POST {{baseUrl}}/api/patients/22222222-2222-2222-2222-222222222222/assigned-procedures
+Content-Type: application/json
+Authorization: Bearer {{doctorToken}}
+
+{
+  "procedureId": "{{procedureId}}",
+  "startDate": "2026-08-10",
+  "status": "EM_ANDAMENTO"
+}
+
+### 9. Mesmo procedimento atribuído duas vezes ao mesmo paciente -> 400
+POST {{baseUrl}}/api/patients/{{patientId}}/assigned-procedures
+Content-Type: application/json
+Authorization: Bearer {{doctorToken}}
+
+{
+  "procedureId": "{{procedureId}}",
+  "startDate": "2026-08-10",
+  "status": "EM_ANDAMENTO"
+}
+
+### 10. Status em branco -> 400 (validação)
+POST {{baseUrl}}/api/patients/{{patientId}}/assigned-procedures
+Content-Type: application/json
+Authorization: Bearer {{doctorToken}}
+
+{
+  "procedureId": "{{procedureId}}",
+  "startDate": "2026-08-10",
+  "status": ""
+}
+
+### 11. Sem data de início -> 400 (validação)
+POST {{baseUrl}}/api/patients/{{patientId}}/assigned-procedures
+Content-Type: application/json
+Authorization: Bearer {{doctorToken}}
+
+{
+  "procedureId": "{{procedureId}}",
+  "status": "EM_ANDAMENTO"
+}
+
+### 12. Sem token -> 401
+GET {{baseUrl}}/api/doctor/procedures
+
+### 13. Token de hospital em rota de médico -> 403
+POST {{baseUrl}}/auth/hospital/login
+Content-Type: application/json
+
+{
+  "email": "hospital@tcc.com",
+  "password": "123456"
+}
+
+> {% client.global.set("hospitalToken", response.body.data.accessToken); %}
+
+###
+GET {{baseUrl}}/api/doctor/procedures
+Authorization: Bearer {{hospitalToken}}

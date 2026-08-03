@@ -1,10 +1,24 @@
 package com.tcc.domain.model;
 
-import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "doctors")
@@ -47,7 +61,7 @@ public class Doctor {
     private List<DoctorPatient> doctorPatients = new ArrayList<>();
 
     @OneToMany(mappedBy = "doctor", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<Procedure> procedures = new ArrayList<>();
+    private List<DoctorProcedure> doctorProcedures = new ArrayList<>();
 
     @OneToMany(mappedBy = "doctor", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Notification> notifications = new ArrayList<>();
@@ -164,12 +178,12 @@ public class Doctor {
         this.doctorPatients = doctorPatients;
     }
 
-    public List<Procedure> getProcedures() {
-        return procedures;
+    public List<DoctorProcedure> getDoctorProcedures() {
+        return doctorProcedures;
     }
 
-    public void setProcedures(List<Procedure> procedures) {
-        this.procedures = procedures;
+    public void setDoctorProcedures(List<DoctorProcedure> doctorProcedures) {
+        this.doctorProcedures = doctorProcedures;
     }
 
     public List<Notification> getNotifications() {

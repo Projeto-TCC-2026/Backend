@@ -1,28 +1,5 @@
 package com.tcc.application.service;
 
-import com.tcc.application.dto.request.PatientRequest;
-import com.tcc.application.dto.response.PatientResponse;
-import com.tcc.application.mapper.PatientMapper;
-import com.tcc.application.mapper.ProcedureExecutionMapper;
-import com.tcc.domain.model.HealthReading;
-import com.tcc.domain.model.Patient;
-import com.tcc.domain.model.ProcedureExecution;
-import com.tcc.domain.model.Role;
-import com.tcc.domain.model.User;
-import com.tcc.domain.repository.PatientRepository;
-import com.tcc.domain.repository.ProcedureExecutionRepository;
-import com.tcc.domain.repository.UserRepository;
-import com.tcc.exception.BusinessException;
-import com.tcc.exception.ResourceNotFoundException;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,8 +8,39 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import com.tcc.application.dto.request.PatientRequest;
+import com.tcc.application.dto.response.PatientResponse;
+import com.tcc.application.mapper.PatientMapper;
+import com.tcc.application.mapper.ProcedureExecutionMapper;
+import com.tcc.domain.model.Doctor;
+import com.tcc.domain.model.DoctorPatient;
+import com.tcc.domain.model.HealthReading;
+import com.tcc.domain.model.Patient;
+import com.tcc.domain.model.ProcedureExecution;
+import com.tcc.domain.model.Role;
+import com.tcc.domain.model.User;
+import com.tcc.domain.repository.DoctorPatientRepository;
+import com.tcc.domain.repository.DoctorRepository;
+import com.tcc.domain.repository.PatientRepository;
+import com.tcc.domain.repository.ProcedureExecutionRepository;
+import com.tcc.domain.repository.UserRepository;
+import com.tcc.exception.BusinessException;
+import com.tcc.exception.ResourceNotFoundException;
+import com.tcc.exception.UnauthorizedException;
 
 @ExtendWith(MockitoExtension.class)
 class PatientServiceImplTest {
@@ -42,6 +50,12 @@ class PatientServiceImplTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private DoctorRepository doctorRepository;
+
+    @Mock
+    private DoctorPatientRepository doctorPatientRepository;
 
     @Mock
     private ProcedureExecutionRepository procedureExecutionRepository;
@@ -56,11 +70,16 @@ class PatientServiceImplTest {
     private PatientServiceImpl patientService;
 
     private User user;
+    private User doctorUser;
+    private Doctor doctor;
     private Patient patient;
     private PatientRequest request;
     private PatientResponse response;
 
+    private static final String DOCTOR_EMAIL = "doctor@tcc.com";
     private static final UUID USER_ID = UUID.randomUUID();
+    private static final UUID DOCTOR_USER_ID = UUID.randomUUID();
+    private static final UUID DOCTOR_ID = UUID.randomUUID();
     private static final UUID PATIENT_ID = UUID.randomUUID();
     private static final UUID NONEXISTENT_ID = UUID.randomUUID();
 
@@ -68,6 +87,13 @@ class PatientServiceImplTest {
     void setUp() {
         user = new User("patient@test.com", "encoded", Role.PATIENT);
         user.setId(USER_ID);
+
+        doctorUser = new User(DOCTOR_EMAIL, "encoded", Role.DOCTOR);
+        doctorUser.setId(DOCTOR_USER_ID);
+
+        doctor = new Doctor();
+        doctor.setId(DOCTOR_ID);
+        doctor.setFullName("Dr. Carlos Mendes");
 
         patient = new Patient(user, "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1));
         patient.setId(PATIENT_ID);
@@ -92,8 +118,9 @@ class PatientServiceImplTest {
     class CreatePatient {
 
         @Test
-        @DisplayName("deve criar paciente com sucesso")
+        @DisplayName("deve criar paciente e vincular ao medico autenticado")
         void shouldCreatePatientSuccessfully() {
+            mockAuthenticatedDoctor();
             when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
             when(patientRepository.existsByCpfAndActiveTrue("12345678901")).thenReturn(false);
             when(patientRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
@@ -102,19 +129,38 @@ class PatientServiceImplTest {
             when(patientRepository.save(patient)).thenReturn(patient);
             when(patientMapper.toResponse(patient)).thenReturn(response);
 
-            PatientResponse result = patientService.createPatient(request);
+            PatientResponse result = patientService.createPatient(DOCTOR_EMAIL, request);
 
             assertThat(result).isEqualTo(response);
             verify(patientRepository).save(patient);
+
+            ArgumentCaptor<DoctorPatient> captor = ArgumentCaptor.forClass(DoctorPatient.class);
+            verify(doctorPatientRepository).save(captor.capture());
+            assertThat(captor.getValue().getDoctor()).isEqualTo(doctor);
+            assertThat(captor.getValue().getPatient()).isEqualTo(patient);
+        }
+
+        @Test
+        @DisplayName("deve lancar excecao quando usuario autenticado nao tem perfil de medico")
+        void shouldThrowWhenAuthenticatedUserIsNotDoctor() {
+            when(userRepository.findByEmailAndActiveTrue(DOCTOR_EMAIL)).thenReturn(Optional.of(doctorUser));
+            when(doctorRepository.findByUserId(DOCTOR_USER_ID)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> patientService.createPatient(DOCTOR_EMAIL, request))
+                    .isInstanceOf(UnauthorizedException.class);
+
+            verify(patientRepository, never()).save(any());
+            verify(doctorPatientRepository, never()).save(any());
         }
 
         @Test
         @DisplayName("deve lancar excecao quando CPF duplicado")
         void shouldThrowWhenDuplicateCpf() {
+            mockAuthenticatedDoctor();
             when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
             when(patientRepository.existsByCpfAndActiveTrue("12345678901")).thenReturn(true);
 
-            assertThatThrownBy(() -> patientService.createPatient(request))
+            assertThatThrownBy(() -> patientService.createPatient(DOCTOR_EMAIL, request))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("CPF");
 
@@ -124,12 +170,13 @@ class PatientServiceImplTest {
         @Test
         @DisplayName("deve lancar excecao quando email duplicado")
         void shouldThrowWhenDuplicateEmail() {
+            mockAuthenticatedDoctor();
             when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
             when(patientRepository.existsByCpfAndActiveTrue("12345678901")).thenReturn(false);
             when(patientRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
             when(patientRepository.existsByEmailAndActiveTrue("patient@test.com")).thenReturn(true);
 
-            assertThatThrownBy(() -> patientService.createPatient(request))
+            assertThatThrownBy(() -> patientService.createPatient(DOCTOR_EMAIL, request))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("e-mail");
 
@@ -139,11 +186,12 @@ class PatientServiceImplTest {
         @Test
         @DisplayName("deve lancar excecao quando usuario ja associado a outro paciente")
         void shouldThrowWhenUserAlreadyAssociated() {
+            mockAuthenticatedDoctor();
             when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
             when(patientRepository.existsByCpfAndActiveTrue("12345678901")).thenReturn(false);
             when(patientRepository.findByUserId(USER_ID)).thenReturn(Optional.of(patient));
 
-            assertThatThrownBy(() -> patientService.createPatient(request))
+            assertThatThrownBy(() -> patientService.createPatient(DOCTOR_EMAIL, request))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("Usuário já está associado");
 
@@ -153,11 +201,17 @@ class PatientServiceImplTest {
         @Test
         @DisplayName("deve lancar excecao quando usuario nao encontrado")
         void shouldThrowWhenUserNotFound() {
+            mockAuthenticatedDoctor();
             when(userRepository.findById(USER_ID)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> patientService.createPatient(request))
+            assertThatThrownBy(() -> patientService.createPatient(DOCTOR_EMAIL, request))
                     .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("Usuário não encontrado");
+        }
+
+        private void mockAuthenticatedDoctor() {
+            when(userRepository.findByEmailAndActiveTrue(DOCTOR_EMAIL)).thenReturn(Optional.of(doctorUser));
+            when(doctorRepository.findByUserId(DOCTOR_USER_ID)).thenReturn(Optional.of(doctor));
         }
     }
 

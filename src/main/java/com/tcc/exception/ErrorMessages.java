@@ -38,6 +38,30 @@ public final class ErrorMessages {
         return "Hospital não encontrado com ID: " + id;
     }
 
+    public static String procedureNotFoundById(UUID id) {
+        return "Procedimento não encontrado com ID: " + id;
+    }
+
+    public static String duplicateProcedureTitle(String title) {
+        return "Já existe um procedimento cadastrado neste hospital com o título: " + title;
+    }
+
+    public static String procedureNotInHospital() {
+        return "Este procedimento não pertence ao seu hospital";
+    }
+
+    public static String doctorNotInHospital() {
+        return "Este médico não pertence ao seu hospital";
+    }
+
+    public static String doctorAlreadyAssignedToProcedure() {
+        return "Este médico já está associado a este procedimento";
+    }
+
+    public static String doctorNotAssignedToProcedure() {
+        return "Este médico não está associado a este procedimento";
+    }
+
     public static String duplicateUserEmail(String email) {
         return "Já existe um usuário cadastrado com o e-mail: " + email;
     }
@@ -82,6 +106,34 @@ public final class ErrorMessages {
 
     public static String doctorHasProcedures(long count) {
         return "Não é possível excluir o doutor. Existem " + count + " procedimentos associados.";
+    }
+
+    public static String procedureAlreadyInactive() {
+        return "Este procedimento já está inativo";
+    }
+
+    public static String doctorProfileNotFound() {
+        return "Usuário autenticado não possui perfil de médico";
+    }
+
+    public static String procedureNotAssignedToDoctor() {
+        return "Este procedimento não está entre os que o hospital atribuiu a você";
+    }
+
+    public static String procedureInactiveForAssignment() {
+        return "Este procedimento está inativo e não pode ser atribuído a pacientes";
+    }
+
+    public static String patientNotLinkedToDoctor() {
+        return "Este paciente não está vinculado a você";
+    }
+
+    public static String patientProcedureNotFoundById(UUID id) {
+        return "Atribuição de procedimento não encontrada com ID: " + id;
+    }
+
+    public static String duplicatePatientProcedure() {
+        return "Este procedimento já está atribuído a este paciente por você";
     }
 
     public static String hospitalHasDoctors(long count) {
