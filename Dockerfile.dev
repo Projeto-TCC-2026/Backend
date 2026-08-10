@@ -1,0 +1,18 @@
+FROM eclipse-temurin:17-jdk
+
+WORKDIR /app
+
+# Copia o Maven Wrapper
+COPY .mvn/ .mvn/
+COPY mvnw pom.xml ./
+
+# Baixa as dependências
+RUN ./mvnw dependency:go-offline -B
+
+# O código será montado pelo volume do docker-compose
+COPY src ./src
+
+EXPOSE 8080
+EXPOSE 5005
+
+CMD ["./mvnw", "spring-boot:run"]
