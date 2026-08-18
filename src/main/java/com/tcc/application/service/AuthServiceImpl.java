@@ -1,22 +1,29 @@
 package com.tcc.application.service;
 
+import com.tcc.application.dto.request.HospitalRegistrationRequest;
 import com.tcc.application.dto.request.LoginRequest;
 import com.tcc.application.dto.request.RefreshTokenRequest;
 import com.tcc.application.dto.response.AuthResponse;
 import com.tcc.application.dto.response.DoctorAuthResponse;
 import com.tcc.application.dto.response.HospitalAuthResponse;
+import com.tcc.application.dto.response.HospitalResponse;
 import com.tcc.application.dto.response.PatientAuthResponse;
 import com.tcc.application.dto.response.RefreshTokenResponse;
 import com.tcc.application.dto.response.UserProfileResponse;
+import com.tcc.application.mapper.HospitalMapper;
 import com.tcc.domain.model.Doctor;
+import com.tcc.domain.model.Hospital;
 import com.tcc.domain.model.Patient;
 import com.tcc.domain.model.RefreshToken;
 import com.tcc.domain.model.Role;
 import com.tcc.domain.model.User;
 import com.tcc.domain.repository.DoctorRepository;
+import com.tcc.domain.repository.HospitalRepository;
 import com.tcc.domain.repository.PatientRepository;
 import com.tcc.domain.repository.RefreshTokenRepository;
 import com.tcc.domain.repository.UserRepository;
+import com.tcc.exception.BusinessException;
+import com.tcc.exception.ErrorMessages;
 import com.tcc.exception.InvalidTokenException;
 import com.tcc.exception.ResourceNotFoundException;
 import com.tcc.exception.UnauthorizedException;
@@ -37,6 +44,8 @@ public class AuthServiceImpl implements AuthService {
     private final UserRepository userRepository;
     private final DoctorRepository doctorRepository;
     private final PatientRepository patientRepository;
+    private final HospitalRepository hospitalRepository;
+    private final HospitalMapper hospitalMapper;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
@@ -44,12 +53,16 @@ public class AuthServiceImpl implements AuthService {
     public AuthServiceImpl(UserRepository userRepository,
                            DoctorRepository doctorRepository,
                            PatientRepository patientRepository,
+                           HospitalRepository hospitalRepository,
+                           HospitalMapper hospitalMapper,
                            RefreshTokenRepository refreshTokenRepository,
                            PasswordEncoder passwordEncoder,
                            JwtService jwtService) {
         this.userRepository = userRepository;
         this.doctorRepository = doctorRepository;
         this.patientRepository = patientRepository;
+        this.hospitalRepository = hospitalRepository;
+        this.hospitalMapper = hospitalMapper;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -119,6 +132,32 @@ public class AuthServiceImpl implements AuthService {
         String refreshToken = createRefreshToken(user);
 
         return new AuthResponse(accessToken, refreshToken, user.getEmail(), user.getRole().name());
+    }
+
+    @Override
+    @Transactional
+    public HospitalResponse registerHospital(HospitalRegistrationRequest request) {
+        if (hospitalRepository.existsByCnpj(request.cnpj())) {
+            throw new BusinessException(ErrorMessages.duplicateHospitalCnpj(request.cnpj()));
+        }
+
+        if (userRepository.existsByEmail(request.email())) {
+            throw new BusinessException(ErrorMessages.duplicateUserEmail(request.email()));
+        }
+
+        Hospital hospital = new Hospital(request.name(), request.cnpj());
+        hospital.setPhone(request.phone());
+        hospital.setEmail(request.email());
+        hospital.setAddress(request.address());
+        hospital.setCity(request.city());
+        hospital.setState(request.state());
+        Hospital savedHospital = hospitalRepository.save(hospital);
+
+        User user = new User(request.email(), passwordEncoder.encode(request.password()), Role.HOSPITAL);
+        user.setHospital(savedHospital);
+        userRepository.save(user);
+
+        return hospitalMapper.toResponse(savedHospital);
     }
 
     @Override

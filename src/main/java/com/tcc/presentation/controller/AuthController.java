@@ -1,11 +1,13 @@
 package com.tcc.presentation.controller;
 
+import com.tcc.application.dto.request.HospitalRegistrationRequest;
 import com.tcc.application.dto.request.LoginRequest;
 import com.tcc.application.dto.request.RefreshTokenRequest;
 import com.tcc.application.dto.response.ApiResponse;
 import com.tcc.application.dto.response.AuthResponse;
 import com.tcc.application.dto.response.DoctorAuthResponse;
 import com.tcc.application.dto.response.HospitalAuthResponse;
+import com.tcc.application.dto.response.HospitalResponse;
 import com.tcc.application.dto.response.PatientAuthResponse;
 import com.tcc.application.dto.response.RefreshTokenResponse;
 import com.tcc.application.dto.response.UserProfileResponse;
@@ -13,6 +15,7 @@ import com.tcc.application.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -61,6 +64,20 @@ public class AuthController {
     @Operation(summary = "Login hospital", description = "Autentica um gestor de hospital e retorna tokens com dados do hospital")
     public ResponseEntity<ApiResponse<HospitalAuthResponse>> loginHospital(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(ApiResponse.success(authService.loginHospital(request)));
+    }
+
+    @PostMapping("/register/hospital")
+    @Operation(
+        summary = "Auto-cadastro de hospital",
+        description = "Endpoint público para hospitais se auto-cadastrarem na plataforma. " +
+                      "Cria o hospital e o usuário gestor vinculado, já ativos e prontos para login."
+    )
+    public ResponseEntity<ApiResponse<HospitalResponse>> registerHospital(
+            @Valid @RequestBody HospitalRegistrationRequest request) {
+        HospitalResponse hospital = authService.registerHospital(request);
+        ApiResponse<HospitalResponse> response = ApiResponse.success(hospital,
+                "Cadastro realizado com sucesso. Você já pode fazer login.");
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("/refresh")
