@@ -1,7 +1,9 @@
 package com.tcc.application.service;
 
+import com.tcc.application.dto.request.DoctorRegistrationRequest;
 import com.tcc.application.dto.request.DoctorRequest;
 import com.tcc.application.dto.request.HospitalRequest;
+import com.tcc.application.dto.response.DoctorRegistrationResponse;
 import com.tcc.application.dto.response.DoctorResponse;
 import com.tcc.application.dto.response.HospitalDashboardResponse;
 import com.tcc.application.dto.response.HospitalResponse;
@@ -26,6 +28,9 @@ public interface HospitalPortalService {
 
     /** Cadastra um médico vinculado automaticamente ao hospital do usuário autenticado. */
     DoctorResponse createDoctor(String email, DoctorRequest request);
+
+    /** Cadastra um médico criando sua conta automaticamente e envia o e-mail de boas-vindas. */
+    DoctorRegistrationResponse registerDoctor(String email, DoctorRegistrationRequest request);
 
     /** Busca um médico por ID, validando que pertence ao hospital do usuário autenticado. */
     DoctorResponse getDoctorById(String email, UUID doctorId);

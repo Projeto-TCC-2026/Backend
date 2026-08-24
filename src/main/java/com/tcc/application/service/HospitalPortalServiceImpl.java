@@ -1,10 +1,13 @@
 package com.tcc.application.service;
 
+import com.tcc.application.dto.request.DoctorRegistrationRequest;
 import com.tcc.application.dto.request.DoctorRequest;
 import com.tcc.application.dto.request.HospitalRequest;
+import com.tcc.application.dto.response.DoctorRegistrationResponse;
 import com.tcc.application.dto.response.DoctorResponse;
 import com.tcc.application.dto.response.HospitalDashboardResponse;
 import com.tcc.application.dto.response.HospitalResponse;
+import com.tcc.application.mapper.DoctorMapper;
 import com.tcc.domain.model.Hospital;
 import com.tcc.domain.model.User;
 import com.tcc.domain.repository.DoctorRepository;
@@ -28,17 +31,20 @@ public class HospitalPortalServiceImpl implements HospitalPortalService {
     private final HospitalService hospitalService;
     private final DoctorService doctorService;
     private final DashboardService dashboardService;
+    private final DoctorMapper doctorMapper;
 
     public HospitalPortalServiceImpl(UserRepository userRepository,
                                      DoctorRepository doctorRepository,
                                      HospitalService hospitalService,
                                      DoctorService doctorService,
-                                     DashboardService dashboardService) {
+                                     DashboardService dashboardService,
+                                     DoctorMapper doctorMapper) {
         this.userRepository = userRepository;
         this.doctorRepository = doctorRepository;
         this.hospitalService = hospitalService;
         this.doctorService = doctorService;
         this.dashboardService = dashboardService;
+        this.doctorMapper = doctorMapper;
     }
 
     @Override
@@ -66,19 +72,8 @@ public class HospitalPortalServiceImpl implements HospitalPortalService {
     @Transactional(readOnly = true)
     public Page<DoctorResponse> listDoctors(String email, Pageable pageable) {
         Hospital hospital = resolveHospital(email);
-        return doctorRepository.findByHospitalId(hospital.getId(), pageable)
-                .map(doctor -> new DoctorResponse(
-                        doctor.getId(),
-                        null,
-                        null,
-                        doctor.getFullName(),
-                        doctor.getCpf(),
-                        doctor.getCrm(),
-                        doctor.getSpecialty(),
-                        doctor.getPhone(),
-                        doctor.getCreatedAt(),
-                        doctor.getUpdatedAt()
-                ));
+        return doctorRepository.findByHospitalIdAndActiveTrue(hospital.getId(), pageable)
+                .map(doctorMapper::toResponse);
     }
 
     @Override
@@ -91,6 +86,18 @@ public class HospitalPortalServiceImpl implements HospitalPortalService {
         }
 
         return doctorService.createDoctor(request);
+    }
+
+    @Override
+    @Transactional
+    public DoctorRegistrationResponse registerDoctor(String email, DoctorRegistrationRequest request) {
+        Hospital hospital = resolveHospital(email);
+
+        if (!hospital.getId().equals(request.hospitalId())) {
+            throw new BusinessException("O hospital informado não corresponde ao seu hospital");
+        }
+
+        return doctorService.registerDoctor(request);
     }
 
     @Override

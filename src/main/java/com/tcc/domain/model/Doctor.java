@@ -45,6 +45,9 @@ public class Doctor {
     @Column(nullable = false, unique = true, length = 20)
     private String crm;
 
+    @Column(nullable = false)
+    private Boolean active = true;
+
     @Column(length = 100)
     private String specialty;
 
@@ -136,6 +139,14 @@ public class Doctor {
 
     public void setCrm(String crm) {
         this.crm = crm;
+    }
+
+    public Boolean getActive() {
+        return active;
+    }
+
+    public void setActive(Boolean active) {
+        this.active = active;
     }
 
     public String getSpecialty() {

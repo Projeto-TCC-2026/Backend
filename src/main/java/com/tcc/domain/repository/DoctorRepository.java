@@ -23,7 +23,9 @@ public interface DoctorRepository extends JpaRepository<Doctor, UUID> {
     
     List<Doctor> findByHospitalId(UUID hospitalId);
 
-    Page<Doctor> findByHospitalId(UUID hospitalId, Pageable pageable);
+    Page<Doctor> findByHospitalIdAndActiveTrue(UUID hospitalId, Pageable pageable);
+
+    Page<Doctor> findAllByActiveTrue(Pageable pageable);
     
     boolean existsByCpf(String cpf);
     

@@ -10,6 +10,7 @@ public record DoctorResponse(
         String fullName,
         String cpf,
         String crm,
+        Boolean active,
         String specialty,
         String phone,
         LocalDateTime createdAt,

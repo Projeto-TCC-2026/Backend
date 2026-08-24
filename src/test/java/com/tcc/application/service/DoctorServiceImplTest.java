@@ -78,7 +78,7 @@ class DoctorServiceImplTest {
 
         request = new DoctorRequest(USER_ID, HOSPITAL_ID, "Dr. Carlos", "11122233344", "CRM12345", "Cardiologia", "11988887777");
 
-        response = new DoctorResponse(DOCTOR_ID, null, null, "Dr. Carlos", "11122233344", "CRM12345", "Cardiologia", "11988887777", null, null);
+        response = new DoctorResponse(DOCTOR_ID, null, null, "Dr. Carlos", "11122233344", "CRM12345", true, "Cardiologia", "11988887777", null, null);
     }
 
     @Nested
@@ -175,15 +175,18 @@ class DoctorServiceImplTest {
     class DeleteDoctor {
 
         @Test
-        @DisplayName("deve excluir doutor sem relacionamentos")
-        void shouldDeleteDoctorWithoutRelationships() {
+        @DisplayName("deve inativar doutor e conta associada sem excluir registros")
+        void shouldDeleteDoctorAndAssociatedUserWithoutRelationships() {
             doctor.setDoctorPatients(new ArrayList<>());
             doctor.setDoctorProcedures(new ArrayList<>());
             when(doctorRepository.findById(DOCTOR_ID)).thenReturn(Optional.of(doctor));
 
             doctorService.deleteDoctor(DOCTOR_ID);
 
-            verify(doctorRepository).delete(doctor);
+            verify(doctorRepository).save(doctor);
+            verify(userRepository).save(user);
+            assertThat(doctor.getActive()).isFalse();
+            assertThat(user.getActive()).isFalse();
         }
 
         @Test
@@ -198,7 +201,7 @@ class DoctorServiceImplTest {
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("pacientes associados");
 
-            verify(doctorRepository, never()).delete(any());
+            verify(doctorRepository, never()).save(any());
         }
 
         @Test
@@ -213,7 +216,7 @@ class DoctorServiceImplTest {
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("procedimentos associados");
 
-            verify(doctorRepository, never()).delete(any());
+            verify(doctorRepository, never()).save(any());
         }
 
         @Test

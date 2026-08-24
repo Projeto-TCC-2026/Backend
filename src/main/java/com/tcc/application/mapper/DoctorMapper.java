@@ -29,6 +29,7 @@ public class DoctorMapper {
                 doctor.getFullName(),
                 doctor.getCpf(),
                 doctor.getCrm(),
+                doctor.getActive(),
                 doctor.getSpecialty(),
                 doctor.getPhone(),
                 doctor.getCreatedAt(),

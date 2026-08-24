@@ -1,8 +1,10 @@
 package com.tcc.presentation.controller;
 
+import com.tcc.application.dto.request.DoctorRegistrationRequest;
 import com.tcc.application.dto.request.DoctorRequest;
 import com.tcc.application.dto.request.HospitalRequest;
 import com.tcc.application.dto.response.ApiResponse;
+import com.tcc.application.dto.response.DoctorRegistrationResponse;
 import com.tcc.application.dto.response.DoctorResponse;
 import com.tcc.application.dto.response.HospitalDashboardResponse;
 import com.tcc.application.dto.response.HospitalResponse;
@@ -94,6 +96,21 @@ public class HospitalPortalController {
         String email = extractEmail(authentication);
         DoctorResponse doctor = hospitalPortalService.createDoctor(email, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(doctor));
+    }
+
+    @PostMapping("/doctors/register")
+    @Operation(
+        summary = "Cadastrar médico com conta de acesso",
+        description = "Cria a conta de usuário do médico (com senha temporária desconhecida) vinculada ao " +
+                      "hospital do usuário autenticado e envia um e-mail de boas-vindas para o primeiro acesso."
+    )
+    public ResponseEntity<ApiResponse<DoctorRegistrationResponse>> registerDoctor(
+            Authentication authentication,
+            @Valid @RequestBody DoctorRegistrationRequest request) {
+        String email = extractEmail(authentication);
+        DoctorRegistrationResponse doctor = hospitalPortalService.registerDoctor(email, request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(doctor, "Médico cadastrado. E-mail de boas-vindas enviado."));
     }
 
     @GetMapping("/doctors/{id}")

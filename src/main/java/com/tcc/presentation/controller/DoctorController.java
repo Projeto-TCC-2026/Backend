@@ -1,7 +1,10 @@
 package com.tcc.presentation.controller;
 
+import com.tcc.application.dto.request.DoctorRegistrationRequest;
 import com.tcc.application.dto.request.DoctorRequest;
+import com.tcc.application.dto.response.AccessLinkResponse;
 import com.tcc.application.dto.response.ApiResponse;
+import com.tcc.application.dto.response.DoctorRegistrationResponse;
 import com.tcc.application.dto.response.DoctorResponse;
 import com.tcc.application.service.DoctorService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -46,6 +49,36 @@ public class DoctorController {
         ApiResponse<DoctorResponse> response = ApiResponse.success(doctor);
         
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/register")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(
+        summary = "Cadastrar novo doutor com conta de acesso",
+        description = "Cria a conta de usuário do doutor (com senha temporária desconhecida) e envia um " +
+                      "e-mail de boas-vindas para que ele defina a própria senha antes do primeiro acesso."
+    )
+    public ResponseEntity<ApiResponse<DoctorRegistrationResponse>> registerDoctor(
+            @Valid @RequestBody DoctorRegistrationRequest request) {
+
+        DoctorRegistrationResponse doctor = doctorService.registerDoctor(request);
+        ApiResponse<DoctorRegistrationResponse> response = ApiResponse.success(doctor, "Doutor cadastrado. E-mail de boas-vindas enviado.");
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/{id}/access-link")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(
+        summary = "Gerar novo link de acesso",
+        description = "Invalida o link de ativação pendente (se houver), gera um novo e reenvia o e-mail de " +
+                      "boas-vindas. Útil para copiar o link manualmente ou reenviar quando o anterior expirou."
+    )
+    public ResponseEntity<ApiResponse<AccessLinkResponse>> generateAccessLink(
+            @Parameter(description = "ID do doutor", required = true) @PathVariable UUID id) {
+
+        AccessLinkResponse link = doctorService.generateAccessLink(id);
+        return ResponseEntity.ok(ApiResponse.success(link));
     }
 
     @GetMapping
