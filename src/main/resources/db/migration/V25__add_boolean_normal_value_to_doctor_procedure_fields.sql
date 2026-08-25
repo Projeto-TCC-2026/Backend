@@ -1,0 +1,2 @@
+ALTER TABLE doctor_procedure_fields
+ADD COLUMN normal_boolean BOOLEAN;

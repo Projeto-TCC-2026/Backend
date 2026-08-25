@@ -6,6 +6,8 @@ import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.tcc.domain.model.DoctorProcedure;
 
@@ -23,4 +25,7 @@ public interface DoctorProcedureRepository extends JpaRepository<DoctorProcedure
     long countByProcedureId(UUID procedureId);
 
     long countByDoctorId(UUID doctorId);
+
+    @Query("SELECT dp FROM DoctorProcedure dp JOIN FETCH dp.procedure WHERE dp.doctor.user.id = :userId AND dp.procedure.active = true ORDER BY dp.createdAt")
+    List<DoctorProcedure> findActiveByDoctorUserId(@Param("userId") UUID userId);
 }
