@@ -6,7 +6,9 @@ import com.tcc.application.dto.response.AccessLinkResponse;
 import com.tcc.application.dto.response.ApiResponse;
 import com.tcc.application.dto.response.DoctorRegistrationResponse;
 import com.tcc.application.dto.response.DoctorResponse;
+import com.tcc.application.dto.response.DoctorProcedureResponse;
 import com.tcc.application.service.DoctorService;
+import com.tcc.application.service.ProcedureService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -30,9 +32,11 @@ import java.util.UUID;
 public class DoctorController {
 
     private final DoctorService doctorService;
+    private final ProcedureService procedureService;
 
-    public DoctorController(DoctorService doctorService) {
+    public DoctorController(DoctorService doctorService, ProcedureService procedureService) {
         this.doctorService = doctorService;
+        this.procedureService = procedureService;
     }
 
     @PostMapping
@@ -147,6 +151,13 @@ public class DoctorController {
         ApiResponse<Void> response = ApiResponse.success();
         
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}/procedures")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<java.util.List<DoctorProcedureResponse>>> listDoctorProcedures(
+            @PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(procedureService.listDoctorProceduresForAdmin(id)));
     }
 
     @GetMapping("/search/name")

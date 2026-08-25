@@ -130,6 +130,15 @@ public class ProcedureController {
         return ResponseEntity.ok(ApiResponse.success(procedureService.listProcedureDoctors(email, id)));
     }
 
+    @GetMapping("/doctors/{doctorId}")
+    @Operation(summary = "Listar procedimentos do médico")
+    public ResponseEntity<ApiResponse<List<DoctorProcedureResponse>>> listDoctorProcedures(
+            Authentication authentication,
+            @PathVariable UUID doctorId) {
+        String email = extractEmail(authentication);
+        return ResponseEntity.ok(ApiResponse.success(procedureService.listDoctorProcedures(email, doctorId)));
+    }
+
     @PostMapping("/{id}/doctors")
     @Operation(
         summary = "Atrelar médico ao procedimento",

@@ -19,17 +19,37 @@ public interface ProcedureService {
 
     ProcedureResponse createProcedure(String email, ProcedureRequest request);
 
+    ProcedureResponse createProcedureForHospital(UUID hospitalId, ProcedureRequest request);
+
     Page<ProcedureResponse> listProcedures(String email, Boolean includeInactive, Pageable pageable);
+
+    Page<ProcedureResponse> listProceduresForHospital(UUID hospitalId, Boolean includeInactive, Pageable pageable);
 
     ProcedureResponse getProcedureById(String email, UUID id);
 
+    ProcedureResponse getProcedureByIdForHospital(UUID hospitalId, UUID id);
+
     ProcedureResponse updateProcedure(String email, UUID id, ProcedureRequest request);
+
+    ProcedureResponse updateProcedureForHospital(UUID hospitalId, UUID id, ProcedureRequest request);
 
     void deactivateProcedure(String email, UUID id);
 
+    void deactivateProcedureForHospital(UUID hospitalId, UUID id);
+
+    List<DoctorProcedureResponse> listDoctorProcedures(String email, UUID doctorId);
+
+    List<DoctorProcedureResponse> listDoctorProceduresForAdmin(UUID doctorId);
+
     List<DoctorProcedureResponse> listProcedureDoctors(String email, UUID procedureId);
+
+    List<DoctorProcedureResponse> listProcedureDoctorsForAdmin(UUID procedureId);
 
     DoctorProcedureResponse assignDoctor(String email, UUID procedureId, DoctorProcedureRequest request);
 
+    DoctorProcedureResponse assignDoctorForAdmin(UUID procedureId, DoctorProcedureRequest request);
+
     void unassignDoctor(String email, UUID procedureId, UUID doctorId);
+
+    void unassignDoctorForAdmin(UUID procedureId, UUID doctorId);
 }

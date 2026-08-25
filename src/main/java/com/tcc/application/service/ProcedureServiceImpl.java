@@ -21,6 +21,7 @@ import com.tcc.domain.model.Procedure;
 import com.tcc.domain.model.User;
 import com.tcc.domain.repository.DoctorProcedureRepository;
 import com.tcc.domain.repository.DoctorRepository;
+import com.tcc.domain.repository.HospitalRepository;
 import com.tcc.domain.repository.ProcedureRepository;
 import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.BusinessException;
@@ -32,6 +33,7 @@ import com.tcc.exception.UnauthorizedException;
 public class ProcedureServiceImpl implements ProcedureService {
 
     private final ProcedureRepository procedureRepository;
+    private final HospitalRepository hospitalRepository;
     private final DoctorProcedureRepository doctorProcedureRepository;
     private final DoctorRepository doctorRepository;
     private final UserRepository userRepository;
@@ -39,12 +41,14 @@ public class ProcedureServiceImpl implements ProcedureService {
     private final DoctorProcedureMapper doctorProcedureMapper;
 
     public ProcedureServiceImpl(ProcedureRepository procedureRepository,
+                                HospitalRepository hospitalRepository,
                                 DoctorProcedureRepository doctorProcedureRepository,
                                 DoctorRepository doctorRepository,
                                 UserRepository userRepository,
                                 ProcedureMapper procedureMapper,
                                 DoctorProcedureMapper doctorProcedureMapper) {
         this.procedureRepository = procedureRepository;
+        this.hospitalRepository = hospitalRepository;
         this.doctorProcedureRepository = doctorProcedureRepository;
         this.doctorRepository = doctorRepository;
         this.userRepository = userRepository;
@@ -56,6 +60,18 @@ public class ProcedureServiceImpl implements ProcedureService {
     @Transactional
     public ProcedureResponse createProcedure(String email, ProcedureRequest request) {
         Hospital hospital = resolveHospital(email);
+
+        return createProcedure(hospital, request);
+    }
+
+    @Override
+    @Transactional
+    public ProcedureResponse createProcedureForHospital(UUID hospitalId, ProcedureRequest request) {
+        Hospital hospital = findHospital(hospitalId);
+        return createProcedure(hospital, request);
+    }
+
+    private ProcedureResponse createProcedure(Hospital hospital, ProcedureRequest request) {
 
         if (procedureRepository.existsByHospitalIdAndTitleIgnoreCase(hospital.getId(), request.title())) {
             throw new BusinessException(ErrorMessages.duplicateProcedureTitle(request.title()));
@@ -71,6 +87,17 @@ public class ProcedureServiceImpl implements ProcedureService {
     @Transactional(readOnly = true)
     public Page<ProcedureResponse> listProcedures(String email, Boolean includeInactive, Pageable pageable) {
         Hospital hospital = resolveHospital(email);
+
+        return listProceduresForKnownHospital(hospital, includeInactive, pageable);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ProcedureResponse> listProceduresForHospital(UUID hospitalId, Boolean includeInactive, Pageable pageable) {
+        return listProceduresForKnownHospital(findHospital(hospitalId), includeInactive, pageable);
+    }
+
+    private Page<ProcedureResponse> listProceduresForKnownHospital(Hospital hospital, Boolean includeInactive, Pageable pageable) {
 
         Page<Procedure> procedures = Boolean.TRUE.equals(includeInactive)
                 ? procedureRepository.findByHospitalId(hospital.getId(), pageable)
@@ -89,9 +116,26 @@ public class ProcedureServiceImpl implements ProcedureService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public ProcedureResponse getProcedureByIdForHospital(UUID hospitalId, UUID id) {
+        return procedureMapper.toResponse(findProcedureInHospital(id, findHospital(hospitalId).getId()));
+    }
+
+    @Override
     @Transactional
     public ProcedureResponse updateProcedure(String email, UUID id, ProcedureRequest request) {
         Hospital hospital = resolveHospital(email);
+
+        return updateProcedure(hospital, id, request);
+    }
+
+    @Override
+    @Transactional
+    public ProcedureResponse updateProcedureForHospital(UUID hospitalId, UUID id, ProcedureRequest request) {
+        return updateProcedure(findHospital(hospitalId), id, request);
+    }
+
+    private ProcedureResponse updateProcedure(Hospital hospital, UUID id, ProcedureRequest request) {
         Procedure procedure = findProcedureInHospital(id, hospital.getId());
 
         if (!procedure.getTitle().equalsIgnoreCase(request.title())
@@ -109,6 +153,17 @@ public class ProcedureServiceImpl implements ProcedureService {
     @Transactional
     public void deactivateProcedure(String email, UUID id) {
         Hospital hospital = resolveHospital(email);
+
+        deactivateProcedureForKnownHospital(hospital, id);
+    }
+
+    @Override
+    @Transactional
+    public void deactivateProcedureForHospital(UUID hospitalId, UUID id) {
+        deactivateProcedureForKnownHospital(findHospital(hospitalId), id);
+    }
+
+    private void deactivateProcedureForKnownHospital(Hospital hospital, UUID id) {
         Procedure procedure = findProcedureInHospital(id, hospital.getId());
 
         if (!Boolean.TRUE.equals(procedure.getActive())) {
@@ -130,12 +185,58 @@ public class ProcedureServiceImpl implements ProcedureService {
                 .toList();
     }
 
+            @Override
+            @Transactional(readOnly = true)
+            public List<DoctorProcedureResponse> listProcedureDoctorsForAdmin(UUID procedureId) {
+            procedureRepository.findById(procedureId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.procedureNotFoundById(procedureId)));
+            return doctorProcedureRepository.findByProcedureId(procedureId).stream()
+                .map(doctorProcedureMapper::toResponse)
+                .toList();
+            }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DoctorProcedureResponse> listDoctorProcedures(String email, UUID doctorId) {
+        Hospital hospital = resolveHospital(email);
+        return listDoctorProceduresForHospital(doctorId, hospital.getId());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DoctorProcedureResponse> listDoctorProceduresForAdmin(UUID doctorId) {
+        Doctor doctor = doctorRepository.findById(doctorId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.doctorNotFoundById(doctorId)));
+        return doctorProcedureRepository.findByDoctorId(doctor.getId()).stream()
+                .map(doctorProcedureMapper::toResponse)
+                .toList();
+    }
+
+    private List<DoctorProcedureResponse> listDoctorProceduresForHospital(UUID doctorId, UUID hospitalId) {
+        Doctor doctor = findDoctorInHospital(doctorId, hospitalId);
+        return doctorProcedureRepository.findByDoctorId(doctor.getId()).stream()
+                .map(doctorProcedureMapper::toResponse)
+                .toList();
+    }
+
     @Override
     @Transactional
     public DoctorProcedureResponse assignDoctor(String email, UUID procedureId, DoctorProcedureRequest request) {
         Hospital hospital = resolveHospital(email);
-        Procedure procedure = findProcedureInHospital(procedureId, hospital.getId());
-        Doctor doctor = findDoctorInHospital(request.doctorId(), hospital.getId());
+        return assignDoctor(procedureId, request, hospital.getId());
+    }
+
+    @Override
+    @Transactional
+    public DoctorProcedureResponse assignDoctorForAdmin(UUID procedureId, DoctorProcedureRequest request) {
+        Procedure procedure = procedureRepository.findById(procedureId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.procedureNotFoundById(procedureId)));
+        return assignDoctor(procedureId, request, procedure.getHospital().getId());
+    }
+
+    private DoctorProcedureResponse assignDoctor(UUID procedureId, DoctorProcedureRequest request, UUID hospitalId) {
+        Procedure procedure = findProcedureInHospital(procedureId, hospitalId);
+        Doctor doctor = findDoctorInHospital(request.doctorId(), hospitalId);
 
         if (doctorProcedureRepository.existsByDoctorIdAndProcedureId(doctor.getId(), procedure.getId())) {
             throw new BusinessException(ErrorMessages.doctorAlreadyAssignedToProcedure());
@@ -151,8 +252,20 @@ public class ProcedureServiceImpl implements ProcedureService {
     @Transactional
     public void unassignDoctor(String email, UUID procedureId, UUID doctorId) {
         Hospital hospital = resolveHospital(email);
-        Procedure procedure = findProcedureInHospital(procedureId, hospital.getId());
-        Doctor doctor = findDoctorInHospital(doctorId, hospital.getId());
+        unassignDoctor(procedureId, doctorId, hospital.getId());
+    }
+
+    @Override
+    @Transactional
+    public void unassignDoctorForAdmin(UUID procedureId, UUID doctorId) {
+        Procedure procedure = procedureRepository.findById(procedureId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.procedureNotFoundById(procedureId)));
+        unassignDoctor(procedureId, doctorId, procedure.getHospital().getId());
+    }
+
+    private void unassignDoctor(UUID procedureId, UUID doctorId, UUID hospitalId) {
+        Procedure procedure = findProcedureInHospital(procedureId, hospitalId);
+        Doctor doctor = findDoctorInHospital(doctorId, hospitalId);
 
         DoctorProcedure doctorProcedure = doctorProcedureRepository
                 .findByDoctorIdAndProcedureId(doctor.getId(), procedure.getId())
@@ -172,6 +285,11 @@ public class ProcedureServiceImpl implements ProcedureService {
         }
 
         return user.getHospital();
+    }
+
+    private Hospital findHospital(UUID hospitalId) {
+        return hospitalRepository.findById(hospitalId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.hospitalNotFoundById(hospitalId)));
     }
 
     private Procedure findProcedureInHospital(UUID procedureId, UUID hospitalId) {

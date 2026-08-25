@@ -37,6 +37,7 @@ import com.tcc.domain.model.Role;
 import com.tcc.domain.model.User;
 import com.tcc.domain.repository.DoctorProcedureRepository;
 import com.tcc.domain.repository.DoctorRepository;
+import com.tcc.domain.repository.HospitalRepository;
 import com.tcc.domain.repository.ProcedureRepository;
 import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.BusinessException;
@@ -51,6 +52,9 @@ class ProcedureServiceImplTest {
 
     @Mock
     private DoctorProcedureRepository doctorProcedureRepository;
+
+    @Mock
+    private HospitalRepository hospitalRepository;
 
     @Mock
     private DoctorRepository doctorRepository;

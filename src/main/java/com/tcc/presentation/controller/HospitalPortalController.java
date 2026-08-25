@@ -4,11 +4,13 @@ import com.tcc.application.dto.request.DoctorRegistrationRequest;
 import com.tcc.application.dto.request.DoctorRequest;
 import com.tcc.application.dto.request.HospitalRequest;
 import com.tcc.application.dto.response.ApiResponse;
+import com.tcc.application.dto.response.DoctorProcedureResponse;
 import com.tcc.application.dto.response.DoctorRegistrationResponse;
 import com.tcc.application.dto.response.DoctorResponse;
 import com.tcc.application.dto.response.HospitalDashboardResponse;
 import com.tcc.application.dto.response.HospitalResponse;
 import com.tcc.application.service.HospitalPortalService;
+import com.tcc.application.service.ProcedureService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -35,9 +37,11 @@ import java.util.UUID;
 public class HospitalPortalController {
 
     private final HospitalPortalService hospitalPortalService;
+    private final ProcedureService procedureService;
 
-    public HospitalPortalController(HospitalPortalService hospitalPortalService) {
+    public HospitalPortalController(HospitalPortalService hospitalPortalService, ProcedureService procedureService) {
         this.hospitalPortalService = hospitalPortalService;
+        this.procedureService = procedureService;
     }
 
     @GetMapping("/profile")
@@ -150,6 +154,14 @@ public class HospitalPortalController {
         String email = extractEmail(authentication);
         hospitalPortalService.deleteDoctor(email, id);
         return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @GetMapping("/doctors/{id}/procedures")
+    public ResponseEntity<ApiResponse<java.util.List<DoctorProcedureResponse>>> listDoctorProcedures(
+            Authentication authentication,
+            @PathVariable UUID id) {
+        String email = extractEmail(authentication);
+        return ResponseEntity.ok(ApiResponse.success(procedureService.listDoctorProcedures(email, id)));
     }
 
     // --- Helper ---
