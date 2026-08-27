@@ -62,14 +62,18 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     @Transactional(readOnly = true)
     public AdminDashboardResponse getAdminDashboard() {
-        Long totalHospitals   = hospitalRepository.countTotalHospitals();
-        Long totalDoctors     = doctorRepository.countTotalDoctors();
-        Long activeDoctors    = doctorRepository.countByActiveTrueTotal();
-        Long inactiveDoctors  = totalDoctors - activeDoctors;
-        Long totalPatients    = (long) patientRepository.count();
+        Long totalHospitals    = hospitalRepository.countTotalHospitals();
+        Long activeHospitals   = hospitalRepository.countByActiveTrue();
+        Long inactiveHospitals = hospitalRepository.countByActiveFalse();
+        Long totalDoctors      = doctorRepository.countTotalDoctors();
+        Long activeDoctors     = doctorRepository.countByActiveTrueTotal();
+        Long inactiveDoctors   = totalDoctors - activeDoctors;
+        Long totalPatients     = (long) patientRepository.count();
 
         return new AdminDashboardResponse(
                 totalHospitals,
+                activeHospitals,
+                inactiveHospitals,
                 totalDoctors,
                 activeDoctors,
                 inactiveDoctors,
