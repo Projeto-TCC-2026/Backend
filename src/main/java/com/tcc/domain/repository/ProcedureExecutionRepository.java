@@ -37,8 +37,10 @@ public interface ProcedureExecutionRepository extends JpaRepository<ProcedureExe
     Page<ProcedureExecution> findPagedByDoctorId(@Param("doctorId") UUID doctorId, Pageable pageable);
     
     long countByPatientId(UUID patientId);
-    
+
     long countByPatientIdAndStatus(UUID patientId, String status);
+
+    long countByDoctorId(UUID doctorId);
     
     boolean existsByPatientId(UUID patientId);
     

@@ -43,27 +43,6 @@ public class AdminController {
         this.userService = userService;
     }
 
-    // ======================= DASHBOARD ADMINISTRATIVO =======================
-
-    @GetMapping("/dashboard")
-    @Operation(
-        summary = "Dashboard administrativo",
-        description = "Retorna estatísticas gerais da plataforma para o painel administrativo"
-    )
-    public ResponseEntity<ApiResponse<Map<String, Object>>> getDashboard() {
-        // Implementar estatísticas do sistema
-        Map<String, Object> dashboard = Map.of(
-            "totalHospitals", hospitalService.countHospitals(),
-            "totalUsers", userService.countUsers(),
-            "totalDoctors", userService.countUsersByRole(Role.DOCTOR),
-            "totalPatients", userService.countUsersByRole(Role.PATIENT),
-            "message", "Bem-vindo ao painel administrativo"
-        );
-        
-        ApiResponse<Map<String, Object>> response = ApiResponse.success(dashboard);
-        return ResponseEntity.ok(response);
-    }
-
     @GetMapping("/profile")
     @Operation(
         summary = "Perfil do administrador logado",

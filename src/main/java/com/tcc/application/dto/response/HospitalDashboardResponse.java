@@ -8,7 +8,9 @@ public record HospitalDashboardResponse(
         String hospitalName,
         Long totalDoctors,
         Long totalPatients,
+        Long activePatients,
         Long totalProcedures,
+        Long pendingAlerts,
         List<ProceduresByPeriodResponse> proceduresByPeriod,
         List<PatientSummary> latestPatients
 ) {}

@@ -54,7 +54,9 @@ public interface PatientRepository extends JpaRepository<Patient, UUID> {
                                  Pageable pageable);
                                  
     long countByActiveTrue();
-    
+
+    long countByActiveFalse();
+
     @Query("SELECT COUNT(p) FROM Patient p WHERE p.active = true")
     Long countActivePatientsTotal();
     
@@ -62,6 +64,24 @@ public interface PatientRepository extends JpaRepository<Patient, UUID> {
            "WHERE dp.doctor.hospital.id = :hospitalId " +
            "AND dp.patient.active = true")
     Long countActivePatientsByHospitalId(@Param("hospitalId") UUID hospitalId);
+
+    @Query("SELECT COUNT(DISTINCT dp.patient) FROM DoctorPatient dp " +
+           "WHERE dp.doctor.hospital.id = :hospitalId " +
+           "AND dp.patient.active = false")
+    Long countInactivePatientsByHospitalId(@Param("hospitalId") UUID hospitalId);
+
+    @Query("SELECT COUNT(DISTINCT dp.patient) FROM DoctorPatient dp " +
+           "WHERE dp.doctor.id = :doctorId")
+    Long countPatientsByDoctorId(@Param("doctorId") UUID doctorId);
+
+    @Query("SELECT COUNT(DISTINCT dp.patient) FROM DoctorPatient dp " +
+           "WHERE dp.doctor.id = :doctorId AND dp.patient.active = true")
+    Long countActivePatientsByDoctorId(@Param("doctorId") UUID doctorId);
+
+    @Query("SELECT COUNT(DISTINCT dp.patient) FROM DoctorPatient dp " +
+           "WHERE dp.doctor.id = :doctorId AND dp.patient.createdAt >= :since")
+    Long countNewPatientsByDoctorId(@Param("doctorId") UUID doctorId,
+                                    @Param("since") java.time.LocalDateTime since);
     
     @Query("SELECT DISTINCT p FROM Patient p " +
            "JOIN p.doctorPatients dp " +

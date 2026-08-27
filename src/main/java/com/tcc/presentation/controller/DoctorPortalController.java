@@ -11,7 +11,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.tcc.application.dto.response.ApiResponse;
+import com.tcc.application.dto.response.DoctorDashboardResponse;
 import com.tcc.application.dto.response.ProcedureResponse;
+import com.tcc.application.service.DashboardService;
 import com.tcc.application.service.PatientProcedureService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -26,9 +28,25 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class DoctorPortalController {
 
     private final PatientProcedureService patientProcedureService;
+    private final DashboardService dashboardService;
 
-    public DoctorPortalController(PatientProcedureService patientProcedureService) {
+    public DoctorPortalController(PatientProcedureService patientProcedureService,
+                                  DashboardService dashboardService) {
         this.patientProcedureService = patientProcedureService;
+        this.dashboardService = dashboardService;
+    }
+
+    @GetMapping("/dashboard")
+    @Operation(
+        summary = "Dashboard do médico",
+        description = "Retorna as métricas do médico autenticado: total de pacientes, pacientes ativos, " +
+                      "pacientes com alerta, procedimentos executados e pacientes novos nos últimos 30 dias."
+    )
+    public ResponseEntity<ApiResponse<DoctorDashboardResponse>> getDashboard(
+            Authentication authentication) {
+        String email = extractEmail(authentication);
+        return ResponseEntity.ok(ApiResponse.success(
+                dashboardService.getDoctorDashboard(email)));
     }
 
     @GetMapping("/procedures")

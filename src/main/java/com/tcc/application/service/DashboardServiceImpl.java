@@ -1,21 +1,25 @@
 package com.tcc.application.service;
 
 import com.tcc.application.dto.response.AdminDashboardResponse;
+import com.tcc.application.dto.response.DoctorDashboardResponse;
 import com.tcc.application.dto.response.HospitalDashboardResponse;
 import com.tcc.application.dto.response.PatientSummary;
 import com.tcc.application.dto.response.ProceduresByPeriodResponse;
 import com.tcc.application.mapper.PatientMapper;
+import com.tcc.domain.model.Doctor;
 import com.tcc.domain.model.Hospital;
 import com.tcc.domain.model.Patient;
 import com.tcc.domain.model.Role;
 import com.tcc.domain.model.User;
+import com.tcc.domain.repository.AlertRepository;
 import com.tcc.domain.repository.DoctorRepository;
 import com.tcc.domain.repository.HospitalRepository;
 import com.tcc.domain.repository.PatientRepository;
+import com.tcc.domain.repository.ProcedureExecutionRepository;
 import com.tcc.domain.repository.ProcedureRepository;
 import com.tcc.domain.repository.UserRepository;
-import com.tcc.exception.UnauthorizedException;
 import com.tcc.exception.ResourceNotFoundException;
+import com.tcc.exception.UnauthorizedException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +36,8 @@ public class DashboardServiceImpl implements DashboardService {
     private final DoctorRepository doctorRepository;
     private final PatientRepository patientRepository;
     private final ProcedureRepository procedureRepository;
+    private final ProcedureExecutionRepository procedureExecutionRepository;
+    private final AlertRepository alertRepository;
     private final UserRepository userRepository;
     private final PatientMapper patientMapper;
 
@@ -39,12 +45,16 @@ public class DashboardServiceImpl implements DashboardService {
                                 DoctorRepository doctorRepository,
                                 PatientRepository patientRepository,
                                 ProcedureRepository procedureRepository,
+                                ProcedureExecutionRepository procedureExecutionRepository,
+                                AlertRepository alertRepository,
                                 UserRepository userRepository,
                                 PatientMapper patientMapper) {
         this.hospitalRepository = hospitalRepository;
         this.doctorRepository = doctorRepository;
         this.patientRepository = patientRepository;
         this.procedureRepository = procedureRepository;
+        this.procedureExecutionRepository = procedureExecutionRepository;
+        this.alertRepository = alertRepository;
         this.userRepository = userRepository;
         this.patientMapper = patientMapper;
     }
@@ -52,21 +62,18 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     @Transactional(readOnly = true)
     public AdminDashboardResponse getAdminDashboard() {
-        Long totalHospitals = hospitalRepository.countTotalHospitals();
-        Long totalDoctors = doctorRepository.countTotalDoctors();
-        Long totalPatients = patientRepository.countActivePatientsTotal();
-        Long totalProcedures = procedureRepository.countActiveProceduresTotal();
-        
-        Long activeHospitals = totalHospitals;
-        Long inactiveHospitals = 0L;
+        Long totalHospitals   = hospitalRepository.countTotalHospitals();
+        Long totalDoctors     = doctorRepository.countTotalDoctors();
+        Long activeDoctors    = doctorRepository.countByActiveTrueTotal();
+        Long inactiveDoctors  = totalDoctors - activeDoctors;
+        Long totalPatients    = (long) patientRepository.count();
 
         return new AdminDashboardResponse(
                 totalHospitals,
                 totalDoctors,
-                totalPatients,
-                totalProcedures,
-                activeHospitals,
-                inactiveHospitals
+                activeDoctors,
+                inactiveDoctors,
+                totalPatients
         );
     }
 
@@ -95,16 +102,19 @@ public class DashboardServiceImpl implements DashboardService {
         Hospital hospital = hospitalRepository.findById(hospitalId)
                 .orElseThrow(() -> new ResourceNotFoundException("Hospital não encontrado com ID: " + hospitalId));
 
-        Long totalDoctors = doctorRepository.countByHospitalId(hospitalId);
-        Long totalPatients = patientRepository.countActivePatientsByHospitalId(hospitalId);
+        Long totalDoctors    = doctorRepository.countByHospitalId(hospitalId);
+        Long totalPatients   = patientRepository.countActivePatientsByHospitalId(hospitalId)
+                             + patientRepository.countInactivePatientsByHospitalId(hospitalId);
+        Long activePatients  = patientRepository.countActivePatientsByHospitalId(hospitalId);
         Long totalProcedures = procedureRepository.countActiveProceduresByHospitalId(hospitalId);
+        Long pendingAlerts   = alertRepository.countPendingAlertsByHospitalId(hospitalId);
 
-        LocalDateTime endDate = LocalDateTime.now();
+        LocalDateTime endDate   = LocalDateTime.now();
         LocalDateTime startDate = endDate.minusMonths(12);
-        
+
         List<Object[]> proceduresData = procedureRepository.countProceduresByPeriodAndHospitalId(
                 hospitalId, startDate, endDate);
-        
+
         List<ProceduresByPeriodResponse> proceduresByPeriod = proceduresData.stream()
                 .map(row -> new ProceduresByPeriodResponse(
                         formatPeriod((Number) row[0], (Number) row[1]),
@@ -114,7 +124,7 @@ public class DashboardServiceImpl implements DashboardService {
 
         List<Patient> latestPatientsEntities = patientRepository.findLatestPatientsByHospitalId(
                 hospitalId, PageRequest.of(0, 10));
-        
+
         List<PatientSummary> latestPatients = latestPatientsEntities.stream()
                 .map(patientMapper::toSummary)
                 .collect(Collectors.toList());
@@ -124,9 +134,54 @@ public class DashboardServiceImpl implements DashboardService {
                 hospital.getName(),
                 totalDoctors,
                 totalPatients,
+                activePatients,
                 totalProcedures,
+                pendingAlerts,
                 proceduresByPeriod,
                 latestPatients
+        );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public HospitalDashboardResponse getHospitalDashboardForDoctor(String doctorEmail) {
+        User user = userRepository.findByEmail(doctorEmail)
+                .orElseThrow(() -> new UnauthorizedException("Usuário autenticado não encontrado"));
+
+        UUID hospitalId = doctorRepository.findByUserId(user.getId())
+                .orElseThrow(() -> new UnauthorizedException("Perfil de médico não encontrado"))
+                .getHospital().getId();
+
+        return getHospitalDashboard(hospitalId, doctorEmail);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DoctorDashboardResponse getDoctorDashboard(String doctorEmail) {
+        User user = userRepository.findByEmail(doctorEmail)
+                .orElseThrow(() -> new UnauthorizedException("Usuário autenticado não encontrado"));
+
+        Doctor doctor = doctorRepository.findByUserId(user.getId())
+                .orElseThrow(() -> new UnauthorizedException("Perfil de médico não encontrado"));
+
+        UUID doctorId = doctor.getId();
+        LocalDateTime thirtyDaysAgo = LocalDateTime.now().minusDays(30);
+
+        Long totalPatients       = patientRepository.countPatientsByDoctorId(doctorId);
+        Long activePatients      = patientRepository.countActivePatientsByDoctorId(doctorId);
+        Long patientsWithAlert   = alertRepository.countPatientsWithPendingAlertByDoctorId(doctorId);
+        Long proceduresExecuted  = procedureExecutionRepository.countByDoctorId(doctorId);
+        Long newPatients         = patientRepository.countNewPatientsByDoctorId(doctorId, thirtyDaysAgo);
+
+        return new DoctorDashboardResponse(
+                doctorId,
+                doctor.getFullName(),
+                doctor.getHospital().getName(),
+                totalPatients,
+                activePatients,
+                patientsWithAlert,
+                proceduresExecuted,
+                newPatients
         );
     }
 

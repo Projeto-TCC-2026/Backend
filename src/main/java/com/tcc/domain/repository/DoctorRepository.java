@@ -50,9 +50,18 @@ public interface DoctorRepository extends JpaRepository<Doctor, UUID> {
     
     @Query("SELECT COUNT(d) FROM Doctor d")
     Long countTotalDoctors();
+
+    @Query("SELECT COUNT(d) FROM Doctor d WHERE d.active = true")
+    Long countByActiveTrueTotal();
     
     @Query("SELECT COUNT(d) FROM Doctor d WHERE d.hospital.id = :hospitalId")
     Long countByHospitalId(@Param("hospitalId") UUID hospitalId);
+
+    @Query("SELECT COUNT(d) FROM Doctor d WHERE d.hospital.id = :hospitalId AND d.active = true")
+    Long countByHospitalIdAndActiveTrue(@Param("hospitalId") UUID hospitalId);
+
+    @Query("SELECT COUNT(d) FROM Doctor d WHERE d.hospital.id = :hospitalId AND d.active = false")
+    Long countByHospitalIdAndActiveFalse(@Param("hospitalId") UUID hospitalId);
     
     @Query("SELECT d.hospital.id as hospitalId, d.hospital.name as hospitalName, COUNT(d) as totalDoctors " +
            "FROM Doctor d " +
