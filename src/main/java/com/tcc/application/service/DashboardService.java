@@ -10,6 +10,12 @@ public interface DashboardService {
 
     AdminDashboardResponse getAdminDashboard();
 
+    /**
+     * Devolve o dashboard administrativo a partir do cache. Se o cache não
+     * existir ou estiver ilegível, calcula no banco.
+     */
+    AdminDashboardResponse getAdminDashboardCached();
+
     HospitalDashboardResponse getHospitalDashboard(UUID hospitalId, String requesterEmail);
 
     HospitalDashboardResponse getHospitalDashboardForDoctor(String doctorEmail);

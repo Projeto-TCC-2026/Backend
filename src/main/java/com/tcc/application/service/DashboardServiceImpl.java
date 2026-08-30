@@ -1,5 +1,7 @@
 package com.tcc.application.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tcc.application.dto.response.AdminDashboardResponse;
 import com.tcc.application.dto.response.DoctorDashboardResponse;
 import com.tcc.application.dto.response.HospitalDashboardResponse;
@@ -20,17 +22,25 @@ import com.tcc.domain.repository.ProcedureRepository;
 import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.ResourceNotFoundException;
 import com.tcc.exception.UnauthorizedException;
+import com.tcc.infrastructure.storage.JsonCacheStorage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
 public class DashboardServiceImpl implements DashboardService {
+
+    private static final Logger log = LoggerFactory.getLogger(
+            DashboardServiceImpl.class);
 
     private final HospitalRepository hospitalRepository;
     private final DoctorRepository doctorRepository;
@@ -40,6 +50,9 @@ public class DashboardServiceImpl implements DashboardService {
     private final AlertRepository alertRepository;
     private final UserRepository userRepository;
     private final PatientMapper patientMapper;
+    private final JsonCacheStorage jsonCacheStorage;
+    private final ObjectMapper objectMapper;
+    private final String adminCacheKey;
 
     public DashboardServiceImpl(HospitalRepository hospitalRepository,
                                 DoctorRepository doctorRepository,
@@ -48,7 +61,10 @@ public class DashboardServiceImpl implements DashboardService {
                                 ProcedureExecutionRepository procedureExecutionRepository,
                                 AlertRepository alertRepository,
                                 UserRepository userRepository,
-                                PatientMapper patientMapper) {
+                                PatientMapper patientMapper,
+                                JsonCacheStorage jsonCacheStorage,
+                                ObjectMapper objectMapper,
+                                @Value("${app.dashboard-cache.admin-key}") String adminCacheKey) {
         this.hospitalRepository = hospitalRepository;
         this.doctorRepository = doctorRepository;
         this.patientRepository = patientRepository;
@@ -57,11 +73,46 @@ public class DashboardServiceImpl implements DashboardService {
         this.alertRepository = alertRepository;
         this.userRepository = userRepository;
         this.patientMapper = patientMapper;
+        this.jsonCacheStorage = jsonCacheStorage;
+        this.objectMapper = objectMapper;
+        this.adminCacheKey = adminCacheKey;
     }
 
     @Override
     @Transactional(readOnly = true)
     public AdminDashboardResponse getAdminDashboard() {
+        return calculateAdminDashboard();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AdminDashboardResponse getAdminDashboardCached() {
+        Optional<String> cached = jsonCacheStorage.read(adminCacheKey);
+
+        if (cached.isPresent()) {
+            try {
+                AdminDashboardResponse response = objectMapper.readValue(
+                        cached.get(), AdminDashboardResponse.class);
+
+                log.info("Dashboard admin servido do cache. key={}", adminCacheKey);
+                return response;
+
+            } catch (JsonProcessingException e) {
+                log.error(
+                        "Cache do dashboard admin ilegível; recalculando no banco. key={}, exception={}",
+                        adminCacheKey,
+                        e.getClass().getSimpleName());
+            }
+        } else {
+            log.info(
+                    "Cache do dashboard admin ausente; calculando no banco. key={}",
+                    adminCacheKey);
+        }
+
+        return calculateAdminDashboard();
+    }
+
+    private AdminDashboardResponse calculateAdminDashboard() {
         Long totalHospitals    = hospitalRepository.countTotalHospitals();
         Long activeHospitals   = hospitalRepository.countByActiveTrue();
         Long inactiveHospitals = hospitalRepository.countByActiveFalse();

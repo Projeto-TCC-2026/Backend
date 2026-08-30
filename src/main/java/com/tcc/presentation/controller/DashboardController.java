@@ -29,7 +29,8 @@ public class DashboardController {
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(
         summary = "Dashboard administrativo",
-        description = "Retorna métricas globais da plataforma: total de hospitais, médicos, pacientes e procedimentos."
+        description = "Retorna métricas globais da plataforma: total de hospitais, médicos e pacientes. "
+            + "Os valores vêm de um cache atualizado periodicamente; se o cache não existir, são calculados no banco."
     )
     @ApiResponses(value = {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Métricas retornadas com sucesso"),
@@ -37,6 +38,6 @@ public class DashboardController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Acesso negado")
     })
     public ResponseEntity<ApiResponse<AdminDashboardResponse>> getAdminDashboard() {
-        return ResponseEntity.ok(ApiResponse.success(dashboardService.getAdminDashboard()));
+        return ResponseEntity.ok(ApiResponse.success(dashboardService.getAdminDashboardCached()));
     }
 }

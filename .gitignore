@@ -39,3 +39,6 @@ build/
 
 # Script local de desenvolvimento — NÃO versionar
 run-dev.ps1
+
+# Script local que carrega credencial de produção — NÃO versionar
+run-prod.ps1
