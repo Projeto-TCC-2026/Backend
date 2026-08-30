@@ -55,7 +55,7 @@ INSERT INTO
   )
 VALUES
   (
-    gen_random_uuid (),
+    'a3f1e2c4-7b6d-4a8e-9c1f-2d3b4a5e6f70',
     'Número inteiro',
     'Valor numérico sem casas decimais.',
     'INTEGER',
@@ -64,7 +64,7 @@ VALUES
     'number'
   ),
   (
-    gen_random_uuid (),
+    'b4e2f3d5-8c7e-4b9f-ad2e-3e4c5b6f7a81',
     'Número decimal',
     'Valor numérico com casas decimais.',
     'DECIMAL',
@@ -73,7 +73,7 @@ VALUES
     'number'
   ),
   (
-    gen_random_uuid (),
+    'c5f3a4e6-9d8f-4c0a-be3f-4f5d6c7a8b92',
     'Sim ou não',
     'Resposta booleana.',
     'BOOLEAN',
@@ -82,7 +82,7 @@ VALUES
     'toggle'
   ),
   (
-    gen_random_uuid (),
+    'd6a4b5f7-ae9a-4d1b-cf40-5a6e7d8b9ca3',
     'Texto livre',
     'Resposta aberta do paciente.',
     'TEXT',
@@ -91,7 +91,7 @@ VALUES
     'textarea'
   ),
   (
-    gen_random_uuid (),
+    'e7b5c6a8-bf0b-4e2c-d051-6b7f8e9cadb4',
     'Escala de 0 a 10',
     'Indicador deslizante de intensidade.',
     'SCALE',
@@ -100,7 +100,7 @@ VALUES
     'slider'
   ),
   (
-    gen_random_uuid (),
+    'f8c6d7b9-c01c-4f3d-e162-7c809fadbec5',
     'Foto',
     'Registro fotográfico do acompanhamento.',
     'PHOTO',
