@@ -30,13 +30,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
+    private final ServiceKeyAuthFilter serviceKeyAuthFilter;
     private final UserDetailsServiceImpl userDetailsService;
     private final PasswordEncoder passwordEncoder;
 
     public SecurityConfig(JwtAuthFilter jwtAuthFilter,
+                          ServiceKeyAuthFilter serviceKeyAuthFilter,
                           UserDetailsServiceImpl userDetailsService,
                           PasswordEncoder passwordEncoder) {
         this.jwtAuthFilter = jwtAuthFilter;
+        this.serviceKeyAuthFilter = serviceKeyAuthFilter;
         this.userDetailsService = userDetailsService;
         this.passwordEncoder = passwordEncoder;
     }
@@ -72,6 +75,9 @@ public class SecurityConfig {
                                 "/api-docs/**"
                         ).permitAll()
                         .requestMatchers("/auth/me").authenticated()
+                        // Integração serviço a serviço: autenticada pelo ServiceKeyAuthFilter
+                        // via header X-Integration-Key. Nunca permitAll.
+                        .requestMatchers("/api/integration/**").hasAuthority("ROLE_INTEGRATION")
                         .requestMatchers("/api/doctors/**").hasAnyRole("ADMIN", "DOCTOR")
                         .requestMatchers("/api/doctor/**").hasRole("DOCTOR")
                         .requestMatchers("/api/patients/**").hasRole("DOCTOR")
@@ -107,6 +113,12 @@ public class SecurityConfig {
                         headers.frameOptions(frame -> frame.disable())
                 )
                 .authenticationProvider(authenticationProvider())
+                // O filtro de chave de serviço vem antes do JWT: ele só atua em
+                // /api/integration/**, onde nunca há JWT, e assim uma chamada de
+                // integração não passa pelo processamento de token à toa. Nas demais
+                // rotas ele se auto-ignora e o JwtAuthFilter segue sendo o único a
+                // autenticar.
+                .addFilterBefore(serviceKeyAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())

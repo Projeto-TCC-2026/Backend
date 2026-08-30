@@ -1,0 +1,156 @@
+### Variáveis
+@baseUrl = http://localhost:8080/api
+@integrationKey = YOUR_INTEGRATION_KEY_HERE
+
+### Avaliação de leitura de sinal vital (integração serviço a serviço)
+###
+### Chamado pela Lambda monitoramento-risk-analyzer.
+### Autenticação por chave estática no header X-Integration-Key — não usa JWT,
+### porque a Lambda não é um usuário do sistema.
+###
+### Faixas normais cadastradas na V26 (limites INCLUSIVOS no normal):
+###   HEART_RATE  50 a 120
+###   SPO2        mínimo 90, sem máximo
+###   TEMPERATURE 35.5 a 38.0
+
+### 1. Frequência cardíaca dentro da faixa -> 201, alertGenerated=false
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 80,
+  "measuredAt": "2026-08-29T14:30:00"
+}
+
+### 2. Frequência cardíaca abaixo do mínimo -> 201, alertGenerated=true, severity CRITICAL
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 42,
+  "measuredAt": "2026-08-29T14:35:00"
+}
+
+### 3. Frequência cardíaca acima do máximo -> 201, alertGenerated=true
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 155,
+  "measuredAt": "2026-08-29T14:40:00"
+}
+
+### 4. Valor exatamente igual ao limite -> 201, alertGenerated=false (limite é inclusivo)
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 120,
+  "measuredAt": "2026-08-29T14:45:00"
+}
+
+### 5. SPO2 abaixo do mínimo -> 201, alertGenerated=true
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "SPO2",
+  "value": 85,
+  "measuredAt": "2026-08-29T14:50:00"
+}
+
+### 6. SPO2 alto -> 201, alertGenerated=false (faixa não tem máximo)
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "SPO2",
+  "value": 99,
+  "measuredAt": "2026-08-29T14:55:00"
+}
+
+### 7. Temperatura acima do máximo -> 201, alertGenerated=true
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "TEMPERATURE",
+  "value": 39.2,
+  "measuredAt": "2026-08-29T15:00:00"
+}
+
+### 8. Tipo de leitura sem faixa cadastrada -> 201, alertGenerated=false (não é erro)
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "GLUCOSE",
+  "value": 500,
+  "measuredAt": "2026-08-29T15:05:00"
+}
+
+### 9. Sem a chave de integração -> 401
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 42,
+  "measuredAt": "2026-08-29T15:10:00"
+}
+
+### 10. Chave de integração inválida -> 401
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: chave-invalida
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 42,
+  "measuredAt": "2026-08-29T15:15:00"
+}
+
+### 11. Paciente inexistente -> 404
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "00000000-0000-0000-0000-000000000000",
+  "readingType": "HEART_RATE",
+  "value": 42,
+  "measuredAt": "2026-08-29T15:20:00"
+}
+
+### 12. Campo obrigatório ausente -> 400
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "readingType": "HEART_RATE",
+  "value": 42,
+  "measuredAt": "2026-08-29T15:25:00"
+}
