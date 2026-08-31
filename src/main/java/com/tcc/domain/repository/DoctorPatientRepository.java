@@ -18,4 +18,6 @@ public interface DoctorPatientRepository extends JpaRepository<DoctorPatient, UU
     Optional<DoctorPatient> findByDoctorIdAndPatientId(UUID doctorId, UUID patientId);
     
     boolean existsByDoctorIdAndPatientId(UUID doctorId, UUID patientId);
+
+    boolean existsByDoctor_Hospital_IdAndPatient_Id(UUID hospitalId, UUID patientId);
 }

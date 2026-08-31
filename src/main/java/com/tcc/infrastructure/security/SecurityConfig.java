@@ -80,7 +80,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/integration/**").hasAuthority("ROLE_INTEGRATION")
                         .requestMatchers("/api/doctors/**").hasAnyRole("ADMIN", "DOCTOR")
                         .requestMatchers("/api/doctor/**").hasRole("DOCTOR")
-                        .requestMatchers("/api/patients/**").hasRole("DOCTOR")
+                        .requestMatchers("/api/patients/**").hasAnyRole("ADMIN", "HOSPITAL", "DOCTOR")
                         .requestMatchers("/api/users/**").hasRole("ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/dashboard/**").hasRole("ADMIN")

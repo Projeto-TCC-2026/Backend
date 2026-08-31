@@ -17,32 +17,32 @@ public interface PatientService {
      * sem médico responsável.
      */
     PatientResponse createPatient(String email, PatientRequest request);
-    
-    Page<PatientResponse> getAllActivePatients(Pageable pageable);
-    
-    PatientResponse getPatientById(UUID id);
-    
-    PatientResponse updatePatient(UUID id, PatientRequest request);
-    
+
+    Page<PatientResponse> getAllActivePatients(String requesterEmail, Pageable pageable);
+
+    PatientResponse getPatientById(String requesterEmail, UUID id);
+
+    PatientResponse updatePatient(String requesterEmail, UUID id, PatientRequest request);
+
     void deletePatient(UUID id);
-    
-    void inactivatePatient(UUID id);
-    
-    Page<PatientResponse> searchByName(String name, Pageable pageable);
-    
-    Page<PatientResponse> searchByCpf(String cpf, Pageable pageable);
-    
-    Page<PatientResponse> searchByEmail(String email, Pageable pageable);
-    
-    Page<PatientResponse> searchByPhone(String phone, Pageable pageable);
-    
-    Page<PatientResponse> filterPatients(String name, String gender, String city, String state, Pageable pageable);
-    
-    Page<ProcedureExecutionResponse> getPatientProcedureExecutions(UUID patientId, Pageable pageable);
-    
-    Long countPatientProcedureExecutions(UUID patientId);
-    
+
+    void inactivatePatient(String requesterEmail, UUID id);
+
+    Page<PatientResponse> searchByName(String requesterEmail, String name, Pageable pageable);
+
+    Page<PatientResponse> searchByCpf(String requesterEmail, String cpf, Pageable pageable);
+
+    Page<PatientResponse> searchByEmail(String requesterEmail, String email, Pageable pageable);
+
+    Page<PatientResponse> searchByPhone(String requesterEmail, String phone, Pageable pageable);
+
+    Page<PatientResponse> filterPatients(String requesterEmail, String name, String gender, String city, String state, Pageable pageable);
+
+    Page<ProcedureExecutionResponse> getPatientProcedureExecutions(String requesterEmail, UUID patientId, Pageable pageable);
+
+    Long countPatientProcedureExecutions(String requesterEmail, UUID patientId);
+
     long countAllPatients();
-    
+
     long countActivePatients();
 }

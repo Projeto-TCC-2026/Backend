@@ -25,6 +25,60 @@ public interface PatientRepository extends JpaRepository<Patient, UUID> {
     
     @Query("SELECT p FROM Patient p WHERE p.active = true")
     Page<Patient> findPagedByActiveTrue(Pageable pageable);
+
+    @Query(
+            value = "SELECT DISTINCT p FROM Patient p " +
+                    "JOIN p.doctorPatients dp " +
+                    "WHERE p.active = true AND dp.doctor.id = :doctorId",
+            countQuery = "SELECT COUNT(DISTINCT p) FROM Patient p " +
+                    "JOIN p.doctorPatients dp " +
+                    "WHERE p.active = true AND dp.doctor.id = :doctorId")
+    Page<Patient> findPagedActiveByDoctorId(@Param("doctorId") UUID doctorId, Pageable pageable);
+
+    @Query(
+            value = "SELECT DISTINCT p FROM Patient p " +
+                    "JOIN p.doctorPatients dp " +
+                    "WHERE p.active = true AND dp.doctor.hospital.id = :hospitalId",
+            countQuery = "SELECT COUNT(DISTINCT p) FROM Patient p " +
+                    "JOIN p.doctorPatients dp " +
+                    "WHERE p.active = true AND dp.doctor.hospital.id = :hospitalId")
+    Page<Patient> findPagedActiveByHospitalId(@Param("hospitalId") UUID hospitalId, Pageable pageable);
+
+    @Query(
+            value = "SELECT DISTINCT p FROM Patient p " +
+                    "LEFT JOIN p.doctorPatients dp " +
+                    "WHERE p.active = true " +
+                    "AND (:doctorId IS NULL OR dp.doctor.id = :doctorId) " +
+                    "AND (:hospitalId IS NULL OR dp.doctor.hospital.id = :hospitalId) " +
+                    "AND (:name IS NULL OR LOWER(p.fullName) LIKE LOWER(CONCAT('%', :name, '%'))) " +
+                    "AND (:cpf IS NULL OR p.cpf LIKE CONCAT('%', :cpf, '%')) " +
+                    "AND (:email IS NULL OR LOWER(p.email) LIKE LOWER(CONCAT('%', :email, '%'))) " +
+                    "AND (:phone IS NULL OR p.phone LIKE CONCAT('%', :phone, '%')) " +
+                    "AND (:gender IS NULL OR p.gender = :gender) " +
+                    "AND (:city IS NULL OR LOWER(p.city) LIKE LOWER(CONCAT('%', :city, '%'))) " +
+                    "AND (:state IS NULL OR p.state = :state)",
+            countQuery = "SELECT COUNT(DISTINCT p) FROM Patient p " +
+                    "LEFT JOIN p.doctorPatients dp " +
+                    "WHERE p.active = true " +
+                    "AND (:doctorId IS NULL OR dp.doctor.id = :doctorId) " +
+                    "AND (:hospitalId IS NULL OR dp.doctor.hospital.id = :hospitalId) " +
+                    "AND (:name IS NULL OR LOWER(p.fullName) LIKE LOWER(CONCAT('%', :name, '%'))) " +
+                    "AND (:cpf IS NULL OR p.cpf LIKE CONCAT('%', :cpf, '%')) " +
+                    "AND (:email IS NULL OR LOWER(p.email) LIKE LOWER(CONCAT('%', :email, '%'))) " +
+                    "AND (:phone IS NULL OR p.phone LIKE CONCAT('%', :phone, '%')) " +
+                    "AND (:gender IS NULL OR p.gender = :gender) " +
+                    "AND (:city IS NULL OR LOWER(p.city) LIKE LOWER(CONCAT('%', :city, '%'))) " +
+                    "AND (:state IS NULL OR p.state = :state)")
+    Page<Patient> findVisible(@Param("doctorId") UUID doctorId,
+                              @Param("hospitalId") UUID hospitalId,
+                              @Param("name") String name,
+                              @Param("cpf") String cpf,
+                              @Param("email") String email,
+                              @Param("phone") String phone,
+                              @Param("gender") String gender,
+                              @Param("city") String city,
+                              @Param("state") String state,
+                              Pageable pageable);
     
     Optional<Patient> findByIdAndActiveTrue(UUID id);
     

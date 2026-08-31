@@ -128,6 +128,14 @@ public final class ErrorMessages {
         return "Este paciente não está vinculado a você";
     }
 
+    public static String patientNotInHospital() {
+        return "Este paciente não está vinculado a um médico do seu hospital";
+    }
+
+    public static String hospitalProfileNotFound() {
+        return "Usuário autenticado não possui hospital vinculado";
+    }
+
     public static String patientProcedureNotFoundById(UUID id) {
         return "Atribuição de procedimento não encontrada com ID: " + id;
     }

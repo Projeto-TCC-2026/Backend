@@ -21,6 +21,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import com.tcc.application.dto.request.PatientRequest;
 import com.tcc.application.dto.response.PatientResponse;
@@ -29,6 +33,7 @@ import com.tcc.application.mapper.ProcedureExecutionMapper;
 import com.tcc.domain.model.Doctor;
 import com.tcc.domain.model.DoctorPatient;
 import com.tcc.domain.model.HealthReading;
+import com.tcc.domain.model.Hospital;
 import com.tcc.domain.model.Patient;
 import com.tcc.domain.model.ProcedureExecution;
 import com.tcc.domain.model.Role;
@@ -77,9 +82,12 @@ class PatientServiceImplTest {
     private PatientResponse response;
 
     private static final String DOCTOR_EMAIL = "doctor@tcc.com";
+    private static final String ADMIN_EMAIL = "admin@tcc.com";
+    private static final String HOSPITAL_EMAIL = "hospital@tcc.com";
     private static final UUID USER_ID = UUID.randomUUID();
     private static final UUID DOCTOR_USER_ID = UUID.randomUUID();
     private static final UUID DOCTOR_ID = UUID.randomUUID();
+    private static final UUID HOSPITAL_ID = UUID.randomUUID();
     private static final UUID PATIENT_ID = UUID.randomUUID();
     private static final UUID NONEXISTENT_ID = UUID.randomUUID();
 
@@ -216,6 +224,73 @@ class PatientServiceImplTest {
     }
 
     @Nested
+    @DisplayName("getAllActivePatients")
+    class GetAllActivePatients {
+
+        @Test
+        @DisplayName("admin lista todos os pacientes ativos")
+        void adminListsAllPatients() {
+            Pageable pageable = PageRequest.of(0, 10);
+            when(userRepository.findByEmailAndActiveTrue(ADMIN_EMAIL)).thenReturn(Optional.of(adminUser()));
+            when(patientRepository.findPagedByActiveTrue(pageable))
+                    .thenReturn(new PageImpl<>(List.of(patient)));
+            when(patientMapper.toResponse(patient)).thenReturn(response);
+
+            Page<PatientResponse> result = patientService.getAllActivePatients(ADMIN_EMAIL, pageable);
+
+            assertThat(result.getContent()).containsExactly(response);
+            verify(patientRepository).findPagedByActiveTrue(pageable);
+        }
+
+        @Test
+        @DisplayName("doutor lista apenas os seus pacientes")
+        void doctorListsOwnPatients() {
+            Pageable pageable = PageRequest.of(0, 10);
+            mockAuthenticatedDoctor();
+            when(patientRepository.findPagedActiveByDoctorId(DOCTOR_ID, pageable))
+                    .thenReturn(new PageImpl<>(List.of(patient)));
+            when(patientMapper.toResponse(patient)).thenReturn(response);
+
+            Page<PatientResponse> result = patientService.getAllActivePatients(DOCTOR_EMAIL, pageable);
+
+            assertThat(result.getContent()).containsExactly(response);
+            verify(patientRepository).findPagedActiveByDoctorId(DOCTOR_ID, pageable);
+        }
+
+        @Test
+        @DisplayName("hospital lista apenas pacientes dos medicos do seu hospital")
+        void hospitalListsPatientsOfItsDoctors() {
+            Pageable pageable = PageRequest.of(0, 10);
+            when(userRepository.findByEmailAndActiveTrue(HOSPITAL_EMAIL)).thenReturn(Optional.of(hospitalUser()));
+            when(patientRepository.findPagedActiveByHospitalId(HOSPITAL_ID, pageable))
+                    .thenReturn(new PageImpl<>(List.of(patient)));
+            when(patientMapper.toResponse(patient)).thenReturn(response);
+
+            Page<PatientResponse> result = patientService.getAllActivePatients(HOSPITAL_EMAIL, pageable);
+
+            assertThat(result.getContent()).containsExactly(response);
+            verify(patientRepository).findPagedActiveByHospitalId(HOSPITAL_ID, pageable);
+        }
+    }
+
+    @Nested
+    @DisplayName("getPatientById")
+    class GetPatientById {
+
+        @Test
+        @DisplayName("doutor nao acessa paciente de outro medico")
+        void doctorCannotAccessUnlinkedPatient() {
+            mockAuthenticatedDoctor();
+            when(patientRepository.findByIdAndActiveTrue(PATIENT_ID)).thenReturn(Optional.of(patient));
+            when(doctorPatientRepository.existsByDoctorIdAndPatientId(DOCTOR_ID, PATIENT_ID)).thenReturn(false);
+
+            assertThatThrownBy(() -> patientService.getPatientById(DOCTOR_EMAIL, PATIENT_ID))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessageContaining("vinculado");
+        }
+    }
+
+    @Nested
     @DisplayName("deletePatient")
     class DeletePatient {
 
@@ -278,9 +353,10 @@ class PatientServiceImplTest {
         @DisplayName("deve inativar paciente com sucesso")
         void shouldInactivatePatientSuccessfully() {
             when(patientRepository.findByIdAndActiveTrue(PATIENT_ID)).thenReturn(Optional.of(patient));
+            when(userRepository.findByEmailAndActiveTrue(ADMIN_EMAIL)).thenReturn(Optional.of(adminUser()));
             when(patientRepository.save(patient)).thenReturn(patient);
 
-            patientService.inactivatePatient(PATIENT_ID);
+            patientService.inactivatePatient(ADMIN_EMAIL, PATIENT_ID);
 
             assertThat(patient.getActive()).isFalse();
             verify(patientRepository).save(patient);
@@ -291,8 +367,25 @@ class PatientServiceImplTest {
         void shouldThrowWhenPatientNotFound() {
             when(patientRepository.findByIdAndActiveTrue(NONEXISTENT_ID)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> patientService.inactivatePatient(NONEXISTENT_ID))
+            assertThatThrownBy(() -> patientService.inactivatePatient(ADMIN_EMAIL, NONEXISTENT_ID))
                     .isInstanceOf(ResourceNotFoundException.class);
         }
+    }
+
+    private void mockAuthenticatedDoctor() {
+        when(userRepository.findByEmailAndActiveTrue(DOCTOR_EMAIL)).thenReturn(Optional.of(doctorUser));
+        when(doctorRepository.findByUserId(DOCTOR_USER_ID)).thenReturn(Optional.of(doctor));
+    }
+
+    private User adminUser() {
+        return new User(ADMIN_EMAIL, "encoded", Role.ADMIN);
+    }
+
+    private User hospitalUser() {
+        Hospital hospital = new Hospital();
+        hospital.setId(HOSPITAL_ID);
+        User hospitalUser = new User(HOSPITAL_EMAIL, "encoded", Role.HOSPITAL);
+        hospitalUser.setHospital(hospital);
+        return hospitalUser;
     }
 }
