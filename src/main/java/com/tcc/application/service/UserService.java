@@ -1,5 +1,6 @@
 package com.tcc.application.service;
 
+import com.tcc.application.dto.request.ChangePasswordRequest;
 import com.tcc.application.dto.request.UserRequest;
 import com.tcc.application.dto.response.UserResponse;
 import com.tcc.domain.model.Role;
@@ -35,4 +36,6 @@ public interface UserService {
     void activateUser(UUID id);
     
     void deactivateUser(UUID id);
+
+    void changePassword(String email, ChangePasswordRequest request);
 }

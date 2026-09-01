@@ -63,6 +63,9 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // Endpoints de /auth/** que exigem autenticação — declarados antes
+                        // do permitAll de /auth/** para que o Spring pare no match correto.
+                        .requestMatchers("/auth/me", "/auth/change-password").authenticated()
                         .requestMatchers(
                                 "/auth/**",
                                 "/forgot-password/**",
@@ -74,7 +77,6 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/api-docs/**"
                         ).permitAll()
-                        .requestMatchers("/auth/me").authenticated()
                         // Integração serviço a serviço: autenticada pelo ServiceKeyAuthFilter
                         // via header X-Integration-Key. Nunca permitAll.
                         .requestMatchers("/api/integration/**").hasAuthority("ROLE_INTEGRATION")

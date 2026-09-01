@@ -1,5 +1,6 @@
 package com.tcc.presentation.controller;
 
+import com.tcc.application.dto.request.ChangePasswordRequest;
 import com.tcc.application.dto.request.HospitalRegistrationRequest;
 import com.tcc.application.dto.request.LoginRequest;
 import com.tcc.application.dto.request.RefreshTokenRequest;
@@ -12,14 +13,17 @@ import com.tcc.application.dto.response.PatientAuthResponse;
 import com.tcc.application.dto.response.RefreshTokenResponse;
 import com.tcc.application.dto.response.UserProfileResponse;
 import com.tcc.application.service.AuthService;
+import com.tcc.application.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -31,9 +35,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final UserService userService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, UserService userService) {
         this.authService = authService;
+        this.userService = userService;
     }
 
     @PostMapping("/login")
@@ -98,5 +104,16 @@ public class AuthController {
     public ResponseEntity<ApiResponse<UserProfileResponse>> me(Authentication authentication) {
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
         return ResponseEntity.ok(ApiResponse.success(authService.getProfile(userDetails.getUsername())));
+    }
+
+    @PatchMapping("/change-password")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Alterar senha", description = "Permite ao usuário autenticado alterar a própria senha informando a senha atual")
+    public ResponseEntity<ApiResponse<Void>> changePassword(
+            @Valid @RequestBody ChangePasswordRequest request,
+            Authentication authentication) {
+        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+        userService.changePassword(userDetails.getUsername(), request);
+        return ResponseEntity.ok(ApiResponse.success(null, "Senha alterada com sucesso."));
     }
 }

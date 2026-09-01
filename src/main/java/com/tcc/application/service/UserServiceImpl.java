@@ -1,5 +1,6 @@
 package com.tcc.application.service;
 
+import com.tcc.application.dto.request.ChangePasswordRequest;
 import com.tcc.application.dto.request.UserRequest;
 import com.tcc.application.dto.response.UserResponse;
 import com.tcc.domain.model.Hospital;
@@ -174,6 +175,24 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(id)));
         
         user.setActive(false);
+        userRepository.save(user);
+    }
+
+    @Override
+    @Transactional
+    public void changePassword(String email, ChangePasswordRequest request) {
+        User user = userRepository.findByEmailAndActiveTrue(email)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundByEmail(email)));
+
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+            throw new BusinessException("Senha atual incorreta");
+        }
+
+        if (!request.newPassword().equals(request.confirmNewPassword())) {
+            throw new BusinessException("A nova senha e a confirmação não conferem");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         userRepository.save(user);
     }
 
