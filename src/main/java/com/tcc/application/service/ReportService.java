@@ -6,7 +6,9 @@ import com.tcc.application.dto.response.ProceduresByDoctorResponse;
 import com.tcc.application.dto.response.ProceduresByPeriodResponse;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 
 public interface ReportService {
     
@@ -17,4 +19,11 @@ public interface ReportService {
     List<ProceduresByDoctorResponse> getProceduresByDoctor();
     
     List<ProceduresByPeriodResponse> getProceduresByPeriod(LocalDateTime startDate, LocalDateTime endDate);
+
+    byte[] exportCheckins(String email, LocalDate startDate, LocalDate endDate, UUID procedureId,
+                          UUID patientId, UUID doctorId);
+
+    byte[] exportAlerts(String email, LocalDate startDate, LocalDate endDate, UUID procedureId,
+                        UUID patientId, UUID doctorId);
+
 }

@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Repository
@@ -23,6 +24,17 @@ public interface AlertRepository extends JpaRepository<Alert, UUID> {
     List<Alert> findByPatientIdAndStatus(UUID patientId, String status);
 
     List<Alert> findByPatientIdOrderByCreatedAtDesc(UUID patientId);
+
+    @Query("""
+            SELECT a FROM Alert a
+            JOIN FETCH a.patient
+            LEFT JOIN FETCH a.healthReading
+            WHERE a.createdAt >= :start
+              AND a.createdAt < :end
+            ORDER BY a.createdAt ASC
+            """)
+    List<Alert> findForReport(@Param("start") LocalDateTime start,
+                              @Param("end") LocalDateTime end);
 
     @Query("SELECT COUNT(a) FROM Alert a " +
            "JOIN a.patient p " +

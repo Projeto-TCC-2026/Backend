@@ -6,6 +6,7 @@ import com.tcc.application.dto.response.PatientsByHospitalResponse;
 import com.tcc.application.dto.response.ProceduresByDoctorResponse;
 import com.tcc.application.dto.response.ProceduresByPeriodResponse;
 import com.tcc.application.service.ReportService;
+import com.tcc.exception.BusinessException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -13,11 +14,23 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.TemporalAdjusters;
+import java.time.temporal.WeekFields;
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/reports")
@@ -124,5 +137,103 @@ public class ReportController {
         ApiResponse<List<ProceduresByPeriodResponse>> response = ApiResponse.success(report);
         
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/checkins/daily/export")
+    @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
+    public ResponseEntity<byte[]> exportDailyCheckins(
+            Authentication authentication,
+            @RequestParam String date,
+            @RequestParam(required = false) UUID procedureId,
+            @RequestParam(required = false) UUID patientId,
+            @RequestParam(required = false) UUID doctorId) {
+        LocalDate reportDate = parseDate(date, "data");
+        return xlsx(reportService.exportCheckins(email(authentication), reportDate, reportDate,
+                procedureId, patientId, doctorId), "checkins-daily-" + reportDate + ".xlsx");
+    }
+
+    @GetMapping("/checkins/weekly/export")
+    @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
+    public ResponseEntity<byte[]> exportWeeklyCheckins(
+            Authentication authentication,
+            @RequestParam String week,
+            @RequestParam(required = false) UUID procedureId,
+            @RequestParam(required = false) UUID patientId,
+            @RequestParam(required = false) UUID doctorId) {
+        LocalDate startDate = parseIsoWeek(week);
+        return xlsx(reportService.exportCheckins(email(authentication), startDate, startDate.plusDays(6),
+                procedureId, patientId, doctorId), "checkins-weekly-" + week + ".xlsx");
+    }
+
+    @GetMapping("/checkins/monthly/export")
+    @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
+    public ResponseEntity<byte[]> exportMonthlyCheckins(
+            Authentication authentication,
+            @RequestParam String month,
+            @RequestParam(required = false) UUID procedureId,
+            @RequestParam(required = false) UUID patientId,
+            @RequestParam(required = false) UUID doctorId) {
+        final YearMonth reportMonth;
+        try {
+            reportMonth = YearMonth.parse(month);
+        } catch (DateTimeParseException ex) {
+            throw new BusinessException("Mês inválido. Use o formato YYYY-MM");
+        }
+        return xlsx(reportService.exportCheckins(email(authentication), reportMonth.atDay(1),
+                reportMonth.atEndOfMonth(), procedureId, patientId, doctorId),
+                "checkins-monthly-" + month + ".xlsx");
+    }
+
+    @GetMapping("/alerts/export")
+    @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
+    public ResponseEntity<byte[]> exportAlerts(
+            Authentication authentication,
+            @RequestParam String date,
+            @RequestParam(required = false) UUID procedureId,
+            @RequestParam(required = false) UUID patientId,
+            @RequestParam(required = false) UUID doctorId) {
+        LocalDate reportDate = parseDate(date, "data");
+        return xlsx(reportService.exportAlerts(email(authentication), reportDate, reportDate,
+                procedureId, patientId, doctorId), "alerts-" + reportDate + ".xlsx");
+    }
+
+    private ResponseEntity<byte[]> xlsx(byte[] content, String filename) {
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(filename).build().toString())
+                .body(content);
+    }
+
+    private LocalDate parseDate(String value, String label) {
+        try {
+            return LocalDate.parse(value);
+        } catch (DateTimeParseException ex) {
+            throw new BusinessException(label + " inválida. Use o formato yyyy-MM-dd");
+        }
+    }
+
+    private LocalDate parseIsoWeek(String week) {
+        if (!week.matches("\\d{4}-W\\d{2}")) {
+            throw new BusinessException("Semana inválida. Use o formato YYYY-Www");
+        }
+        int year = Integer.parseInt(week.substring(0, 4));
+        int weekNumber = Integer.parseInt(week.substring(6));
+        if (weekNumber < 1 || weekNumber > 53) {
+            throw new BusinessException("Semana inválida. Use uma semana ISO válida");
+        }
+        LocalDate firstMonday = LocalDate.of(year, 1, 4)
+                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        LocalDate startDate = firstMonday.plusWeeks(weekNumber - 1L);
+        if (startDate.get(WeekFields.ISO.weekBasedYear()) != year
+                || startDate.get(WeekFields.ISO.weekOfWeekBasedYear()) != weekNumber) {
+            throw new BusinessException("Semana inválida. Use uma semana ISO válida");
+        }
+        return startDate;
+    }
+
+    private String email(Authentication authentication) {
+        return ((UserDetails) authentication.getPrincipal()).getUsername();
     }
 }
