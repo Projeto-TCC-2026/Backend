@@ -2,9 +2,11 @@ package com.tcc.application.service;
 
 import com.tcc.application.dto.request.DoctorRegistrationRequest;
 import com.tcc.application.dto.request.DoctorRequest;
+import com.tcc.application.dto.request.UpdateDoctorProfileRequest;
 import com.tcc.application.dto.response.AccessLinkResponse;
 import com.tcc.application.dto.response.DoctorRegistrationResponse;
 import com.tcc.application.dto.response.DoctorResponse;
+import com.tcc.application.dto.response.UserProfileResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -35,4 +37,6 @@ public interface DoctorService {
     Page<DoctorResponse> searchBySpecialty(String specialty, Pageable pageable);
     
     Page<DoctorResponse> filterDoctors(UUID hospitalId, String specialty, String name, String crm, Pageable pageable);
+
+    UserProfileResponse updateOwnProfile(String email, UpdateDoctorProfileRequest request);
 }

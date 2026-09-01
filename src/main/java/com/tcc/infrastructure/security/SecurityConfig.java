@@ -65,7 +65,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // Endpoints de /auth/** que exigem autenticação — declarados antes
                         // do permitAll de /auth/** para que o Spring pare no match correto.
-                        .requestMatchers("/auth/me", "/auth/change-password").authenticated()
+                        .requestMatchers("/auth/me", "/auth/change-password",
+                                "/auth/profile/doctor", "/auth/profile/hospital").authenticated()
                         .requestMatchers(
                                 "/auth/**",
                                 "/forgot-password/**",

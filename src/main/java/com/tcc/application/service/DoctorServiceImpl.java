@@ -9,9 +9,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.tcc.application.dto.request.DoctorRegistrationRequest;
 import com.tcc.application.dto.request.DoctorRequest;
+import com.tcc.application.dto.request.UpdateDoctorProfileRequest;
 import com.tcc.application.dto.response.AccessLinkResponse;
 import com.tcc.application.dto.response.DoctorRegistrationResponse;
 import com.tcc.application.dto.response.DoctorResponse;
+import com.tcc.application.dto.response.UserProfileResponse;
 import com.tcc.application.mapper.DoctorMapper;
 import com.tcc.domain.model.Doctor;
 import com.tcc.domain.model.Hospital;
@@ -234,5 +236,26 @@ public class DoctorServiceImpl implements DoctorService {
     public Page<DoctorResponse> filterDoctors(UUID hospitalId, String specialty, String name, String crm, Pageable pageable) {
         return doctorRepository.findByFilters(hospitalId, specialty, name, crm, pageable)
                 .map(doctorMapper::toResponse);
+    }
+
+    @Override
+    @Transactional
+    public UserProfileResponse updateOwnProfile(String email, UpdateDoctorProfileRequest request) {
+        User user = userRepository.findByEmailAndActiveTrue(email)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundByEmail(email)));
+
+        Doctor doctor = doctorRepository.findByUserId(user.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Perfil de médico não encontrado"));
+
+        doctor.setFullName(request.fullName());
+        doctor.setSpecialty(request.specialty());
+        doctor.setPhone(request.phone());
+        doctorRepository.save(doctor);
+
+        String hospitalName = doctor.getHospital() != null ? doctor.getHospital().getName() : null;
+        return new UserProfileResponse(
+                user.getId(), user.getEmail(), user.getRole().name(), doctor.getFullName(),
+                doctor.getId(), doctor.getCrm(), doctor.getSpecialty(), hospitalName
+        );
     }
 }

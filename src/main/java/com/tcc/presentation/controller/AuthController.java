@@ -4,6 +4,8 @@ import com.tcc.application.dto.request.ChangePasswordRequest;
 import com.tcc.application.dto.request.HospitalRegistrationRequest;
 import com.tcc.application.dto.request.LoginRequest;
 import com.tcc.application.dto.request.RefreshTokenRequest;
+import com.tcc.application.dto.request.UpdateDoctorProfileRequest;
+import com.tcc.application.dto.request.UpdateHospitalProfileRequest;
 import com.tcc.application.dto.response.ApiResponse;
 import com.tcc.application.dto.response.AuthResponse;
 import com.tcc.application.dto.response.DoctorAuthResponse;
@@ -13,6 +15,8 @@ import com.tcc.application.dto.response.PatientAuthResponse;
 import com.tcc.application.dto.response.RefreshTokenResponse;
 import com.tcc.application.dto.response.UserProfileResponse;
 import com.tcc.application.service.AuthService;
+import com.tcc.application.service.DoctorService;
+import com.tcc.application.service.HospitalService;
 import com.tcc.application.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -36,10 +40,17 @@ public class AuthController {
 
     private final AuthService authService;
     private final UserService userService;
+    private final DoctorService doctorService;
+    private final HospitalService hospitalService;
 
-    public AuthController(AuthService authService, UserService userService) {
+    public AuthController(AuthService authService,
+                          UserService userService,
+                          DoctorService doctorService,
+                          HospitalService hospitalService) {
         this.authService = authService;
         this.userService = userService;
+        this.doctorService = doctorService;
+        this.hospitalService = hospitalService;
     }
 
     @PostMapping("/login")
@@ -115,5 +126,27 @@ public class AuthController {
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
         userService.changePassword(userDetails.getUsername(), request);
         return ResponseEntity.ok(ApiResponse.success(null, "Senha alterada com sucesso."));
+    }
+
+    @PatchMapping("/profile/doctor")
+    @PreAuthorize("hasRole('DOCTOR')")
+    @Operation(summary = "Editar perfil do médico", description = "Permite ao médico autenticado atualizar nome, especialidade e telefone do próprio perfil")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> updateDoctorProfile(
+            @Valid @RequestBody UpdateDoctorProfileRequest request,
+            Authentication authentication) {
+        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+        UserProfileResponse profile = doctorService.updateOwnProfile(userDetails.getUsername(), request);
+        return ResponseEntity.ok(ApiResponse.success(profile, "Perfil atualizado com sucesso."));
+    }
+
+    @PatchMapping("/profile/hospital")
+    @PreAuthorize("hasRole('HOSPITAL')")
+    @Operation(summary = "Editar perfil do hospital", description = "Permite ao gestor autenticado atualizar os dados do próprio hospital")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> updateHospitalProfile(
+            @Valid @RequestBody UpdateHospitalProfileRequest request,
+            Authentication authentication) {
+        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+        UserProfileResponse profile = hospitalService.updateOwnProfile(userDetails.getUsername(), request);
+        return ResponseEntity.ok(ApiResponse.success(profile, "Perfil atualizado com sucesso."));
     }
 }

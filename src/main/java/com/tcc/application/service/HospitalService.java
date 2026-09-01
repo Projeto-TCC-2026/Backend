@@ -1,8 +1,10 @@
 package com.tcc.application.service;
 
 import com.tcc.application.dto.request.HospitalRequest;
+import com.tcc.application.dto.request.UpdateHospitalProfileRequest;
 import com.tcc.application.dto.response.HospitalResponse;
 import com.tcc.application.dto.response.HospitalSummary;
+import com.tcc.application.dto.response.UserProfileResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -35,4 +37,6 @@ public interface HospitalService {
     void disableHospital(UUID id);
     
     Page<HospitalSummary> getHospitalsSummary(Pageable pageable);
+
+    UserProfileResponse updateOwnProfile(String email, UpdateHospitalProfileRequest request);
 }
