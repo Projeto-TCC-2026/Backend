@@ -1,16 +1,20 @@
 package com.tcc.application.service;
 
 import com.tcc.application.dto.request.ManualCheckinRequest;
+import com.tcc.application.dto.request.AggregatedManualCheckinRequest;
+import com.tcc.application.dto.response.AggregatedCheckinResponse;
 import com.tcc.application.dto.response.CheckinResponse;
 import com.tcc.domain.model.Checkin;
 import com.tcc.domain.model.CheckinFieldValue;
 import com.tcc.domain.model.CheckinSource;
+import com.tcc.domain.model.CheckinSubmission;
 import com.tcc.domain.model.DoctorProcedure;
 import com.tcc.domain.model.DoctorProcedureField;
 import com.tcc.domain.model.FieldDataType;
 import com.tcc.domain.model.Patient;
 import com.tcc.domain.model.PatientProcedure;
 import com.tcc.domain.repository.CheckinRepository;
+import com.tcc.domain.repository.CheckinSubmissionRepository;
 import com.tcc.domain.repository.DoctorProcedureFieldRepository;
 import com.tcc.domain.repository.DoctorProcedureRepository;
 import com.tcc.domain.repository.PatientProcedureRepository;
@@ -23,12 +27,14 @@ import com.tcc.exception.UnauthorizedException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +47,7 @@ public class CheckinServiceImpl implements CheckinService {
     private final DoctorProcedureRepository doctorProcedureRepository;
     private final DoctorProcedureFieldRepository fieldRepository;
     private final CheckinRepository checkinRepository;
+    private final CheckinSubmissionRepository submissionRepository;
 
     public CheckinServiceImpl(UserRepository userRepository,
                               PatientRepository patientRepository,
@@ -54,11 +61,81 @@ public class CheckinServiceImpl implements CheckinService {
         this.doctorProcedureRepository = doctorProcedureRepository;
         this.fieldRepository = fieldRepository;
         this.checkinRepository = checkinRepository;
+        this.submissionRepository = null;
+    }
+
+    @Autowired
+    public CheckinServiceImpl(UserRepository userRepository,
+                              PatientRepository patientRepository,
+                              PatientProcedureRepository patientProcedureRepository,
+                              DoctorProcedureRepository doctorProcedureRepository,
+                              DoctorProcedureFieldRepository fieldRepository,
+                              CheckinRepository checkinRepository,
+                              CheckinSubmissionRepository submissionRepository) {
+        this.userRepository = userRepository;
+        this.patientRepository = patientRepository;
+        this.patientProcedureRepository = patientProcedureRepository;
+        this.doctorProcedureRepository = doctorProcedureRepository;
+        this.fieldRepository = fieldRepository;
+        this.checkinRepository = checkinRepository;
+        this.submissionRepository = submissionRepository;
     }
 
     @Override
     @Transactional
     public CheckinResponse submitManual(String email, UUID patientProcedureId, ManualCheckinRequest request) {
+        return submitManual(email, patientProcedureId, request, null);
+        }
+
+        @Override
+        @Transactional
+        public AggregatedCheckinResponse submitAggregatedManual(String email, AggregatedManualCheckinRequest request) {
+        if (submissionRepository == null) {
+            throw new IllegalStateException("Repositório de submissões não configurado");
+        }
+
+        Patient patient = patientRepository.findByUserId(resolveUserId(email))
+            .orElseThrow(() -> new UnauthorizedException("Paciente não encontrado para o usuário autenticado"));
+        List<UUID> procedureIds = new ArrayList<>(new HashSet<>(request.patientProcedureIds()));
+        if (procedureIds.size() != request.patientProcedureIds().size()) {
+            throw new BusinessException("Um procedimento não pode aparecer mais de uma vez no check-in");
+        }
+
+        CheckinSubmission existing = submissionRepository
+            .findByPatientIdAndIdempotencyKey(patient.getId(), request.idempotencyKey())
+            .orElse(null);
+        if (existing != null) {
+            List<UUID> checkinIds = checkinRepository.findBySubmissionId(existing.getId()).stream()
+                .map(Checkin::getId)
+                .toList();
+            return new AggregatedCheckinResponse(existing.getId(), checkinIds,
+                existing.getSubmittedAt(), existing.getEditUntil());
+        }
+
+        LocalDateTime submittedAt = LocalDateTime.now();
+        CheckinSubmission submission = new CheckinSubmission();
+        submission.setPatient(patient);
+        submission.setIdempotencyKey(request.idempotencyKey());
+        submission.setConfigurationVersion(request.configurationVersion());
+        submission.setSubmittedAt(submittedAt);
+        submission.setUpdatedAt(submittedAt);
+        submission.setEditUntil(submittedAt.plusHours(1));
+        CheckinSubmission savedSubmission = submissionRepository.save(submission);
+
+        List<UUID> checkinIds = new ArrayList<>();
+        for (UUID patientProcedureId : procedureIds) {
+            List<ManualCheckinRequest.FieldValue> procedureFields = fieldsForProcedure(patientProcedureId, request.fields());
+            CheckinResponse checkin = submitManual(email, patientProcedureId,
+                new ManualCheckinRequest(procedureFields), savedSubmission);
+            checkinIds.add(checkin.id());
+        }
+
+        return new AggregatedCheckinResponse(savedSubmission.getId(), checkinIds,
+            savedSubmission.getSubmittedAt(), savedSubmission.getEditUntil());
+        }
+
+        private CheckinResponse submitManual(String email, UUID patientProcedureId,
+                         ManualCheckinRequest request, CheckinSubmission submission) {
         Patient patient = patientRepository.findByUserId(resolveUserId(email))
                 .orElseThrow(() -> new UnauthorizedException("Paciente não encontrado para o usuário autenticado"));
         PatientProcedure patientProcedure = patientProcedureRepository.findById(patientProcedureId)
@@ -111,6 +188,7 @@ public class CheckinServiceImpl implements CheckinService {
         checkin.setSource(CheckinSource.MANUAL);
         checkin.setManualDate(today);
         checkin.setSubmittedAt(submittedAt);
+        checkin.setSubmission(submission);
 
         for (ManualCheckinRequest.FieldValue submittedValue : request.fields()) {
             CheckinFieldValue fieldValue = new CheckinFieldValue();
@@ -124,6 +202,20 @@ public class CheckinServiceImpl implements CheckinService {
         Checkin saved = checkinRepository.save(checkin);
         return new CheckinResponse(saved.getId(), patientProcedureId, saved.getSource(), saved.getSubmittedAt());
     }
+
+        private List<ManualCheckinRequest.FieldValue> fieldsForProcedure(
+            UUID patientProcedureId, List<ManualCheckinRequest.FieldValue> submittedFields) {
+        PatientProcedure patientProcedure = patientProcedureRepository.findById(patientProcedureId)
+            .orElseThrow(() -> new ResourceNotFoundException("Acompanhamento não encontrado"));
+        DoctorProcedure doctorProcedure = doctorProcedureRepository
+            .findByDoctorIdAndProcedureId(patientProcedure.getDoctor().getId(), patientProcedure.getProcedure().getId())
+            .orElseThrow(() -> new ResourceNotFoundException("Configuração do procedimento não encontrada"));
+        Set<UUID> fieldIds = fieldRepository
+            .findByDoctorProcedureIdAndActiveTrueOrderByDisplayOrderAsc(doctorProcedure.getId()).stream()
+            .map(DoctorProcedureField::getId)
+            .collect(java.util.stream.Collectors.toSet());
+        return submittedFields.stream().filter(value -> fieldIds.contains(value.fieldId())).toList();
+        }
 
     private UUID resolveUserId(String email) {
         return userRepository.findByEmailAndActiveTrue(email)

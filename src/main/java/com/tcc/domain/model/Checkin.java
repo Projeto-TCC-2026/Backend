@@ -31,6 +31,10 @@ public class Checkin {
     @JoinColumn(name = "patient_procedure_id", nullable = false)
     private PatientProcedure patientProcedure;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "submission_id")
+    private CheckinSubmission submission;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private CheckinSource source;
@@ -58,6 +62,14 @@ public class Checkin {
 
     public void setPatientProcedure(PatientProcedure patientProcedure) {
         this.patientProcedure = patientProcedure;
+    }
+
+    public CheckinSubmission getSubmission() {
+        return submission;
+    }
+
+    public void setSubmission(CheckinSubmission submission) {
+        this.submission = submission;
     }
 
     public CheckinSource getSource() {
