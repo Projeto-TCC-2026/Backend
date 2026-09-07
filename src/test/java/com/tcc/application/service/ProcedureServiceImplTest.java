@@ -298,8 +298,8 @@ class ProcedureServiceImplTest {
             when(userRepository.findByEmailWithHospital(EMAIL)).thenReturn(Optional.of(hospitalUser));
             when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
             when(doctorRepository.findById(DOCTOR_ID)).thenReturn(Optional.of(doctor));
-            when(doctorProcedureRepository.existsByDoctorIdAndProcedureId(DOCTOR_ID, PROCEDURE_ID))
-                    .thenReturn(false);
+            when(doctorProcedureRepository.findByDoctorIdAndProcedureId(DOCTOR_ID, PROCEDURE_ID))
+                    .thenReturn(Optional.empty());
             when(doctorProcedureMapper.toEntity(doctor, procedure)).thenReturn(link);
             when(doctorProcedureRepository.save(link)).thenReturn(link);
             when(doctorProcedureMapper.toResponse(link)).thenReturn(linkResponse);
@@ -330,8 +330,8 @@ class ProcedureServiceImplTest {
             when(userRepository.findByEmailWithHospital(EMAIL)).thenReturn(Optional.of(hospitalUser));
             when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
             when(doctorRepository.findById(DOCTOR_ID)).thenReturn(Optional.of(doctor));
-            when(doctorProcedureRepository.existsByDoctorIdAndProcedureId(DOCTOR_ID, PROCEDURE_ID))
-                    .thenReturn(true);
+            when(doctorProcedureRepository.findByDoctorIdAndProcedureId(DOCTOR_ID, PROCEDURE_ID))
+                    .thenReturn(Optional.of(new DoctorProcedure(doctor, procedure)));
 
             assertThatThrownBy(() -> procedureService.assignDoctor(EMAIL, PROCEDURE_ID, assignRequest))
                     .isInstanceOf(BusinessException.class);
@@ -345,18 +345,20 @@ class ProcedureServiceImplTest {
     class UnassignDoctor {
 
         @Test
-        @DisplayName("deve desatrelar medico do procedimento")
+        @DisplayName("deve inativar o vinculo do medico, sem remover do banco")
         void shouldUnassignDoctorSuccessfully() {
             DoctorProcedure link = new DoctorProcedure(doctor, procedure);
             when(userRepository.findByEmailWithHospital(EMAIL)).thenReturn(Optional.of(hospitalUser));
             when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
             when(doctorRepository.findById(DOCTOR_ID)).thenReturn(Optional.of(doctor));
-            when(doctorProcedureRepository.findByDoctorIdAndProcedureId(DOCTOR_ID, PROCEDURE_ID))
+            when(doctorProcedureRepository.findByDoctorIdAndProcedureIdAndActiveTrue(DOCTOR_ID, PROCEDURE_ID))
                     .thenReturn(Optional.of(link));
 
             procedureService.unassignDoctor(EMAIL, PROCEDURE_ID, DOCTOR_ID);
 
-            verify(doctorProcedureRepository).delete(link);
+            assertThat(link.getActive()).isFalse();
+            verify(doctorProcedureRepository).save(link);
+            verify(doctorProcedureRepository, never()).delete(any());
         }
 
         @Test
@@ -365,12 +367,13 @@ class ProcedureServiceImplTest {
             when(userRepository.findByEmailWithHospital(EMAIL)).thenReturn(Optional.of(hospitalUser));
             when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
             when(doctorRepository.findById(DOCTOR_ID)).thenReturn(Optional.of(doctor));
-            when(doctorProcedureRepository.findByDoctorIdAndProcedureId(DOCTOR_ID, PROCEDURE_ID))
+            when(doctorProcedureRepository.findByDoctorIdAndProcedureIdAndActiveTrue(DOCTOR_ID, PROCEDURE_ID))
                     .thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> procedureService.unassignDoctor(EMAIL, PROCEDURE_ID, DOCTOR_ID))
                     .isInstanceOf(BusinessException.class);
 
+            verify(doctorProcedureRepository, never()).save(any());
             verify(doctorProcedureRepository, never()).delete(any());
         }
     }

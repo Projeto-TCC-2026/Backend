@@ -1,5 +1,25 @@
 package com.tcc.application.service;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import static org.mockito.ArgumentMatchers.any;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import org.mockito.junit.jupiter.MockitoExtension;
+
 import com.tcc.application.dto.request.HospitalRequest;
 import com.tcc.application.dto.response.HospitalResponse;
 import com.tcc.application.mapper.HospitalMapper;
@@ -8,24 +28,6 @@ import com.tcc.domain.model.Hospital;
 import com.tcc.domain.repository.HospitalRepository;
 import com.tcc.exception.BusinessException;
 import com.tcc.exception.ResourceNotFoundException;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class HospitalServiceImplTest {
@@ -92,14 +94,16 @@ class HospitalServiceImplTest {
     class DeleteHospital {
 
         @Test
-        @DisplayName("deve excluir hospital sem doutores associados")
-        void shouldDeleteHospitalWithoutDoctors() {
+        @DisplayName("deve inativar hospital sem doutores associados, sem remover do banco")
+        void shouldInactivateHospitalWithoutDoctors() {
             hospital.setDoctors(new ArrayList<>());
             when(hospitalRepository.findById(HOSPITAL_ID)).thenReturn(Optional.of(hospital));
 
             hospitalService.deleteHospital(HOSPITAL_ID);
 
-            verify(hospitalRepository).delete(hospital);
+            assertThat(hospital.getActive()).isFalse();
+            verify(hospitalRepository).save(hospital);
+            verify(hospitalRepository, never()).delete(any());
         }
 
         @Test
@@ -113,6 +117,8 @@ class HospitalServiceImplTest {
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("doutores associados");
 
+            assertThat(hospital.getActive()).isTrue();
+            verify(hospitalRepository, never()).save(any());
             verify(hospitalRepository, never()).delete(any());
         }
 

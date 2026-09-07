@@ -295,15 +295,17 @@ class PatientServiceImplTest {
     class DeletePatient {
 
         @Test
-        @DisplayName("deve excluir paciente sem relacionamentos")
-        void shouldDeletePatientWithoutRelationships() {
+        @DisplayName("deve inativar paciente sem relacionamentos, sem remover do banco")
+        void shouldInactivatePatientWithoutRelationships() {
             patient.setProcedureExecutions(new ArrayList<>());
             patient.setHealthReadings(new ArrayList<>());
             when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
 
             patientService.deletePatient(PATIENT_ID);
 
-            verify(patientRepository).delete(patient);
+            assertThat(patient.getActive()).isFalse();
+            verify(patientRepository).save(patient);
+            verify(patientRepository, never()).delete(any());
         }
 
         @Test
@@ -317,6 +319,8 @@ class PatientServiceImplTest {
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("procedimento");
 
+            assertThat(patient.getActive()).isTrue();
+            verify(patientRepository, never()).save(any());
             verify(patientRepository, never()).delete(any());
         }
 
@@ -332,6 +336,8 @@ class PatientServiceImplTest {
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("leituras de saúde");
 
+            assertThat(patient.getActive()).isTrue();
+            verify(patientRepository, never()).save(any());
             verify(patientRepository, never()).delete(any());
         }
 

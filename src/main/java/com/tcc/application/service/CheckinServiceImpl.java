@@ -1,7 +1,22 @@
 package com.tcc.application.service;
 
-import com.tcc.application.dto.request.ManualCheckinRequest;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.tcc.application.dto.request.AggregatedManualCheckinRequest;
+import com.tcc.application.dto.request.ManualCheckinRequest;
 import com.tcc.application.dto.response.AggregatedCheckinResponse;
 import com.tcc.application.dto.response.CheckinResponse;
 import com.tcc.domain.model.Checkin;
@@ -24,19 +39,6 @@ import com.tcc.exception.BusinessException;
 import com.tcc.exception.ErrorMessages;
 import com.tcc.exception.ResourceNotFoundException;
 import com.tcc.exception.UnauthorizedException;
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class CheckinServiceImpl implements CheckinService {
@@ -138,7 +140,7 @@ public class CheckinServiceImpl implements CheckinService {
                          ManualCheckinRequest request, CheckinSubmission submission) {
         Patient patient = patientRepository.findByUserId(resolveUserId(email))
                 .orElseThrow(() -> new UnauthorizedException("Paciente não encontrado para o usuário autenticado"));
-        PatientProcedure patientProcedure = patientProcedureRepository.findById(patientProcedureId)
+        PatientProcedure patientProcedure = patientProcedureRepository.findByIdAndActiveTrue(patientProcedureId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         ErrorMessages.patientProcedureNotFoundById(patientProcedureId)));
 
@@ -154,7 +156,8 @@ public class CheckinServiceImpl implements CheckinService {
         }
 
         DoctorProcedure doctorProcedure = doctorProcedureRepository
-                .findByDoctorIdAndProcedureId(patientProcedure.getDoctor().getId(), patientProcedure.getProcedure().getId())
+                .findByDoctorIdAndProcedureIdAndActiveTrue(
+                        patientProcedure.getDoctor().getId(), patientProcedure.getProcedure().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Configuração do procedimento não encontrada"));
         List<DoctorProcedureField> activeFields =
                 fieldRepository.findByDoctorProcedureIdAndActiveTrueOrderByDisplayOrderAsc(doctorProcedure.getId());
@@ -205,10 +208,11 @@ public class CheckinServiceImpl implements CheckinService {
 
         private List<ManualCheckinRequest.FieldValue> fieldsForProcedure(
             UUID patientProcedureId, List<ManualCheckinRequest.FieldValue> submittedFields) {
-        PatientProcedure patientProcedure = patientProcedureRepository.findById(patientProcedureId)
+        PatientProcedure patientProcedure = patientProcedureRepository.findByIdAndActiveTrue(patientProcedureId)
             .orElseThrow(() -> new ResourceNotFoundException("Acompanhamento não encontrado"));
         DoctorProcedure doctorProcedure = doctorProcedureRepository
-            .findByDoctorIdAndProcedureId(patientProcedure.getDoctor().getId(), patientProcedure.getProcedure().getId())
+            .findByDoctorIdAndProcedureIdAndActiveTrue(
+                patientProcedure.getDoctor().getId(), patientProcedure.getProcedure().getId())
             .orElseThrow(() -> new ResourceNotFoundException("Configuração do procedimento não encontrada"));
         Set<UUID> fieldIds = fieldRepository
             .findByDoctorProcedureIdAndActiveTrueOrderByDisplayOrderAsc(doctorProcedure.getId()).stream()

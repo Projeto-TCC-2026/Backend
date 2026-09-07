@@ -80,7 +80,7 @@ public class PatientProcedureServiceImpl implements PatientProcedureService {
         Patient patient = findPatientLinkedToDoctor(patientId, doctor.getId());
         Procedure procedure = findProcedureAssignedToDoctor(request.procedureId(), doctor.getId());
 
-        if (patientProcedureRepository.existsByPatientIdAndProcedureIdAndDoctorId(
+        if (patientProcedureRepository.existsByPatientIdAndProcedureIdAndDoctorIdAndActiveTrue(
                 patient.getId(), procedure.getId(), doctor.getId())) {
             throw new BusinessException(ErrorMessages.duplicatePatientProcedure());
         }
@@ -100,7 +100,7 @@ public class PatientProcedureServiceImpl implements PatientProcedureService {
         findPatientLinkedToDoctor(patientId, doctor.getId());
 
         return patientProcedureRepository
-                .findByPatientIdAndDoctorId(patientId, doctor.getId(), pageable)
+                .findByPatientIdAndDoctorIdAndActiveTrue(patientId, doctor.getId(), pageable)
                 .map(patientProcedureMapper::toResponse);
     }
 
@@ -125,7 +125,8 @@ public class PatientProcedureServiceImpl implements PatientProcedureService {
         findPatientLinkedToDoctor(patientId, doctor.getId());
         PatientProcedure patientProcedure = findOwnAssignment(assignmentId, patientId, doctor.getId());
 
-        patientProcedureRepository.delete(patientProcedure);
+        patientProcedure.setActive(false);
+        patientProcedureRepository.save(patientProcedure);
     }
 
     // --- Helpers ---
@@ -157,7 +158,7 @@ public class PatientProcedureServiceImpl implements PatientProcedureService {
         Procedure procedure = procedureRepository.findById(procedureId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.procedureNotFoundById(procedureId)));
 
-        if (!doctorProcedureRepository.existsByDoctorIdAndProcedureId(doctorId, procedure.getId())) {
+        if (!doctorProcedureRepository.existsByDoctorIdAndProcedureIdAndActiveTrue(doctorId, procedure.getId())) {
             throw new UnauthorizedException(ErrorMessages.procedureNotAssignedToDoctor());
         }
 
@@ -170,7 +171,7 @@ public class PatientProcedureServiceImpl implements PatientProcedureService {
 
     private PatientProcedure findOwnAssignment(UUID assignmentId, UUID patientId, UUID doctorId) {
         return patientProcedureRepository
-                .findByIdAndPatientIdAndDoctorId(assignmentId, patientId, doctorId)
+                .findByIdAndPatientIdAndDoctorIdAndActiveTrue(assignmentId, patientId, doctorId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         ErrorMessages.patientProcedureNotFoundById(assignmentId)));
     }

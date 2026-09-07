@@ -180,7 +180,7 @@ public class ProcedureServiceImpl implements ProcedureService {
         Hospital hospital = resolveHospital(email);
         findProcedureInHospital(procedureId, hospital.getId());
 
-        return doctorProcedureRepository.findByProcedureId(procedureId).stream()
+        return doctorProcedureRepository.findByProcedureIdAndActiveTrue(procedureId).stream()
                 .map(doctorProcedureMapper::toResponse)
                 .toList();
     }
@@ -190,7 +190,7 @@ public class ProcedureServiceImpl implements ProcedureService {
             public List<DoctorProcedureResponse> listProcedureDoctorsForAdmin(UUID procedureId) {
             procedureRepository.findById(procedureId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.procedureNotFoundById(procedureId)));
-            return doctorProcedureRepository.findByProcedureId(procedureId).stream()
+            return doctorProcedureRepository.findByProcedureIdAndActiveTrue(procedureId).stream()
                 .map(doctorProcedureMapper::toResponse)
                 .toList();
             }
@@ -207,14 +207,14 @@ public class ProcedureServiceImpl implements ProcedureService {
     public List<DoctorProcedureResponse> listDoctorProceduresForAdmin(UUID doctorId) {
         Doctor doctor = doctorRepository.findById(doctorId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.doctorNotFoundById(doctorId)));
-        return doctorProcedureRepository.findByDoctorId(doctor.getId()).stream()
+        return doctorProcedureRepository.findByDoctorIdAndActiveTrue(doctor.getId()).stream()
                 .map(doctorProcedureMapper::toResponse)
                 .toList();
     }
 
     private List<DoctorProcedureResponse> listDoctorProceduresForHospital(UUID doctorId, UUID hospitalId) {
         Doctor doctor = findDoctorInHospital(doctorId, hospitalId);
-        return doctorProcedureRepository.findByDoctorId(doctor.getId()).stream()
+        return doctorProcedureRepository.findByDoctorIdAndActiveTrue(doctor.getId()).stream()
                 .map(doctorProcedureMapper::toResponse)
                 .toList();
     }
@@ -238,8 +238,18 @@ public class ProcedureServiceImpl implements ProcedureService {
         Procedure procedure = findProcedureInHospital(procedureId, hospitalId);
         Doctor doctor = findDoctorInHospital(request.doctorId(), hospitalId);
 
-        if (doctorProcedureRepository.existsByDoctorIdAndProcedureId(doctor.getId(), procedure.getId())) {
-            throw new BusinessException(ErrorMessages.doctorAlreadyAssignedToProcedure());
+        // uq_doctor_procedures_pair impede um segundo par (doctor_id, procedure_id). Como o
+        // desatrelamento agora só inativa, reatrelar reaproveita a linha existente.
+        DoctorProcedure existing = doctorProcedureRepository
+                .findByDoctorIdAndProcedureId(doctor.getId(), procedure.getId())
+                .orElse(null);
+
+        if (existing != null) {
+            if (Boolean.TRUE.equals(existing.getActive())) {
+                throw new BusinessException(ErrorMessages.doctorAlreadyAssignedToProcedure());
+            }
+            existing.setActive(true);
+            return doctorProcedureMapper.toResponse(doctorProcedureRepository.save(existing));
         }
 
         DoctorProcedure doctorProcedure = doctorProcedureMapper.toEntity(doctor, procedure);
@@ -268,10 +278,11 @@ public class ProcedureServiceImpl implements ProcedureService {
         Doctor doctor = findDoctorInHospital(doctorId, hospitalId);
 
         DoctorProcedure doctorProcedure = doctorProcedureRepository
-                .findByDoctorIdAndProcedureId(doctor.getId(), procedure.getId())
+                .findByDoctorIdAndProcedureIdAndActiveTrue(doctor.getId(), procedure.getId())
                 .orElseThrow(() -> new BusinessException(ErrorMessages.doctorNotAssignedToProcedure()));
 
-        doctorProcedureRepository.delete(doctorProcedure);
+        doctorProcedure.setActive(false);
+        doctorProcedureRepository.save(doctorProcedure);
     }
 
     // --- Helpers ---

@@ -181,9 +181,9 @@ class PatientProcedureServiceImplTest {
             mockAuthenticatedDoctor();
             mockLinkedPatient();
             when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
-            when(doctorProcedureRepository.existsByDoctorIdAndProcedureId(DOCTOR_ID, PROCEDURE_ID))
+            when(doctorProcedureRepository.existsByDoctorIdAndProcedureIdAndActiveTrue(DOCTOR_ID, PROCEDURE_ID))
                     .thenReturn(true);
-            when(patientProcedureRepository.existsByPatientIdAndProcedureIdAndDoctorId(
+            when(patientProcedureRepository.existsByPatientIdAndProcedureIdAndDoctorIdAndActiveTrue(
                     PATIENT_ID, PROCEDURE_ID, DOCTOR_ID)).thenReturn(false);
             when(patientProcedureMapper.toEntity(request, patient, procedure, doctor)).thenReturn(assignment);
             when(patientProcedureRepository.save(assignment)).thenReturn(assignment);
@@ -202,7 +202,7 @@ class PatientProcedureServiceImplTest {
             mockAuthenticatedDoctor();
             mockLinkedPatient();
             when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
-            when(doctorProcedureRepository.existsByDoctorIdAndProcedureId(DOCTOR_ID, PROCEDURE_ID))
+            when(doctorProcedureRepository.existsByDoctorIdAndProcedureIdAndActiveTrue(DOCTOR_ID, PROCEDURE_ID))
                     .thenReturn(false);
 
             assertThatThrownBy(() -> patientProcedureService.assignProcedure(EMAIL, PATIENT_ID, request))
@@ -218,7 +218,7 @@ class PatientProcedureServiceImplTest {
             mockAuthenticatedDoctor();
             mockLinkedPatient();
             when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
-            when(doctorProcedureRepository.existsByDoctorIdAndProcedureId(DOCTOR_ID, PROCEDURE_ID))
+            when(doctorProcedureRepository.existsByDoctorIdAndProcedureIdAndActiveTrue(DOCTOR_ID, PROCEDURE_ID))
                     .thenReturn(true);
 
             assertThatThrownBy(() -> patientProcedureService.assignProcedure(EMAIL, PATIENT_ID, request))
@@ -247,9 +247,9 @@ class PatientProcedureServiceImplTest {
             mockAuthenticatedDoctor();
             mockLinkedPatient();
             when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
-            when(doctorProcedureRepository.existsByDoctorIdAndProcedureId(DOCTOR_ID, PROCEDURE_ID))
+            when(doctorProcedureRepository.existsByDoctorIdAndProcedureIdAndActiveTrue(DOCTOR_ID, PROCEDURE_ID))
                     .thenReturn(true);
-            when(patientProcedureRepository.existsByPatientIdAndProcedureIdAndDoctorId(
+            when(patientProcedureRepository.existsByPatientIdAndProcedureIdAndDoctorIdAndActiveTrue(
                     PATIENT_ID, PROCEDURE_ID, DOCTOR_ID)).thenReturn(true);
 
             assertThatThrownBy(() -> patientProcedureService.assignProcedure(EMAIL, PATIENT_ID, request))
@@ -281,7 +281,7 @@ class PatientProcedureServiceImplTest {
             Page<PatientProcedure> page = new PageImpl<>(List.of(assignment));
             mockAuthenticatedDoctor();
             mockLinkedPatient();
-            when(patientProcedureRepository.findByPatientIdAndDoctorId(PATIENT_ID, DOCTOR_ID, pageable))
+            when(patientProcedureRepository.findByPatientIdAndDoctorIdAndActiveTrue(PATIENT_ID, DOCTOR_ID, pageable))
                     .thenReturn(page);
             when(patientProcedureMapper.toResponse(assignment)).thenReturn(response);
 
@@ -301,7 +301,7 @@ class PatientProcedureServiceImplTest {
         void shouldUpdateOwnAssignment() {
             mockAuthenticatedDoctor();
             mockLinkedPatient();
-            when(patientProcedureRepository.findByIdAndPatientIdAndDoctorId(
+            when(patientProcedureRepository.findByIdAndPatientIdAndDoctorIdAndActiveTrue(
                     ASSIGNMENT_ID, PATIENT_ID, DOCTOR_ID)).thenReturn(Optional.of(assignment));
             when(patientProcedureRepository.save(assignment)).thenReturn(assignment);
             when(patientProcedureMapper.toResponse(assignment)).thenReturn(response);
@@ -318,7 +318,7 @@ class PatientProcedureServiceImplTest {
         void shouldThrowWhenAssignmentBelongsToAnotherDoctor() {
             mockAuthenticatedDoctor();
             mockLinkedPatient();
-            when(patientProcedureRepository.findByIdAndPatientIdAndDoctorId(
+            when(patientProcedureRepository.findByIdAndPatientIdAndDoctorIdAndActiveTrue(
                     ASSIGNMENT_ID, PATIENT_ID, DOCTOR_ID)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> patientProcedureService.updateAssignment(
@@ -334,16 +334,18 @@ class PatientProcedureServiceImplTest {
     class RemoveAssignment {
 
         @Test
-        @DisplayName("deve remover atribuicao propria")
+        @DisplayName("deve inativar atribuicao propria, sem remover do banco")
         void shouldRemoveOwnAssignment() {
             mockAuthenticatedDoctor();
             mockLinkedPatient();
-            when(patientProcedureRepository.findByIdAndPatientIdAndDoctorId(
+            when(patientProcedureRepository.findByIdAndPatientIdAndDoctorIdAndActiveTrue(
                     ASSIGNMENT_ID, PATIENT_ID, DOCTOR_ID)).thenReturn(Optional.of(assignment));
 
             patientProcedureService.removeAssignment(EMAIL, PATIENT_ID, ASSIGNMENT_ID);
 
-            verify(patientProcedureRepository).delete(assignment);
+            assertThat(assignment.getActive()).isFalse();
+            verify(patientProcedureRepository).save(assignment);
+            verify(patientProcedureRepository, never()).delete(any());
         }
 
         @Test
@@ -351,13 +353,14 @@ class PatientProcedureServiceImplTest {
         void shouldThrowWhenAssignmentNotFound() {
             mockAuthenticatedDoctor();
             mockLinkedPatient();
-            when(patientProcedureRepository.findByIdAndPatientIdAndDoctorId(
+            when(patientProcedureRepository.findByIdAndPatientIdAndDoctorIdAndActiveTrue(
                     ASSIGNMENT_ID, PATIENT_ID, DOCTOR_ID)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> patientProcedureService.removeAssignment(
                     EMAIL, PATIENT_ID, ASSIGNMENT_ID))
                     .isInstanceOf(ResourceNotFoundException.class);
 
+            verify(patientProcedureRepository, never()).save(any());
             verify(patientProcedureRepository, never()).delete(any());
         }
     }

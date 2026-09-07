@@ -1,5 +1,24 @@
 package com.tcc.application.service;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.util.WorkbookUtil;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.tcc.application.dto.response.DoctorsByHospitalResponse;
 import com.tcc.application.dto.response.PatientsByHospitalResponse;
 import com.tcc.application.dto.response.ProceduresByDoctorResponse;
@@ -16,30 +35,12 @@ import com.tcc.domain.repository.AlertRepository;
 import com.tcc.domain.repository.CheckinRepository;
 import com.tcc.domain.repository.DoctorProcedureRepository;
 import com.tcc.domain.repository.DoctorRepository;
-import com.tcc.domain.repository.PatientRepository;
 import com.tcc.domain.repository.PatientProcedureRepository;
+import com.tcc.domain.repository.PatientRepository;
 import com.tcc.domain.repository.ProcedureRepository;
 import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.ResourceNotFoundException;
 import com.tcc.exception.UnauthorizedException;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.time.LocalDate;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDateTime;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.stream.Collectors;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.util.WorkbookUtil;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 @Service
 public class ReportServiceImpl implements ReportService {
@@ -256,7 +257,8 @@ public class ReportServiceImpl implements ReportService {
             Procedure procedure = procedureRepository.findById(procedureId)
                     .orElseThrow(() -> new ResourceNotFoundException("Procedimento não encontrado"));
             if (scope.doctorId() != null
-                    && !doctorProcedureRepository.existsByDoctorIdAndProcedureId(scope.doctorId(), procedureId)) {
+                    && !doctorProcedureRepository.existsByDoctorIdAndProcedureIdAndActiveTrue(
+                            scope.doctorId(), procedureId)) {
                 throw new UnauthorizedException("O procedimento não pertence ao médico autenticado");
             }
             if (scope.hospitalId() != null && !procedure.getHospital().getId().equals(scope.hospitalId())) {
@@ -284,7 +286,7 @@ public class ReportServiceImpl implements ReportService {
     }
 
     private Optional<PatientProcedure> findAlertContext(Alert alert, ExportFilters filters) {
-        return patientProcedureRepository.findByPatientId(alert.getPatient().getId()).stream()
+        return patientProcedureRepository.findByPatientIdAndActiveTrue(alert.getPatient().getId()).stream()
                 .filter(assignment -> filters.doctorId() == null
                         || filters.doctorId().equals(assignment.getDoctor().getId()))
                 .filter(assignment -> filters.hospitalId() == null

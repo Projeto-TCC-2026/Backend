@@ -1,5 +1,12 @@
 package com.tcc.application.service;
 
+import java.util.UUID;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.tcc.application.dto.request.HospitalRequest;
 import com.tcc.application.dto.request.UpdateHospitalProfileRequest;
 import com.tcc.application.dto.response.HospitalResponse;
@@ -13,12 +20,6 @@ import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.BusinessException;
 import com.tcc.exception.ErrorMessages;
 import com.tcc.exception.ResourceNotFoundException;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.UUID;
 
 @Service
 public class HospitalServiceImpl implements HospitalService {
@@ -91,7 +92,8 @@ public class HospitalServiceImpl implements HospitalService {
             throw new BusinessException(ErrorMessages.hospitalHasDoctors(hospital.getDoctors().size()));
         }
 
-        hospitalRepository.delete(hospital);
+        hospital.setActive(false);
+        hospitalRepository.save(hospital);
     }
 
     @Override

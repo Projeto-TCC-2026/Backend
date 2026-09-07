@@ -16,22 +16,25 @@ import com.tcc.domain.model.PatientProcedure;
 @Repository
 public interface PatientProcedureRepository extends JpaRepository<PatientProcedure, UUID> {
 
-    List<PatientProcedure> findByPatientId(UUID patientId);
+    List<PatientProcedure> findByPatientIdAndActiveTrue(UUID patientId);
 
-    List<PatientProcedure> findByDoctorId(UUID doctorId);
+    List<PatientProcedure> findByDoctorIdAndActiveTrue(UUID doctorId);
 
-    List<PatientProcedure> findByProcedureId(UUID procedureId);
+    List<PatientProcedure> findByProcedureIdAndActiveTrue(UUID procedureId);
 
-    Page<PatientProcedure> findByPatientIdAndDoctorId(UUID patientId, UUID doctorId, Pageable pageable);
+    Page<PatientProcedure> findByPatientIdAndDoctorIdAndActiveTrue(UUID patientId, UUID doctorId, Pageable pageable);
 
-    Optional<PatientProcedure> findByIdAndPatientIdAndDoctorId(UUID id, UUID patientId, UUID doctorId);
+    Optional<PatientProcedure> findByIdAndPatientIdAndDoctorIdAndActiveTrue(UUID id, UUID patientId, UUID doctorId);
 
-    boolean existsByPatientIdAndProcedureIdAndDoctorId(UUID patientId, UUID procedureId, UUID doctorId);
+    Optional<PatientProcedure> findByIdAndActiveTrue(UUID id);
 
-    boolean existsByPatientIdAndDoctorId(UUID patientId, UUID doctorId);
+    boolean existsByPatientIdAndProcedureIdAndDoctorIdAndActiveTrue(UUID patientId, UUID procedureId, UUID doctorId);
+
+    boolean existsByPatientIdAndDoctorIdAndActiveTrue(UUID patientId, UUID doctorId);
 
     @Query("SELECT CASE WHEN COUNT(pp) > 0 THEN true ELSE false END FROM PatientProcedure pp "
             + "WHERE pp.patient.id = :patientId AND pp.doctor.hospital.id = :hospitalId "
+            + "AND pp.active = true "
             + "AND (:procedureId IS NULL OR pp.procedure.id = :procedureId)")
     boolean existsInHospitalScope(@Param("patientId") UUID patientId,
                                   @Param("hospitalId") UUID hospitalId,

@@ -5,27 +5,36 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
 import com.tcc.domain.model.DoctorProcedure;
 
 @Repository
 public interface DoctorProcedureRepository extends JpaRepository<DoctorProcedure, UUID> {
 
-    List<DoctorProcedure> findByProcedureId(UUID procedureId);
+    List<DoctorProcedure> findByProcedureIdAndActiveTrue(UUID procedureId);
 
-    List<DoctorProcedure> findByDoctorId(UUID doctorId);
+    List<DoctorProcedure> findByDoctorIdAndActiveTrue(UUID doctorId);
 
+    Optional<DoctorProcedure> findByDoctorIdAndProcedureIdAndActiveTrue(UUID doctorId, UUID procedureId);
+
+    Optional<DoctorProcedure> findByIdAndActiveTrue(UUID id);
+
+    boolean existsByDoctorIdAndProcedureIdAndActiveTrue(UUID doctorId, UUID procedureId);
+
+    /**
+     * Busca o vínculo ignorando o active. Necessário porque uq_doctor_procedures_pair
+     * impede inserir um segundo par (doctor_id, procedure_id): reatrelar um médico
+     * reaproveita a linha inativada em vez de criar outra.
+     */
     Optional<DoctorProcedure> findByDoctorIdAndProcedureId(UUID doctorId, UUID procedureId);
 
-    boolean existsByDoctorIdAndProcedureId(UUID doctorId, UUID procedureId);
+    long countByProcedureIdAndActiveTrue(UUID procedureId);
 
-    long countByProcedureId(UUID procedureId);
+    long countByDoctorIdAndActiveTrue(UUID doctorId);
 
-    long countByDoctorId(UUID doctorId);
-
-    @Query("SELECT dp FROM DoctorProcedure dp JOIN FETCH dp.procedure WHERE dp.doctor.user.id = :userId AND dp.procedure.active = true ORDER BY dp.createdAt")
+    @Query("SELECT dp FROM DoctorProcedure dp JOIN FETCH dp.procedure WHERE dp.doctor.user.id = :userId AND dp.active = true AND dp.procedure.active = true ORDER BY dp.createdAt")
     List<DoctorProcedure> findActiveByDoctorUserId(@Param("userId") UUID userId);
 }

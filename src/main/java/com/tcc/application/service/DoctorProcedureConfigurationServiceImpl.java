@@ -23,10 +23,10 @@ import com.tcc.domain.model.PatientProcedure;
 import com.tcc.domain.repository.DoctorProcedureFieldRepository;
 import com.tcc.domain.repository.DoctorProcedureRepository;
 import com.tcc.domain.repository.DoctorRepository;
+import com.tcc.domain.repository.FieldTypePresetRepository;
 import com.tcc.domain.repository.PatientProcedureRepository;
 import com.tcc.domain.repository.PatientRepository;
 import com.tcc.domain.repository.UserRepository;
-import com.tcc.domain.repository.FieldTypePresetRepository;
 import com.tcc.exception.ResourceNotFoundException;
 import com.tcc.exception.UnauthorizedException;
 
@@ -75,7 +75,7 @@ public class DoctorProcedureConfigurationServiceImpl implements DoctorProcedureC
   @Transactional(readOnly = true)
   public List<DoctorProcedureResponse> listOwnProcedures(String email) {
     Doctor doctor = resolveDoctor(email);
-    return doctorProcedureRepository.findByDoctorId(doctor.getId()).stream()
+    return doctorProcedureRepository.findByDoctorIdAndActiveTrue(doctor.getId()).stream()
         .filter(dp -> Boolean.TRUE.equals(dp.getProcedure().getActive()))
         .map(assignmentMapper::toResponse)
         .toList();
@@ -113,7 +113,7 @@ public class DoctorProcedureConfigurationServiceImpl implements DoctorProcedureC
     Patient patient = patientRepository.findByUserId(resolveUserId(email))
         .orElseThrow(() -> new UnauthorizedException("Paciente não encontrado para o usuário autenticado"));
 
-    PatientProcedure assignment = patientProcedureRepository.findById(patientProcedureId)
+    PatientProcedure assignment = patientProcedureRepository.findByIdAndActiveTrue(patientProcedureId)
         .orElseThrow(() -> new ResourceNotFoundException("Acompanhamento não encontrado"));
 
     if (!assignment.getPatient().getId().equals(patient.getId())) {
@@ -182,7 +182,7 @@ public class DoctorProcedureConfigurationServiceImpl implements DoctorProcedureC
   private DoctorProcedure findOwnAssignment(String email, UUID id) {
     Doctor doctor = resolveDoctor(email);
 
-    DoctorProcedure assignment = doctorProcedureRepository.findById(id)
+    DoctorProcedure assignment = doctorProcedureRepository.findByIdAndActiveTrue(id)
         .orElseThrow(() -> new ResourceNotFoundException("Procedimento do médico não encontrado"));
 
     if (!assignment.getDoctor().getId().equals(doctor.getId())) {

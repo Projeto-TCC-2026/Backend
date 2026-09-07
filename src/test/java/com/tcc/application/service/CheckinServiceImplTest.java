@@ -1,11 +1,22 @@
 package com.tcc.application.service;
 
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.any;
+import org.mockito.Mock;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.tcc.application.dto.request.ManualCheckinRequest;
 import com.tcc.application.dto.response.CheckinResponse;
@@ -27,16 +38,6 @@ import com.tcc.domain.repository.PatientProcedureRepository;
 import com.tcc.domain.repository.PatientRepository;
 import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.BusinessException;
-import java.time.LocalDate;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class CheckinServiceImplTest {
@@ -91,8 +92,10 @@ class CheckinServiceImplTest {
 
         when(userRepository.findByEmailAndActiveTrue(EMAIL)).thenReturn(Optional.of(user));
         when(patientRepository.findByUserId(USER_ID)).thenReturn(Optional.of(patient));
-        when(patientProcedureRepository.findById(PATIENT_PROCEDURE_ID)).thenReturn(Optional.of(patientProcedure));
-        lenient().when(doctorProcedureRepository.findByDoctorIdAndProcedureId(doctor.getId(), procedure.getId()))
+        when(patientProcedureRepository.findByIdAndActiveTrue(PATIENT_PROCEDURE_ID))
+                .thenReturn(Optional.of(patientProcedure));
+        lenient().when(doctorProcedureRepository.findByDoctorIdAndProcedureIdAndActiveTrue(
+                        doctor.getId(), procedure.getId()))
                 .thenReturn(Optional.of(doctorProcedure));
         lenient().when(fieldRepository.findByDoctorProcedureIdAndActiveTrueOrderByDisplayOrderAsc(doctorProcedure.getId()))
                 .thenReturn(List.of(field));

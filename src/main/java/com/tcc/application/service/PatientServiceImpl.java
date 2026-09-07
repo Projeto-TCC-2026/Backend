@@ -149,7 +149,8 @@ public class PatientServiceImpl implements PatientService {
             throw new BusinessException(ErrorMessages.PATIENT_HAS_HEALTH_READINGS);
         }
 
-        patientRepository.delete(patient);
+        patient.inactivate();
+        patientRepository.save(patient);
     }
 
     @Override
