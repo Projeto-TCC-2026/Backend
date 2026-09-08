@@ -52,7 +52,9 @@ Authorization: Bearer {{doctorToken}}
   "notes": "Tratamento concluído sem intercorrências"
 }
 
-### 6. Remover a atribuição
+### 6. Remover a atribuição (inativa, não remove do banco)
+### Recusa com 400 se esta for a última atribuição ativa do paciente: nenhum paciente
+### fica sem procedimento ativo. Atribua outro antes de remover este.
 DELETE {{baseUrl}}/api/patients/{{patientId}}/assigned-procedures/{{assignmentId}}
 Authorization: Bearer {{doctorToken}}
 

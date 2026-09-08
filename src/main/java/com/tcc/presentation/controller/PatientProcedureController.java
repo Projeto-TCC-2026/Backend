@@ -95,7 +95,8 @@ public class PatientProcedureController {
     @Operation(
         summary = "Remover atribuição",
         description = "Remove o vínculo entre procedimento e paciente. Só remove atribuição feita pelo " +
-                      "próprio médico autenticado."
+                      "próprio médico autenticado. Recusa a remoção do último procedimento ativo do " +
+                      "paciente: atribua outro antes de remover este."
     )
     public ResponseEntity<ApiResponse<Void>> removeAssignment(
             Authentication authentication,

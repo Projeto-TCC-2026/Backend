@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import com.tcc.application.dto.request.PatientRequest;
+import com.tcc.application.dto.request.PatientUpdateRequest;
 import com.tcc.application.dto.response.PatientResponse;
 import com.tcc.application.dto.response.ProcedureExecutionResponse;
 
@@ -22,7 +23,11 @@ public interface PatientService {
 
     PatientResponse getPatientById(String requesterEmail, UUID id);
 
-    PatientResponse updatePatient(String requesterEmail, UUID id, PatientRequest request);
+    /**
+     * Atualiza os dados cadastrais do paciente. Não mexe em procedimento: o vínculo é
+     * gerenciado pelo {@link PatientProcedureService}.
+     */
+    PatientResponse updatePatient(String requesterEmail, UUID id, PatientUpdateRequest request);
 
     void deletePatient(UUID id);
 

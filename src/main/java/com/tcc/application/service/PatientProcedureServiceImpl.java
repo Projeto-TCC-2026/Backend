@@ -1,6 +1,9 @@
 package com.tcc.application.service;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.data.domain.Page;
@@ -93,6 +96,34 @@ public class PatientProcedureServiceImpl implements PatientProcedureService {
     }
 
     @Override
+    @Transactional
+    public List<PatientProcedureResponse> assignInitialProcedures(Doctor doctor, Patient patient,
+                                                                 List<PatientProcedureRequest> requests) {
+        if (requests == null || requests.isEmpty()) {
+            throw new BusinessException(ErrorMessages.patientRequiresProcedure());
+        }
+
+        // O banco não pega procedimento repetido dentro do próprio request: nenhum dos
+        // itens está persistido ainda, então a checagem é sobre a lista recebida.
+        Set<UUID> seenProcedureIds = new HashSet<>();
+
+        List<PatientProcedure> assignments = new ArrayList<>(requests.size());
+
+        for (PatientProcedureRequest request : requests) {
+            if (!seenProcedureIds.add(request.procedureId())) {
+                throw new BusinessException(ErrorMessages.duplicateProcedureInRequest(request.procedureId()));
+            }
+
+            Procedure procedure = findProcedureAssignedToDoctor(request.procedureId(), doctor.getId());
+            assignments.add(patientProcedureMapper.toEntity(request, patient, procedure, doctor));
+        }
+
+        return patientProcedureRepository.saveAll(assignments).stream()
+                .map(patientProcedureMapper::toResponse)
+                .toList();
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public Page<PatientProcedureResponse> listPatientProcedures(String email, UUID patientId,
                                                                 Pageable pageable) {
@@ -124,6 +155,13 @@ public class PatientProcedureServiceImpl implements PatientProcedureService {
         Doctor doctor = resolveDoctor(email);
         findPatientLinkedToDoctor(patientId, doctor.getId());
         PatientProcedure patientProcedure = findOwnAssignment(assignmentId, patientId, doctor.getId());
+
+        // Invariante do paciente: ele nunca fica sem procedimento ativo. A contagem é
+        // global, então o médico não remove a própria atribuição se ela for a última
+        // do paciente, mesmo que as outras tenham sido removidas por outro médico.
+        if (patientProcedureRepository.countByPatientIdAndActiveTrue(patientId) <= 1) {
+            throw new BusinessException(ErrorMessages.cannotRemoveLastPatientProcedure());
+        }
 
         patientProcedure.setActive(false);
         patientProcedureRepository.save(patientProcedure);

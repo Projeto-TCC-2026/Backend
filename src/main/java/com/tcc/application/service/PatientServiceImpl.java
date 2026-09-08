@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.tcc.application.dto.request.PatientRequest;
+import com.tcc.application.dto.request.PatientUpdateRequest;
 import com.tcc.application.dto.response.PatientResponse;
 import com.tcc.application.dto.response.ProcedureExecutionResponse;
 import com.tcc.application.mapper.PatientMapper;
@@ -35,6 +36,7 @@ public class PatientServiceImpl implements PatientService {
     private final DoctorRepository doctorRepository;
     private final DoctorPatientRepository doctorPatientRepository;
     private final ProcedureExecutionRepository procedureExecutionRepository;
+    private final PatientProcedureService patientProcedureService;
     private final PatientMapper patientMapper;
     private final ProcedureExecutionMapper procedureExecutionMapper;
 
@@ -43,6 +45,7 @@ public class PatientServiceImpl implements PatientService {
                              DoctorRepository doctorRepository,
                              DoctorPatientRepository doctorPatientRepository,
                              ProcedureExecutionRepository procedureExecutionRepository,
+                             PatientProcedureService patientProcedureService,
                              PatientMapper patientMapper,
                              ProcedureExecutionMapper procedureExecutionMapper) {
         this.patientRepository = patientRepository;
@@ -50,6 +53,7 @@ public class PatientServiceImpl implements PatientService {
         this.doctorRepository = doctorRepository;
         this.doctorPatientRepository = doctorPatientRepository;
         this.procedureExecutionRepository = procedureExecutionRepository;
+        this.patientProcedureService = patientProcedureService;
         this.patientMapper = patientMapper;
         this.procedureExecutionMapper = procedureExecutionMapper;
     }
@@ -81,6 +85,10 @@ public class PatientServiceImpl implements PatientService {
 
         doctorPatientRepository.save(new DoctorPatient(doctor, savedPatient));
 
+        // Mesma transação: se a atribuição falhar, o paciente não é criado. Nenhum
+        // paciente fica sem procedimento ativo.
+        patientProcedureService.assignInitialProcedures(doctor, savedPatient, request.procedures());
+
         return patientMapper.toResponse(savedPatient);
     }
 
@@ -101,7 +109,7 @@ public class PatientServiceImpl implements PatientService {
 
     @Override
     @Transactional
-    public PatientResponse updatePatient(String requesterEmail, UUID id, PatientRequest request) {
+    public PatientResponse updatePatient(String requesterEmail, UUID id, PatientUpdateRequest request) {
         Patient existingPatient = findAccessiblePatient(requesterEmail, id);
 
         if (!existingPatient.getCpf().equals(request.cpf()) &&

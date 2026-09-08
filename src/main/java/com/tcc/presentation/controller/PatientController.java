@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.tcc.application.dto.request.PatientRequest;
+import com.tcc.application.dto.request.PatientUpdateRequest;
 import com.tcc.application.dto.response.ApiResponse;
 import com.tcc.application.dto.response.PatientResponse;
 import com.tcc.application.dto.response.ProcedureExecutionResponse;
@@ -52,7 +53,10 @@ public class PatientController {
         summary = "Cadastrar novo paciente",
         description = "Criar um novo paciente no sistema e vinculá-lo ao médico autenticado. " +
                       "Doutores e Administradores podem cadastrar pacientes, e o paciente criado fica sob " +
-                      "responsabilidade de quem o cadastrou."
+                      "responsabilidade de quem o cadastrou. " +
+                      "É obrigatório informar pelo menos um procedimento em 'procedures': nenhum paciente " +
+                      "existe sem procedimento ativo. Cada procedimento precisa estar ativo e autorizado ao " +
+                      "médico pelo hospital, e não pode repetir na mesma requisição."
     )
     public ResponseEntity<ApiResponse<PatientResponse>> createPatient(
             Authentication authentication,
@@ -102,13 +106,15 @@ public class PatientController {
     @PreAuthorize("hasAnyRole('ADMIN', 'HOSPITAL', 'DOCTOR')")
     @Operation(
         summary = "Atualizar dados do paciente",
-        description = "Atualiza todas as informações de um paciente existente"
+        description = "Atualiza os dados cadastrais de um paciente existente. " +
+                      "Não altera os procedimentos atribuídos: use os endpoints de " +
+                      "/api/patients/{patientId}/assigned-procedures para isso."
     )
     public ResponseEntity<ApiResponse<PatientResponse>> updatePatient(
             Authentication authentication,
             @Parameter(description = "ID do paciente", example = "1", required = true)
             @PathVariable UUID id,
-            @Valid @RequestBody PatientRequest request) {
+            @Valid @RequestBody PatientUpdateRequest request) {
 
         PatientResponse patient = patientService.updatePatient(extractEmail(authentication), id, request);
         ApiResponse<PatientResponse> response = ApiResponse.success(patient);

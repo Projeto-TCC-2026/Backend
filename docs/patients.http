@@ -10,15 +10,19 @@
 ### ============================================
 ### 1. POST - Criar novo paciente
 ### O paciente é vinculado automaticamente ao médico autenticado (doctor_patients),
-### usando o e-mail do token. O vínculo é pré-requisito para atribuir procedimentos
-### ao paciente — ver docs/patient-procedures.http
+### usando o e-mail do token.
+### "procedures" é obrigatório e precisa ter pelo menos um item: nenhum paciente
+### existe sem procedimento ativo. Cada procedureId precisa estar ativo e autorizado
+### ao médico pelo hospital, e não pode repetir na mesma requisição.
+### Para consultar os procedimentos disponíveis e gerenciar os vínculos depois,
+### ver docs/patient-procedures.http
 ### ============================================
 POST {{baseUrl}}/api/patients
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-  "userId": 1,
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
   "fullName": "João Silva Santos",
   "cpf": "12345678901",
   "birthDate": "1990-05-15",
@@ -31,7 +35,29 @@ Content-Type: application/json
   "state": "SP",
   "zipCode": "01234567",
   "weight": 75.5,
-  "height": 1.78
+  "height": 1.78,
+  "procedures": [
+    {
+      "procedureId": "660e8400-e29b-41d4-a716-446655440010",
+      "startDate": "2026-09-10",
+      "endDate": null,
+      "status": "EM_ANDAMENTO",
+      "notes": "Primeira sessão"
+    }
+  ]
+}
+
+### 1.1 - Erro 400: lista de procedimentos vazia
+POST {{baseUrl}}/api/patients
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "fullName": "Paciente Sem Procedimento",
+  "cpf": "98765432100",
+  "birthDate": "1985-03-20",
+  "procedures": []
 }
 
 ### ============================================
@@ -52,13 +78,15 @@ Authorization: Bearer {{token}}
 
 ### ============================================
 ### 4. PUT - Atualizar paciente
+### Não aceita "procedures": o vínculo com procedimento é gerenciado pelos endpoints
+### de /api/patients/{patientId}/assigned-procedures — ver docs/patient-procedures.http
 ### ============================================
 PUT {{baseUrl}}/api/patients/550e8400-e29b-41d4-a716-446655440001
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-  "userId": 1,
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
   "fullName": "João Silva Santos Junior",
   "cpf": "12345678901",
   "birthDate": "1990-05-15",

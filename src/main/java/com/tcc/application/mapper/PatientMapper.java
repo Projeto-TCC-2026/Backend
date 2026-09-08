@@ -3,6 +3,7 @@ package com.tcc.application.mapper;
 import org.springframework.stereotype.Component;
 
 import com.tcc.application.dto.request.PatientRequest;
+import com.tcc.application.dto.request.PatientUpdateRequest;
 import com.tcc.application.dto.response.PatientResponse;
 import com.tcc.application.dto.response.PatientSummary;
 import com.tcc.domain.model.Patient;
@@ -70,7 +71,7 @@ public class PatientMapper {
         return patient;
     }
 
-    public void updateEntity(Patient patient, PatientRequest request) {
+    public void updateEntity(Patient patient, PatientUpdateRequest request) {
         patient.setFullName(request.fullName());
         patient.setCpf(request.cpf());
         patient.setBirthDate(request.birthDate());

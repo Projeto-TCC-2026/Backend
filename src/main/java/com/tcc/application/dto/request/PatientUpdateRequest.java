@@ -1,24 +1,21 @@
 package com.tcc.application.dto.request;
 
 import java.time.LocalDate;
-import java.util.List;
 import java.util.UUID;
 
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
- * Corpo do cadastro de paciente. A atualização usa {@link PatientUpdateRequest},
- * que não tem {@code procedures}: procedimento é atribuído e removido pelos
- * endpoints de {@code /api/patients/{patientId}/assigned-procedures}.
+ * Corpo da atualização de paciente. Tem os mesmos campos de {@link PatientRequest}
+ * menos {@code procedures}: o vínculo com procedimento é gerenciado pelos endpoints
+ * de {@code /api/patients/{patientId}/assigned-procedures}, e não por este.
  */
-public record PatientRequest(
+public record PatientUpdateRequest(
 
         @NotNull(message = "ID do usuário é obrigatório")
         UUID userId,
@@ -64,14 +61,5 @@ public record PatientRequest(
 
         Double weight,
 
-        Double height,
-
-        /**
-         * Nenhum paciente existe sem procedimento: o médico define ao menos um no
-         * cadastro. {@code @Valid} é necessário para que a validação desça nos itens
-         * da lista.
-         */
-        @NotEmpty(message = "Informe pelo menos um procedimento para o paciente")
-        @Valid
-        List<PatientProcedureRequest> procedures
+        Double height
 ) {}

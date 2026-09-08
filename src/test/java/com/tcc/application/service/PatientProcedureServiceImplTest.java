@@ -340,11 +340,31 @@ class PatientProcedureServiceImplTest {
             mockLinkedPatient();
             when(patientProcedureRepository.findByIdAndPatientIdAndDoctorIdAndActiveTrue(
                     ASSIGNMENT_ID, PATIENT_ID, DOCTOR_ID)).thenReturn(Optional.of(assignment));
+            when(patientProcedureRepository.countByPatientIdAndActiveTrue(PATIENT_ID)).thenReturn(2L);
 
             patientProcedureService.removeAssignment(EMAIL, PATIENT_ID, ASSIGNMENT_ID);
 
             assertThat(assignment.getActive()).isFalse();
             verify(patientProcedureRepository).save(assignment);
+            verify(patientProcedureRepository, never()).delete(any());
+        }
+
+        @Test
+        @DisplayName("deve recusar a remocao do ultimo procedimento ativo do paciente")
+        void shouldRefuseRemovingLastActiveProcedure() {
+            mockAuthenticatedDoctor();
+            mockLinkedPatient();
+            when(patientProcedureRepository.findByIdAndPatientIdAndDoctorIdAndActiveTrue(
+                    ASSIGNMENT_ID, PATIENT_ID, DOCTOR_ID)).thenReturn(Optional.of(assignment));
+            when(patientProcedureRepository.countByPatientIdAndActiveTrue(PATIENT_ID)).thenReturn(1L);
+
+            assertThatThrownBy(() -> patientProcedureService.removeAssignment(
+                    EMAIL, PATIENT_ID, ASSIGNMENT_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("último procedimento ativo");
+
+            assertThat(assignment.getActive()).isTrue();
+            verify(patientProcedureRepository, never()).save(any());
             verify(patientProcedureRepository, never()).delete(any());
         }
 
@@ -362,6 +382,135 @@ class PatientProcedureServiceImplTest {
 
             verify(patientProcedureRepository, never()).save(any());
             verify(patientProcedureRepository, never()).delete(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("assignInitialProcedures")
+    class AssignInitialProcedures {
+
+        @Test
+        @DisplayName("deve criar todos os vinculos da lista")
+        void shouldCreateEveryAssignmentInTheList() {
+            UUID secondProcedureId = UUID.randomUUID();
+            Procedure second = new Procedure(doctor.getHospital(), "Fisioterapia");
+            second.setId(secondProcedureId);
+            second.setActive(true);
+
+            PatientProcedureRequest secondRequest = new PatientProcedureRequest(
+                    secondProcedureId, LocalDate.of(2026, 9, 1), null, "AGENDADO", null);
+
+            PatientProcedure secondAssignment = new PatientProcedure();
+            secondAssignment.setPatient(patient);
+            secondAssignment.setProcedure(second);
+            secondAssignment.setDoctor(doctor);
+
+            when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
+            when(doctorProcedureRepository.existsByDoctorIdAndProcedureIdAndActiveTrue(DOCTOR_ID, PROCEDURE_ID))
+                    .thenReturn(true);
+            when(procedureRepository.findById(secondProcedureId)).thenReturn(Optional.of(second));
+            when(doctorProcedureRepository.existsByDoctorIdAndProcedureIdAndActiveTrue(DOCTOR_ID, secondProcedureId))
+                    .thenReturn(true);
+            when(patientProcedureMapper.toEntity(request, patient, procedure, doctor)).thenReturn(assignment);
+            when(patientProcedureMapper.toEntity(secondRequest, patient, second, doctor))
+                    .thenReturn(secondAssignment);
+            when(patientProcedureRepository.saveAll(List.of(assignment, secondAssignment)))
+                    .thenReturn(List.of(assignment, secondAssignment));
+            when(patientProcedureMapper.toResponse(assignment)).thenReturn(response);
+            when(patientProcedureMapper.toResponse(secondAssignment)).thenReturn(response);
+
+            List<PatientProcedureResponse> result = patientProcedureService.assignInitialProcedures(
+                    doctor, patient, List.of(request, secondRequest));
+
+            assertThat(result).hasSize(2);
+            verify(patientProcedureRepository).saveAll(List.of(assignment, secondAssignment));
+        }
+
+        @Test
+        @DisplayName("nao deve reconsultar medico nem paciente: recebe as entidades em memoria")
+        void shouldNotReResolveDoctorOrPatient() {
+            when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
+            when(doctorProcedureRepository.existsByDoctorIdAndProcedureIdAndActiveTrue(DOCTOR_ID, PROCEDURE_ID))
+                    .thenReturn(true);
+            when(patientProcedureMapper.toEntity(request, patient, procedure, doctor)).thenReturn(assignment);
+            when(patientProcedureRepository.saveAll(List.of(assignment))).thenReturn(List.of(assignment));
+            when(patientProcedureMapper.toResponse(assignment)).thenReturn(response);
+
+            patientProcedureService.assignInitialProcedures(doctor, patient, List.of(request));
+
+            // No cadastro, paciente e vínculo acabaram de ser criados na mesma transação e
+            // ainda não estão visíveis para consulta. Reconsultar dependeria de flush.
+            verify(userRepository, never()).findByEmailAndActiveTrue(any());
+            verify(doctorRepository, never()).findByUserId(any());
+            verify(patientRepository, never()).findByIdAndActiveTrue(any());
+            verify(doctorPatientRepository, never()).existsByDoctorIdAndPatientId(any(), any());
+        }
+
+        @Test
+        @DisplayName("deve lancar excecao quando a lista esta vazia")
+        void shouldThrowWhenListIsEmpty() {
+            assertThatThrownBy(() -> patientProcedureService.assignInitialProcedures(
+                    doctor, patient, List.of()))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("pelo menos um procedimento");
+
+            verify(patientProcedureRepository, never()).saveAll(any());
+        }
+
+        @Test
+        @DisplayName("deve lancar excecao quando a lista esta nula")
+        void shouldThrowWhenListIsNull() {
+            assertThatThrownBy(() -> patientProcedureService.assignInitialProcedures(
+                    doctor, patient, null))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("pelo menos um procedimento");
+
+            verify(patientProcedureRepository, never()).saveAll(any());
+        }
+
+        @Test
+        @DisplayName("deve lancar excecao quando o mesmo procedimento repete na requisicao")
+        void shouldThrowWhenProcedureRepeatsInRequest() {
+            when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
+            when(doctorProcedureRepository.existsByDoctorIdAndProcedureIdAndActiveTrue(DOCTOR_ID, PROCEDURE_ID))
+                    .thenReturn(true);
+            when(patientProcedureMapper.toEntity(request, patient, procedure, doctor)).thenReturn(assignment);
+
+            assertThatThrownBy(() -> patientProcedureService.assignInitialProcedures(
+                    doctor, patient, List.of(request, request)))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("mais de uma vez");
+
+            verify(patientProcedureRepository, never()).saveAll(any());
+        }
+
+        @Test
+        @DisplayName("deve propagar excecao quando um procedimento nao esta autorizado ao medico")
+        void shouldThrowWhenProcedureNotAssignedToDoctor() {
+            when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
+            when(doctorProcedureRepository.existsByDoctorIdAndProcedureIdAndActiveTrue(DOCTOR_ID, PROCEDURE_ID))
+                    .thenReturn(false);
+
+            assertThatThrownBy(() -> patientProcedureService.assignInitialProcedures(
+                    doctor, patient, List.of(request)))
+                    .isInstanceOf(UnauthorizedException.class);
+
+            verify(patientProcedureRepository, never()).saveAll(any());
+        }
+
+        @Test
+        @DisplayName("deve lancar excecao quando um procedimento esta inativo")
+        void shouldThrowWhenProcedureIsInactive() {
+            procedure.setActive(false);
+            when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
+            when(doctorProcedureRepository.existsByDoctorIdAndProcedureIdAndActiveTrue(DOCTOR_ID, PROCEDURE_ID))
+                    .thenReturn(true);
+
+            assertThatThrownBy(() -> patientProcedureService.assignInitialProcedures(
+                    doctor, patient, List.of(request)))
+                    .isInstanceOf(BusinessException.class);
+
+            verify(patientProcedureRepository, never()).saveAll(any());
         }
     }
 }

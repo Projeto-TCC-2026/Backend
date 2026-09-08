@@ -144,6 +144,19 @@ public final class ErrorMessages {
         return "Este procedimento já está atribuído a este paciente por você";
     }
 
+    public static String patientRequiresProcedure() {
+        return "Informe pelo menos um procedimento para o paciente";
+    }
+
+    public static String duplicateProcedureInRequest(UUID procedureId) {
+        return "O procedimento " + procedureId + " foi informado mais de uma vez na mesma requisição";
+    }
+
+    public static String cannotRemoveLastPatientProcedure() {
+        return "Não é possível remover o último procedimento ativo do paciente. "
+                + "Atribua outro procedimento antes de remover este.";
+    }
+
     public static String hospitalHasDoctors(long count) {
         return "Não é possível excluir o hospital. Existem " + count + " doutores associados.";
     }

@@ -32,6 +32,12 @@ public interface PatientProcedureRepository extends JpaRepository<PatientProcedu
 
     boolean existsByPatientIdAndDoctorIdAndActiveTrue(UUID patientId, UUID doctorId);
 
+    /**
+     * Contagem por paciente, sem filtrar por médico: a invariante "nenhum paciente
+     * sem procedimento ativo" é do paciente, não de cada médico que o atende.
+     */
+    long countByPatientIdAndActiveTrue(UUID patientId);
+
     @Query("SELECT CASE WHEN COUNT(pp) > 0 THEN true ELSE false END FROM PatientProcedure pp "
             + "WHERE pp.patient.id = :patientId AND pp.doctor.hospital.id = :hospitalId "
             + "AND pp.active = true "

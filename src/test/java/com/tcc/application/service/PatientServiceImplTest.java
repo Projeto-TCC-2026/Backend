@@ -19,6 +19,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -26,7 +27,9 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
+import com.tcc.application.dto.request.PatientProcedureRequest;
 import com.tcc.application.dto.request.PatientRequest;
+import com.tcc.application.dto.request.PatientUpdateRequest;
 import com.tcc.application.dto.response.PatientResponse;
 import com.tcc.application.mapper.PatientMapper;
 import com.tcc.application.mapper.ProcedureExecutionMapper;
@@ -66,6 +69,9 @@ class PatientServiceImplTest {
     private ProcedureExecutionRepository procedureExecutionRepository;
 
     @Mock
+    private PatientProcedureService patientProcedureService;
+
+    @Mock
     private PatientMapper patientMapper;
 
     @Mock
@@ -79,6 +85,8 @@ class PatientServiceImplTest {
     private Doctor doctor;
     private Patient patient;
     private PatientRequest request;
+    private PatientUpdateRequest updateRequest;
+    private PatientProcedureRequest procedureRequest;
     private PatientResponse response;
 
     private static final String DOCTOR_EMAIL = "doctor@tcc.com";
@@ -89,6 +97,7 @@ class PatientServiceImplTest {
     private static final UUID DOCTOR_ID = UUID.randomUUID();
     private static final UUID HOSPITAL_ID = UUID.randomUUID();
     private static final UUID PATIENT_ID = UUID.randomUUID();
+    private static final UUID PROCEDURE_ID = UUID.randomUUID();
     private static final UUID NONEXISTENT_ID = UUID.randomUUID();
 
     @BeforeEach
@@ -107,7 +116,17 @@ class PatientServiceImplTest {
         patient.setId(PATIENT_ID);
         patient.setEmail("patient@test.com");
 
+        procedureRequest = new PatientProcedureRequest(PROCEDURE_ID, LocalDate.of(2026, 8, 10),
+                null, "EM_ANDAMENTO", "Primeira sessão");
+
         request = new PatientRequest(
+                USER_ID, "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1),
+                "M", "11999999999", "patient@test.com", "Rua A",
+                "Sao Paulo", "SP", "01000000", "O+", 70.0, 1.75,
+                List.of(procedureRequest)
+        );
+
+        updateRequest = new PatientUpdateRequest(
                 USER_ID, "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1),
                 "M", "11999999999", "patient@test.com", "Rua A",
                 "Sao Paulo", "SP", "01000000", "O+", 70.0, 1.75
@@ -146,6 +165,59 @@ class PatientServiceImplTest {
             verify(doctorPatientRepository).save(captor.capture());
             assertThat(captor.getValue().getDoctor()).isEqualTo(doctor);
             assertThat(captor.getValue().getPatient()).isEqualTo(patient);
+
+            verify(patientProcedureService)
+                    .assignInitialProcedures(doctor, patient, List.of(procedureRequest));
+        }
+
+        @Test
+        @DisplayName("deve delegar a atribuicao com o medico e o paciente em memoria")
+        void shouldDelegateAssignmentWithInMemoryEntities() {
+            PatientProcedureRequest second = new PatientProcedureRequest(
+                    UUID.randomUUID(), LocalDate.of(2026, 9, 1), null, "AGENDADO", null);
+
+            PatientRequest twoProcedures = new PatientRequest(
+                    USER_ID, "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1),
+                    "M", "11999999999", "patient@test.com", "Rua A",
+                    "Sao Paulo", "SP", "01000000", "O+", 70.0, 1.75,
+                    List.of(procedureRequest, second)
+            );
+
+            mockAuthenticatedDoctor();
+            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+            when(patientRepository.existsByCpfAndActiveTrue("12345678901")).thenReturn(false);
+            when(patientRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
+            when(patientRepository.existsByEmailAndActiveTrue("patient@test.com")).thenReturn(false);
+            when(patientMapper.toEntity(twoProcedures, user)).thenReturn(patient);
+            when(patientRepository.save(patient)).thenReturn(patient);
+            when(patientMapper.toResponse(patient)).thenReturn(response);
+
+            patientService.createPatient(DOCTOR_EMAIL, twoProcedures);
+
+            // O paciente recém-criado ainda não está visível para consulta: a atribuição
+            // recebe as entidades em memória, sem reconsultar o repository.
+            verify(patientProcedureService).assignInitialProcedures(
+                    doctor, patient, List.of(procedureRequest, second));
+            verify(patientRepository, never()).findByIdAndActiveTrue(any());
+        }
+
+        @Test
+        @DisplayName("deve propagar excecao quando a atribuicao de procedimento falha")
+        void shouldPropagateWhenProcedureAssignmentFails() {
+            mockAuthenticatedDoctor();
+            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+            when(patientRepository.existsByCpfAndActiveTrue("12345678901")).thenReturn(false);
+            when(patientRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
+            when(patientRepository.existsByEmailAndActiveTrue("patient@test.com")).thenReturn(false);
+            when(patientMapper.toEntity(request, user)).thenReturn(patient);
+            when(patientRepository.save(patient)).thenReturn(patient);
+            when(patientProcedureService.assignInitialProcedures(doctor, patient, List.of(procedureRequest)))
+                    .thenThrow(new UnauthorizedException("Procedimento não autorizado"));
+
+            assertThatThrownBy(() -> patientService.createPatient(DOCTOR_EMAIL, request))
+                    .isInstanceOf(UnauthorizedException.class);
+
+            verify(patientMapper, never()).toResponse(any());
         }
 
         @Test
@@ -287,6 +359,26 @@ class PatientServiceImplTest {
             assertThatThrownBy(() -> patientService.getPatientById(DOCTOR_EMAIL, PATIENT_ID))
                     .isInstanceOf(UnauthorizedException.class)
                     .hasMessageContaining("vinculado");
+        }
+    }
+
+    @Nested
+    @DisplayName("updatePatient")
+    class UpdatePatient {
+
+        @Test
+        @DisplayName("deve atualizar dados cadastrais sem tocar nos procedimentos")
+        void shouldUpdateWithoutTouchingProcedures() {
+            when(userRepository.findByEmailAndActiveTrue(ADMIN_EMAIL)).thenReturn(Optional.of(adminUser()));
+            when(patientRepository.findByIdAndActiveTrue(PATIENT_ID)).thenReturn(Optional.of(patient));
+            when(patientRepository.save(patient)).thenReturn(patient);
+            when(patientMapper.toResponse(patient)).thenReturn(response);
+
+            PatientResponse result = patientService.updatePatient(ADMIN_EMAIL, PATIENT_ID, updateRequest);
+
+            assertThat(result).isEqualTo(response);
+            verify(patientMapper).updateEntity(patient, updateRequest);
+            verifyNoInteractions(patientProcedureService);
         }
     }
 
