@@ -557,7 +557,7 @@ Authorization: Bearer {{token}}
 # 5. Buscas retornam apenas pacientes ativos
 # 6. Paginação padrão: 10 itens, ordenado por nome
 # 7. CPF deve ser único entre pacientes ativos
-# 8. E-mail deve ser único entre pacientes ativos (se fornecido)
+# 8. E-mail é obrigatório e deve ser único entre pacientes ativos
 # 9. Estado deve ser sigla de 2 letras maiúsculas (ex: SP, RJ)
 # 10. CPF deve conter apenas números
 # 11. Paciente com procedimentos não pode ser excluído (usar inativação)

@@ -39,6 +39,7 @@ public record PatientUpdateRequest(
         @Size(max = 20, message = "Telefone deve ter no máximo 20 caracteres")
         String phone,
 
+        @NotBlank(message = "E-mail é obrigatório")
         @Email(message = "E-mail deve ser válido")
         @Size(max = 255, message = "E-mail deve ter no máximo 255 caracteres")
         String email,

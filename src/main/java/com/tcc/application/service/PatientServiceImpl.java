@@ -74,10 +74,8 @@ public class PatientServiceImpl implements PatientService {
             throw new BusinessException(ErrorMessages.userAlreadyAssociatedWithPatient());
         }
 
-        if (request.email() != null && !request.email().trim().isEmpty()) {
-            if (patientRepository.existsByEmailAndActiveTrue(request.email())) {
-                throw new BusinessException(ErrorMessages.duplicateActivePatientEmail(request.email()));
-            }
+        if (patientRepository.existsByEmailAndActiveTrue(request.email())) {
+            throw new BusinessException(ErrorMessages.duplicateActivePatientEmail(request.email()));
         }
 
         Patient patient = patientMapper.toEntity(request, user);
@@ -117,12 +115,9 @@ public class PatientServiceImpl implements PatientService {
             throw new BusinessException(ErrorMessages.duplicateActivePatientCpf(request.cpf()));
         }
 
-        if (request.email() != null && !request.email().trim().isEmpty()) {
-            if (existingPatient.getEmail() == null || !existingPatient.getEmail().equals(request.email())) {
-                if (patientRepository.existsByEmailAndActiveTrue(request.email())) {
-                    throw new BusinessException(ErrorMessages.duplicateActivePatientEmail(request.email()));
-                }
-            }
+        if (!request.email().equals(existingPatient.getEmail()) &&
+            patientRepository.existsByEmailAndActiveTrue(request.email())) {
+            throw new BusinessException(ErrorMessages.duplicateActivePatientEmail(request.email()));
         }
 
         if (!existingPatient.getUser().getId().equals(request.userId())) {
