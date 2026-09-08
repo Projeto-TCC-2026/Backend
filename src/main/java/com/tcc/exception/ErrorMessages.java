@@ -136,6 +136,10 @@ public final class ErrorMessages {
         return "Usuário autenticado não possui hospital vinculado";
     }
 
+    public static String inactiveUserAccount() {
+        return "Conta inativa. Entre em contato com o administrador";
+    }
+
     public static String patientProcedureNotFoundById(UUID id) {
         return "Atribuição de procedimento não encontrada com ID: " + id;
     }

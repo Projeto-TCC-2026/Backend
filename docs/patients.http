@@ -8,12 +8,20 @@
 @token = seu_jwt_token_aqui
 
 ### ============================================
-### 1. POST - Criar novo paciente
+### 1. POST - Criar novo paciente (com conta de acesso)
+### Não se informa "userId": o backend cria a conta (role PATIENT) a partir do "email",
+### com senha temporária aleatória que ninguém conhece. O paciente recebe um e-mail de
+### boas-vindas e define a própria senha em /account-activation/activate.
+### A resposta traz { "patient": {...}, "activationLink": "..." } — o link também pode
+### ser repassado manualmente; ver o item 15 para reemitir.
+### "email" é obrigatório e único entre contas de usuário.
 ### O paciente é vinculado automaticamente ao médico autenticado (doctor_patients),
 ### usando o e-mail do token.
 ### "procedures" é obrigatório e precisa ter pelo menos um item: nenhum paciente
 ### existe sem procedimento ativo. Cada procedureId precisa estar ativo e autorizado
 ### ao médico pelo hospital, e não pode repetir na mesma requisição.
+### Se o e-mail pertencer a um paciente inativo, o cadastro reativa a conta existente
+### e reemite o link, em vez de retornar erro de duplicidade.
 ### Para consultar os procedimentos disponíveis e gerenciar os vínculos depois,
 ### ver docs/patient-procedures.http
 ### ============================================
@@ -22,7 +30,6 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-  "userId": "550e8400-e29b-41d4-a716-446655440000",
   "fullName": "João Silva Santos",
   "cpf": "12345678901",
   "birthDate": "1990-05-15",
@@ -53,10 +60,10 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-  "userId": "550e8400-e29b-41d4-a716-446655440000",
   "fullName": "Paciente Sem Procedimento",
   "cpf": "98765432100",
   "birthDate": "1985-03-20",
+  "email": "sem.procedimento@email.com",
   "procedures": []
 }
 
@@ -80,13 +87,14 @@ Authorization: Bearer {{token}}
 ### 4. PUT - Atualizar paciente
 ### Não aceita "procedures": o vínculo com procedimento é gerenciado pelos endpoints
 ### de /api/patients/{patientId}/assigned-procedures — ver docs/patient-procedures.http
+### Também não aceita "userId": a conta de acesso é definida no cadastro e não é
+### repontada pela atualização.
 ### ============================================
 PUT {{baseUrl}}/api/patients/550e8400-e29b-41d4-a716-446655440001
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-  "userId": "550e8400-e29b-41d4-a716-446655440000",
   "fullName": "João Silva Santos Junior",
   "cpf": "12345678901",
   "birthDate": "1990-05-15",
@@ -190,13 +198,38 @@ GET {{baseUrl}}/api/patients/1/procedures/count
 Authorization: Bearer {{token}}
 
 ### ============================================
+### 15. POST - Reemitir link de primeiro acesso do paciente
+### Invalida o link pendente, gera um novo e reenvia o e-mail de boas-vindas.
+### DOCTOR só reemite para paciente vinculado a ele; HOSPITAL, apenas para paciente
+### de um médico do próprio hospital — o escopo é aplicado na consulta.
+### Resposta: { "success": true, "data": { "activationLink": "..." } }
+### ============================================
+POST {{baseUrl}}/api/patients/550e8400-e29b-41d4-a716-446655440001/access-link
+Authorization: Bearer {{token}}
+
+### 15.1 - Definir a primeira senha com o token recebido
+### (endpoint público do fluxo de boas-vindas, não exige token JWT)
+POST {{baseUrl}}/account-activation/activate
+Content-Type: application/json
+
+{
+  "token": "token-recebido-no-link",
+  "password": "senhaDoPaciente123",
+  "passwordConfirmation": "senhaDoPaciente123"
+}
+
+### ============================================
 ### EXEMPLOS DE RESPOSTAS
 ### ============================================
 
 ### ✅ Sucesso - Criar paciente (201 Created)
+# O corpo de "data" tem duas chaves: "patient" (abaixo) e "activationLink".
 # {
 #   "success": true,
+#   "message": "Paciente cadastrado. E-mail de boas-vindas enviado.",
 #   "data": {
+#    "activationLink": "http://localhost:4200/welcome?token=8f14e45f-ceea-467a-9d1b-2c3f4a5b6c7d",
+#    "patient": {
 #     "id": 1,
 #     "user": {
 #       "id": 1,
@@ -220,6 +253,7 @@ Authorization: Bearer {{token}}
 #     "active": true,
 #     "createdAt": "2024-01-01T10:00:00",
 #     "updatedAt": "2024-01-01T10:00:00"
+#    }
 #   }
 # }
 
@@ -550,14 +584,16 @@ Authorization: Bearer {{token}}
 ### NOTAS IMPORTANTES
 ### ============================================
 # 
-# 1. Todos os endpoints requerem autenticação JWT
+# 1. Todos os endpoints requerem autenticação JWT, exceto /account-activation/activate
 # 2. Apenas usuários com role DOCTOR podem acessar
 # 3. Soft delete (PATCH inactive) não remove dados
 # 4. Hard delete (DELETE) remove permanentemente
 # 5. Buscas retornam apenas pacientes ativos
 # 6. Paginação padrão: 10 itens, ordenado por nome
 # 7. CPF deve ser único entre pacientes ativos
-# 8. E-mail é obrigatório e deve ser único entre pacientes ativos
+# 8. E-mail é obrigatório e deve ser único entre contas de usuário; o cadastro cria a
+#    conta (role PATIENT) com senha aleatória e envia link de primeiro acesso
+# 8.1 O cadastro não recebe "userId"; a atualização também não
 # 9. Estado deve ser sigla de 2 letras maiúsculas (ex: SP, RJ)
 # 10. CPF deve conter apenas números
 # 11. Paciente com procedimentos não pode ser excluído (usar inativação)

@@ -4,11 +4,14 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.tcc.application.dto.request.PatientRequest;
 import com.tcc.application.dto.request.PatientUpdateRequest;
+import com.tcc.application.dto.response.AccessLinkResponse;
+import com.tcc.application.dto.response.PatientRegistrationResponse;
 import com.tcc.application.dto.response.PatientResponse;
 import com.tcc.application.dto.response.ProcedureExecutionResponse;
 import com.tcc.application.mapper.PatientMapper;
@@ -37,6 +40,8 @@ public class PatientServiceImpl implements PatientService {
     private final DoctorPatientRepository doctorPatientRepository;
     private final ProcedureExecutionRepository procedureExecutionRepository;
     private final PatientProcedureService patientProcedureService;
+    private final AccountActivationService accountActivationService;
+    private final PasswordEncoder passwordEncoder;
     private final PatientMapper patientMapper;
     private final ProcedureExecutionMapper procedureExecutionMapper;
 
@@ -46,6 +51,8 @@ public class PatientServiceImpl implements PatientService {
                              DoctorPatientRepository doctorPatientRepository,
                              ProcedureExecutionRepository procedureExecutionRepository,
                              PatientProcedureService patientProcedureService,
+                             AccountActivationService accountActivationService,
+                             PasswordEncoder passwordEncoder,
                              PatientMapper patientMapper,
                              ProcedureExecutionMapper procedureExecutionMapper) {
         this.patientRepository = patientRepository;
@@ -54,31 +61,36 @@ public class PatientServiceImpl implements PatientService {
         this.doctorPatientRepository = doctorPatientRepository;
         this.procedureExecutionRepository = procedureExecutionRepository;
         this.patientProcedureService = patientProcedureService;
+        this.accountActivationService = accountActivationService;
+        this.passwordEncoder = passwordEncoder;
         this.patientMapper = patientMapper;
         this.procedureExecutionMapper = procedureExecutionMapper;
     }
 
     @Override
     @Transactional
-    public PatientResponse createPatient(String email, PatientRequest request) {
+    public PatientRegistrationResponse createPatient(String email, PatientRequest request) {
         Doctor doctor = resolveDoctor(email);
 
-        User user = userRepository.findById(request.userId())
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(request.userId())));
+        User existingUser = userRepository.findByEmail(request.email()).orElse(null);
+        if (existingUser != null) {
+            return reactivatePatient(doctor, existingUser, request);
+        }
 
         if (patientRepository.existsByCpfAndActiveTrue(request.cpf())) {
             throw new BusinessException(ErrorMessages.duplicateActivePatientCpf(request.cpf()));
-        }
-
-        if (patientRepository.findByUserId(request.userId()).isPresent()) {
-            throw new BusinessException(ErrorMessages.userAlreadyAssociatedWithPatient());
         }
 
         if (patientRepository.existsByEmailAndActiveTrue(request.email())) {
             throw new BusinessException(ErrorMessages.duplicateActivePatientEmail(request.email()));
         }
 
-        Patient patient = patientMapper.toEntity(request, user);
+        // Senha temporária aleatória: ninguém a conhece, o paciente só entra depois de
+        // definir a própria senha através do link de boas-vindas enviado por e-mail.
+        User user = new User(request.email(), passwordEncoder.encode(randomPassword()), Role.PATIENT);
+        User savedUser = userRepository.save(user);
+
+        Patient patient = patientMapper.toEntity(request, savedUser);
         Patient savedPatient = patientRepository.save(patient);
 
         doctorPatientRepository.save(new DoctorPatient(doctor, savedPatient));
@@ -87,7 +99,60 @@ public class PatientServiceImpl implements PatientService {
         // paciente fica sem procedimento ativo.
         patientProcedureService.assignInitialProcedures(doctor, savedPatient, request.procedures());
 
-        return patientMapper.toResponse(savedPatient);
+        // Por último: e-mail de boas-vindas só sai depois que todo o cadastro passou.
+        String activationLink = accountActivationService.issueActivationToken(savedUser, request.fullName());
+
+        return new PatientRegistrationResponse(patientMapper.toResponse(savedPatient), activationLink);
+    }
+
+    /**
+     * Recadastro de um paciente que havia sido inativado: reaproveita a conta existente
+     * em vez de recusar o e-mail como duplicado, espelhando o recadastro do médico.
+     * Conta ativa, ou conta que não pertence a um paciente, continua sendo conflito.
+     */
+    private PatientRegistrationResponse reactivatePatient(Doctor doctor, User existingUser, PatientRequest request) {
+        Patient existingPatient = existingUser.getPatient();
+
+        if (Boolean.TRUE.equals(existingUser.getActive()) || existingPatient == null) {
+            throw new BusinessException(ErrorMessages.duplicateUserEmail(request.email()));
+        }
+
+        if (!existingPatient.getCpf().equals(request.cpf())
+                && patientRepository.existsByCpfAndActiveTrue(request.cpf())) {
+            throw new BusinessException(ErrorMessages.duplicateActivePatientCpf(request.cpf()));
+        }
+
+        patientMapper.updateEntity(existingPatient, request);
+        existingPatient.setActive(true);
+        existingUser.setActive(true);
+        userRepository.save(existingUser);
+        Patient savedPatient = patientRepository.save(existingPatient);
+
+        if (!doctorPatientRepository.existsByDoctorIdAndPatientId(doctor.getId(), savedPatient.getId())) {
+            doctorPatientRepository.save(new DoctorPatient(doctor, savedPatient));
+        }
+
+        patientProcedureService.assignInitialProcedures(doctor, savedPatient, request.procedures());
+
+        String activationLink = accountActivationService.issueActivationToken(existingUser, request.fullName());
+
+        return new PatientRegistrationResponse(patientMapper.toResponse(savedPatient), activationLink);
+    }
+
+    @Override
+    @Transactional
+    public AccessLinkResponse generateAccessLink(String requesterEmail, UUID patientId) {
+        Patient patient = findAccessiblePatient(requesterEmail, patientId);
+
+        String activationLink = accountActivationService.issueActivationToken(
+                patient.getUser(), patient.getFullName());
+
+        return new AccessLinkResponse(activationLink);
+    }
+
+    /** Senha temporária que ninguém conhece. Nunca é logada nem devolvida na resposta. */
+    private String randomPassword() {
+        return UUID.randomUUID().toString() + UUID.randomUUID();
     }
 
     @Override
@@ -120,17 +185,6 @@ public class PatientServiceImpl implements PatientService {
             throw new BusinessException(ErrorMessages.duplicateActivePatientEmail(request.email()));
         }
 
-        if (!existingPatient.getUser().getId().equals(request.userId())) {
-            User newUser = userRepository.findById(request.userId())
-                    .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundById(request.userId())));
-
-            if (patientRepository.findByUserId(request.userId()).isPresent()) {
-                throw new BusinessException(ErrorMessages.userAlreadyAssociatedWithPatient());
-            }
-
-            existingPatient.setUser(newUser);
-        }
-
         patientMapper.updateEntity(existingPatient, request);
         Patient updatedPatient = patientRepository.save(existingPatient);
 
@@ -154,6 +208,7 @@ public class PatientServiceImpl implements PatientService {
 
         patient.inactivate();
         patientRepository.save(patient);
+        inactivateAccount(patient);
     }
 
     @Override
@@ -162,6 +217,19 @@ public class PatientServiceImpl implements PatientService {
         Patient patient = findAccessiblePatient(requesterEmail, id);
         patient.inactivate();
         patientRepository.save(patient);
+        inactivateAccount(patient);
+    }
+
+    /**
+     * Inativar o paciente derruba também a conta de acesso, espelhando
+     * {@code deleteDoctor}: sem isso o paciente desativado continuaria autenticando.
+     * É o que habilita o recadastro por reativação em {@code createPatient}.
+     */
+    private void inactivateAccount(Patient patient) {
+        if (patient.getUser() != null) {
+            patient.getUser().setActive(false);
+            userRepository.save(patient.getUser());
+        }
     }
 
     @Override

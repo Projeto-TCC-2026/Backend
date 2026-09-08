@@ -1,10 +1,33 @@
 package com.tcc.application.service;
 
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import static org.mockito.ArgumentMatchers.any;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
+
 import com.tcc.application.dto.request.HospitalRegistrationRequest;
 import com.tcc.application.dto.request.LoginRequest;
 import com.tcc.application.dto.request.RefreshTokenRequest;
 import com.tcc.application.dto.response.AuthResponse;
 import com.tcc.application.dto.response.DoctorAuthResponse;
+import com.tcc.application.dto.response.HospitalAuthResponse;
 import com.tcc.application.dto.response.HospitalResponse;
 import com.tcc.application.dto.response.RefreshTokenResponse;
 import com.tcc.application.mapper.HospitalMapper;
@@ -22,26 +45,6 @@ import com.tcc.exception.BusinessException;
 import com.tcc.exception.InvalidTokenException;
 import com.tcc.exception.UnauthorizedException;
 import com.tcc.infrastructure.security.JwtService;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.util.ReflectionTestUtils;
-
-import java.time.LocalDateTime;
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceImplTest {
@@ -79,6 +82,8 @@ class AuthServiceImplTest {
 
     private static final UUID DOCTOR_USER_ID = UUID.randomUUID();
     private static final UUID ADMIN_USER_ID = UUID.randomUUID();
+    private static final UUID PATIENT_USER_ID = UUID.randomUUID();
+    private static final UUID HOSPITAL_USER_ID = UUID.randomUUID();
     private static final UUID HOSPITAL_ID = UUID.randomUUID();
     private static final UUID DOCTOR_ID = UUID.randomUUID();
     private static final UUID TOKEN_ID = UUID.randomUUID();
@@ -217,6 +222,137 @@ class AuthServiceImplTest {
     }
 
     @Nested
+    @DisplayName("login de conta inativa")
+    class LoginWithInactiveAccount {
+
+        @Test
+        @DisplayName("paciente inativado nao autentica")
+        void inactivePatientCannotLogin() {
+            User patientUser = new User("patient@test.com", "encodedPassword", Role.PATIENT);
+            patientUser.setId(PATIENT_USER_ID);
+            patientUser.setActive(false);
+
+            LoginRequest request = new LoginRequest("patient@test.com", "senha123");
+            when(userRepository.findByEmail("patient@test.com")).thenReturn(Optional.of(patientUser));
+            when(passwordEncoder.matches("senha123", "encodedPassword")).thenReturn(true);
+
+            assertThatThrownBy(() -> authService.loginPatient(request))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessageContaining("Conta inativa");
+
+            // Não chega a emitir token nem a consultar o perfil de paciente.
+            verify(jwtService, never()).generateToken(any());
+            verify(refreshTokenRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("medico inativado nao autentica")
+        void inactiveDoctorCannotLogin() {
+            doctorUser.setActive(false);
+
+            LoginRequest request = new LoginRequest("doctor@test.com", "senha123");
+            when(userRepository.findByEmail("doctor@test.com")).thenReturn(Optional.of(doctorUser));
+            when(passwordEncoder.matches("senha123", "encodedPassword")).thenReturn(true);
+
+            assertThatThrownBy(() -> authService.loginDoctor(request))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessageContaining("Conta inativa");
+
+            verify(jwtService, never()).generateToken(any());
+        }
+
+        @Test
+        @DisplayName("conta inativa e barrada tambem no login generico")
+        void inactiveAccountBlockedOnGenericLogin() {
+            adminUser.setActive(false);
+
+            LoginRequest request = new LoginRequest("admin@test.com", "senha123");
+            when(userRepository.findByEmail("admin@test.com")).thenReturn(Optional.of(adminUser));
+            when(passwordEncoder.matches("senha123", "encodedPassword")).thenReturn(true);
+
+            assertThatThrownBy(() -> authService.login(request))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessageContaining("Conta inativa");
+        }
+
+        @Test
+        @DisplayName("senha errada em conta inativa continua devolvendo credenciais invalidas")
+        void wrongPasswordOnInactiveAccountStillReportsInvalidCredentials() {
+            doctorUser.setActive(false);
+
+            LoginRequest request = new LoginRequest("doctor@test.com", "senhaErrada");
+            when(userRepository.findByEmail("doctor@test.com")).thenReturn(Optional.of(doctorUser));
+            when(passwordEncoder.matches("senhaErrada", "encodedPassword")).thenReturn(false);
+
+            // A checagem de senha vem antes: não revela o estado da conta a quem
+            // não sabe a credencial.
+            assertThatThrownBy(() -> authService.login(request))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessageContaining("Credenciais inválidas");
+        }
+    }
+
+    @Nested
+    @DisplayName("regressao: perfis ativos continuam autenticando")
+    class ActiveProfilesRegression {
+
+        @Test
+        @DisplayName("ADMIN ativo autentica normalmente")
+        void activeAdminStillLogs() {
+            LoginRequest request = new LoginRequest("admin@test.com", "senha123");
+            when(userRepository.findByEmail("admin@test.com")).thenReturn(Optional.of(adminUser));
+            when(passwordEncoder.matches("senha123", "encodedPassword")).thenReturn(true);
+            when(jwtService.generateToken("admin@test.com")).thenReturn("access-token");
+            when(jwtService.generateRefreshToken()).thenReturn("refresh-token");
+            when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(i -> i.getArgument(0));
+
+            AuthResponse result = authService.loginAdmin(request);
+
+            assertThat(result.getAccessToken()).isEqualTo("access-token");
+            assertThat(result.getRole()).isEqualTo("ADMIN");
+        }
+
+        @Test
+        @DisplayName("DOCTOR ativo autentica normalmente")
+        void activeDoctorStillLogs() {
+            LoginRequest request = new LoginRequest("doctor@test.com", "senha123");
+            when(userRepository.findByEmail("doctor@test.com")).thenReturn(Optional.of(doctorUser));
+            when(passwordEncoder.matches("senha123", "encodedPassword")).thenReturn(true);
+            when(doctorRepository.findByUserId(DOCTOR_USER_ID)).thenReturn(Optional.of(doctor));
+            when(jwtService.generateToken("doctor@test.com")).thenReturn("access-token");
+            when(jwtService.generateRefreshToken()).thenReturn("refresh-token");
+            when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(i -> i.getArgument(0));
+
+            DoctorAuthResponse result = authService.loginDoctor(request);
+
+            assertThat(result.getAccessToken()).isEqualTo("access-token");
+            assertThat(result.getDoctorId()).isEqualTo(DOCTOR_ID);
+        }
+
+        @Test
+        @DisplayName("HOSPITAL ativo autentica normalmente")
+        void activeHospitalStillLogs() {
+            Hospital hospital = new Hospital("Hospital Central", "12345678000100");
+            hospital.setId(HOSPITAL_ID);
+            User hospitalUser = new User("hospital@test.com", "encodedPassword", Role.HOSPITAL);
+            hospitalUser.setId(HOSPITAL_USER_ID);
+            hospitalUser.setHospital(hospital);
+
+            LoginRequest request = new LoginRequest("hospital@test.com", "senha123");
+            when(userRepository.findByEmail("hospital@test.com")).thenReturn(Optional.of(hospitalUser));
+            when(passwordEncoder.matches("senha123", "encodedPassword")).thenReturn(true);
+            when(jwtService.generateToken("hospital@test.com")).thenReturn("access-token");
+            when(jwtService.generateRefreshToken()).thenReturn("refresh-token");
+            when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(i -> i.getArgument(0));
+
+            HospitalAuthResponse result = authService.loginHospital(request);
+
+            assertThat(result.getAccessToken()).isEqualTo("access-token");
+            assertThat(result.getHospitalId()).isEqualTo(HOSPITAL_ID);
+        }
+    }
+
+    @Nested
     @DisplayName("loginDoctor")
     class LoginDoctor {
 
@@ -316,6 +452,44 @@ class AuthServiceImplTest {
             assertThatThrownBy(() -> authService.refresh(request))
                     .isInstanceOf(InvalidTokenException.class)
                     .hasMessageContaining("expirado");
+        }
+
+        @Test
+        @DisplayName("paciente inativado nao renova o access token")
+        void inactivePatientCannotRefresh() {
+            User patientUser = new User("patient@test.com", "encodedPassword", Role.PATIENT);
+            patientUser.setId(PATIENT_USER_ID);
+            patientUser.setActive(false);
+
+            RefreshToken validToken = new RefreshToken(patientUser, "valid-token", LocalDateTime.now().plusDays(7));
+            validToken.setId(TOKEN_ID);
+
+            when(refreshTokenRepository.findByToken("valid-token")).thenReturn(Optional.of(validToken));
+
+            assertThatThrownBy(() -> authService.refresh(new RefreshTokenRequest("valid-token")))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessageContaining("Conta inativa");
+
+            // O token não é rotacionado nem substituído: nenhum access token novo sai.
+            assertThat(validToken.getRevoked()).isFalse();
+            verify(jwtService, never()).generateToken(any());
+            verify(refreshTokenRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("conta ativa continua renovando normalmente")
+        void activeAccountStillRefreshes() {
+            RefreshToken existingToken = new RefreshToken(adminUser, "valid-token", LocalDateTime.now().plusDays(7));
+            existingToken.setId(TOKEN_ID);
+
+            when(refreshTokenRepository.findByToken("valid-token")).thenReturn(Optional.of(existingToken));
+            when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(i -> i.getArgument(0));
+            when(jwtService.generateToken("admin@test.com")).thenReturn("new-access-token");
+            when(jwtService.generateRefreshToken()).thenReturn("new-refresh-token");
+
+            RefreshTokenResponse result = authService.refresh(new RefreshTokenRequest("valid-token"));
+
+            assertThat(result.getAccessToken()).isEqualTo("new-access-token");
         }
     }
 }

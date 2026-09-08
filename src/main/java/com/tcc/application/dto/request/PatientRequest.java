@@ -2,7 +2,6 @@ package com.tcc.application.dto.request;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.UUID;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
@@ -14,14 +13,15 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
- * Corpo do cadastro de paciente. A atualização usa {@link PatientUpdateRequest},
- * que não tem {@code procedures}: procedimento é atribuído e removido pelos
- * endpoints de {@code /api/patients/{patientId}/assigned-procedures}.
+ * Corpo do cadastro de paciente. Não recebe {@code userId}: a conta de acesso é criada
+ * pelo backend a partir do {@code email}, com senha temporária desconhecida, e o paciente
+ * define a própria senha pelo link de ativação.
+ *
+ * <p>A atualização usa {@link PatientUpdateRequest}, que não tem {@code procedures}:
+ * procedimento é atribuído e removido pelos endpoints de
+ * {@code /api/patients/{patientId}/assigned-procedures}.
  */
 public record PatientRequest(
-
-        @NotNull(message = "ID do usuário é obrigatório")
-        UUID userId,
 
         @NotBlank(message = "Nome completo é obrigatório")
         @Size(max = 255, message = "Nome deve ter no máximo 255 caracteres")

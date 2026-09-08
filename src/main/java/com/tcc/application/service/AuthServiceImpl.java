@@ -1,5 +1,11 @@
 package com.tcc.application.service;
 
+import java.time.LocalDateTime;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
 import com.tcc.application.dto.request.HospitalRegistrationRequest;
 import com.tcc.application.dto.request.LoginRequest;
 import com.tcc.application.dto.request.RefreshTokenRequest;
@@ -28,12 +34,8 @@ import com.tcc.exception.InvalidTokenException;
 import com.tcc.exception.ResourceNotFoundException;
 import com.tcc.exception.UnauthorizedException;
 import com.tcc.infrastructure.security.JwtService;
-import jakarta.transaction.Transactional;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import jakarta.transaction.Transactional;
 
 @Service
 public class AuthServiceImpl implements AuthService {
@@ -200,6 +202,12 @@ public class AuthServiceImpl implements AuthService {
             throw new InvalidTokenException("Refresh token expirado");
         }
 
+        // /auth/refresh é público e não passa por findAndValidateUser: sem esta checagem,
+        // uma conta inativada continuaria renovando o access token indefinidamente.
+        if (!Boolean.TRUE.equals(refreshToken.getUser().getActive())) {
+            throw new UnauthorizedException(ErrorMessages.inactiveUserAccount());
+        }
+
         // Rotaciona — invalida o atual e gera um novo
         refreshToken.setRevoked(true);
         refreshTokenRepository.save(refreshToken);
@@ -252,12 +260,21 @@ public class AuthServiceImpl implements AuthService {
 
     // --- Helpers ---
 
+    /**
+     * Gargalo dos cinco logins. A conta inativa é recusada aqui, depois da senha, para
+     * não revelar se o e-mail existe a quem não sabe a credencial. Vale para todos os
+     * perfis: usuário inativado (inclusive médico e paciente desativados) não entra.
+     */
     private User findAndValidateUser(LoginRequest request) {
         User user = userRepository.findByEmail(request.email())
                 .orElseThrow(() -> new UnauthorizedException("Credenciais inválidas"));
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new UnauthorizedException("Credenciais inválidas");
+        }
+
+        if (!Boolean.TRUE.equals(user.getActive())) {
+            throw new UnauthorizedException(ErrorMessages.inactiveUserAccount());
         }
 
         return user;

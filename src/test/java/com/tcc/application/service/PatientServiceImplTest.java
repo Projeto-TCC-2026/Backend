@@ -15,9 +15,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -26,10 +28,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.tcc.application.dto.request.PatientProcedureRequest;
 import com.tcc.application.dto.request.PatientRequest;
 import com.tcc.application.dto.request.PatientUpdateRequest;
+import com.tcc.application.dto.response.AccessLinkResponse;
+import com.tcc.application.dto.response.PatientRegistrationResponse;
 import com.tcc.application.dto.response.PatientResponse;
 import com.tcc.application.mapper.PatientMapper;
 import com.tcc.application.mapper.ProcedureExecutionMapper;
@@ -72,6 +77,12 @@ class PatientServiceImplTest {
     private PatientProcedureService patientProcedureService;
 
     @Mock
+    private AccountActivationService accountActivationService;
+
+    @Mock
+    private PasswordEncoder passwordEncoder;
+
+    @Mock
     private PatientMapper patientMapper;
 
     @Mock
@@ -92,6 +103,8 @@ class PatientServiceImplTest {
     private static final String DOCTOR_EMAIL = "doctor@tcc.com";
     private static final String ADMIN_EMAIL = "admin@tcc.com";
     private static final String HOSPITAL_EMAIL = "hospital@tcc.com";
+    private static final String ENCODED_PASSWORD = "$2a$10$hashFicticioDeTeste";
+    private static final String ACTIVATION_LINK = "http://localhost:4200/welcome?token=abc-123";
     private static final UUID USER_ID = UUID.randomUUID();
     private static final UUID DOCTOR_USER_ID = UUID.randomUUID();
     private static final UUID DOCTOR_ID = UUID.randomUUID();
@@ -120,14 +133,14 @@ class PatientServiceImplTest {
                 null, "EM_ANDAMENTO", "Primeira sessão");
 
         request = new PatientRequest(
-                USER_ID, "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1),
+                "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1),
                 "M", "11999999999", "patient@test.com", "Rua A",
                 "Sao Paulo", "SP", "01000000", "O+", 70.0, 1.75,
                 List.of(procedureRequest)
         );
 
         updateRequest = new PatientUpdateRequest(
-                USER_ID, "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1),
+                "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1),
                 "M", "11999999999", "patient@test.com", "Rua A",
                 "Sao Paulo", "SP", "01000000", "O+", 70.0, 1.75
         );
@@ -147,18 +160,14 @@ class PatientServiceImplTest {
         @Test
         @DisplayName("deve criar paciente e vincular ao medico autenticado")
         void shouldCreatePatientSuccessfully() {
-            mockAuthenticatedDoctor();
-            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
-            when(patientRepository.existsByCpfAndActiveTrue("12345678901")).thenReturn(false);
-            when(patientRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
-            when(patientRepository.existsByEmailAndActiveTrue("patient@test.com")).thenReturn(false);
-            when(patientMapper.toEntity(request, user)).thenReturn(patient);
-            when(patientRepository.save(patient)).thenReturn(patient);
+            mockNewAccountCreation();
             when(patientMapper.toResponse(patient)).thenReturn(response);
+            when(accountActivationService.issueActivationToken(any(), any())).thenReturn(ACTIVATION_LINK);
 
-            PatientResponse result = patientService.createPatient(DOCTOR_EMAIL, request);
+            PatientRegistrationResponse result = patientService.createPatient(DOCTOR_EMAIL, request);
 
-            assertThat(result).isEqualTo(response);
+            assertThat(result.patient()).isEqualTo(response);
+            assertThat(result.activationLink()).isEqualTo(ACTIVATION_LINK);
             verify(patientRepository).save(patient);
 
             ArgumentCaptor<DoctorPatient> captor = ArgumentCaptor.forClass(DoctorPatient.class);
@@ -171,23 +180,121 @@ class PatientServiceImplTest {
         }
 
         @Test
+        @DisplayName("deve criar a conta de acesso com role PATIENT e o e-mail informado")
+        void shouldCreateUserAccountWithPatientRole() {
+            mockNewAccountCreation();
+            when(accountActivationService.issueActivationToken(any(), any())).thenReturn(ACTIVATION_LINK);
+
+            patientService.createPatient(DOCTOR_EMAIL, request);
+
+            ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+            verify(userRepository).save(captor.capture());
+            assertThat(captor.getValue().getRole()).isEqualTo(Role.PATIENT);
+            assertThat(captor.getValue().getEmail()).isEqualTo("patient@test.com");
+            assertThat(captor.getValue().getActive()).isTrue();
+        }
+
+        @Test
+        @DisplayName("deve persistir apenas o hash da senha aleatoria, sem expor a senha")
+        void shouldPersistOnlyHashedRandomPassword() {
+            mockNewAccountCreation();
+            when(accountActivationService.issueActivationToken(any(), any())).thenReturn(ACTIVATION_LINK);
+
+            PatientRegistrationResponse result = patientService.createPatient(DOCTOR_EMAIL, request);
+
+            ArgumentCaptor<String> rawPassword = ArgumentCaptor.forClass(String.class);
+            verify(passwordEncoder).encode(rawPassword.capture());
+
+            ArgumentCaptor<User> savedUser = ArgumentCaptor.forClass(User.class);
+            verify(userRepository).save(savedUser.capture());
+
+            // O que vai para o banco é o retorno do encoder, nunca a senha em claro.
+            assertThat(savedUser.getValue().getPasswordHash()).isEqualTo(ENCODED_PASSWORD);
+            assertThat(savedUser.getValue().getPasswordHash()).isNotEqualTo(rawPassword.getValue());
+            assertThat(result.activationLink()).doesNotContain(rawPassword.getValue());
+        }
+
+        @Test
+        @DisplayName("deve emitir o token de ativacao uma unica vez")
+        void shouldIssueActivationTokenOnce() {
+            mockNewAccountCreation();
+            when(accountActivationService.issueActivationToken(user, "Joao Silva")).thenReturn(ACTIVATION_LINK);
+
+            patientService.createPatient(DOCTOR_EMAIL, request);
+
+            verify(accountActivationService, times(1)).issueActivationToken(user, "Joao Silva");
+        }
+
+        @Test
+        @DisplayName("deve reativar paciente inativo quando o e-mail ja existe, sem erro de duplicidade")
+        void shouldReactivateInactivePatientWhenEmailExists() {
+            mockAuthenticatedDoctor();
+            User inactiveUser = inactiveUserWithPatient();
+            when(userRepository.findByEmail("patient@test.com")).thenReturn(Optional.of(inactiveUser));
+            when(patientRepository.save(patient)).thenReturn(patient);
+            when(doctorPatientRepository.existsByDoctorIdAndPatientId(DOCTOR_ID, PATIENT_ID)).thenReturn(false);
+            when(patientMapper.toResponse(patient)).thenReturn(response);
+            when(accountActivationService.issueActivationToken(inactiveUser, "Joao Silva"))
+                    .thenReturn(ACTIVATION_LINK);
+
+            PatientRegistrationResponse result = patientService.createPatient(DOCTOR_EMAIL, request);
+
+            assertThat(result.activationLink()).isEqualTo(ACTIVATION_LINK);
+            assertThat(patient.getActive()).isTrue();
+            assertThat(inactiveUser.getActive()).isTrue();
+            verify(patientMapper).updateEntity(patient, request);
+            verify(userRepository, never()).save(argThat(u -> u != inactiveUser));
+            verify(doctorPatientRepository).save(any(DoctorPatient.class));
+        }
+
+        @Test
+        @DisplayName("deve lancar excecao quando o e-mail pertence a uma conta ativa")
+        void shouldThrowWhenEmailBelongsToActiveAccount() {
+            mockAuthenticatedDoctor();
+            when(userRepository.findByEmail("patient@test.com")).thenReturn(Optional.of(user));
+
+            assertThatThrownBy(() -> patientService.createPatient(DOCTOR_EMAIL, request))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("Já existe um usuário");
+
+            verify(patientRepository, never()).save(any());
+            verifyNoInteractions(accountActivationService);
+        }
+
+        @Test
+        @DisplayName("nao deve emitir token de ativacao quando a atribuicao de procedimento falha")
+        void shouldNotIssueActivationTokenWhenProcedureAssignmentFails() {
+            mockNewAccountCreation();
+            when(patientProcedureService.assignInitialProcedures(doctor, patient, List.of(procedureRequest)))
+                    .thenThrow(new UnauthorizedException("Procedimento não autorizado"));
+
+            assertThatThrownBy(() -> patientService.createPatient(DOCTOR_EMAIL, request))
+                    .isInstanceOf(UnauthorizedException.class);
+
+            // Rollback cuida do User e do Patient; o e-mail de boas-vindas é o efeito
+            // externo que não pode escapar, então nem chega a ser disparado.
+            verifyNoInteractions(accountActivationService);
+        }
+
+        @Test
         @DisplayName("deve delegar a atribuicao com o medico e o paciente em memoria")
         void shouldDelegateAssignmentWithInMemoryEntities() {
             PatientProcedureRequest second = new PatientProcedureRequest(
                     UUID.randomUUID(), LocalDate.of(2026, 9, 1), null, "AGENDADO", null);
 
             PatientRequest twoProcedures = new PatientRequest(
-                    USER_ID, "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1),
+                    "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1),
                     "M", "11999999999", "patient@test.com", "Rua A",
                     "Sao Paulo", "SP", "01000000", "O+", 70.0, 1.75,
                     List.of(procedureRequest, second)
             );
 
             mockAuthenticatedDoctor();
-            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+            when(userRepository.findByEmail("patient@test.com")).thenReturn(Optional.empty());
             when(patientRepository.existsByCpfAndActiveTrue("12345678901")).thenReturn(false);
-            when(patientRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
             when(patientRepository.existsByEmailAndActiveTrue("patient@test.com")).thenReturn(false);
+            when(passwordEncoder.encode(any())).thenReturn(ENCODED_PASSWORD);
+            when(userRepository.save(any(User.class))).thenReturn(user);
             when(patientMapper.toEntity(twoProcedures, user)).thenReturn(patient);
             when(patientRepository.save(patient)).thenReturn(patient);
             when(patientMapper.toResponse(patient)).thenReturn(response);
@@ -204,13 +311,7 @@ class PatientServiceImplTest {
         @Test
         @DisplayName("deve propagar excecao quando a atribuicao de procedimento falha")
         void shouldPropagateWhenProcedureAssignmentFails() {
-            mockAuthenticatedDoctor();
-            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
-            when(patientRepository.existsByCpfAndActiveTrue("12345678901")).thenReturn(false);
-            when(patientRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
-            when(patientRepository.existsByEmailAndActiveTrue("patient@test.com")).thenReturn(false);
-            when(patientMapper.toEntity(request, user)).thenReturn(patient);
-            when(patientRepository.save(patient)).thenReturn(patient);
+            mockNewAccountCreation();
             when(patientProcedureService.assignInitialProcedures(doctor, patient, List.of(procedureRequest)))
                     .thenThrow(new UnauthorizedException("Procedimento não autorizado"));
 
@@ -237,7 +338,7 @@ class PatientServiceImplTest {
         @DisplayName("deve lancar excecao quando CPF duplicado")
         void shouldThrowWhenDuplicateCpf() {
             mockAuthenticatedDoctor();
-            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+            when(userRepository.findByEmail("patient@test.com")).thenReturn(Optional.empty());
             when(patientRepository.existsByCpfAndActiveTrue("12345678901")).thenReturn(true);
 
             assertThatThrownBy(() -> patientService.createPatient(DOCTOR_EMAIL, request))
@@ -245,15 +346,15 @@ class PatientServiceImplTest {
                     .hasMessageContaining("CPF");
 
             verify(patientRepository, never()).save(any());
+            verify(userRepository, never()).save(any());
         }
 
         @Test
-        @DisplayName("deve lancar excecao quando email duplicado")
+        @DisplayName("deve lancar excecao quando email duplicado entre pacientes ativos")
         void shouldThrowWhenDuplicateEmail() {
             mockAuthenticatedDoctor();
-            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+            when(userRepository.findByEmail("patient@test.com")).thenReturn(Optional.empty());
             when(patientRepository.existsByCpfAndActiveTrue("12345678901")).thenReturn(false);
-            when(patientRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
             when(patientRepository.existsByEmailAndActiveTrue("patient@test.com")).thenReturn(true);
 
             assertThatThrownBy(() -> patientService.createPatient(DOCTOR_EMAIL, request))
@@ -261,37 +362,56 @@ class PatientServiceImplTest {
                     .hasMessageContaining("e-mail");
 
             verify(patientRepository, never()).save(any());
-        }
-
-        @Test
-        @DisplayName("deve lancar excecao quando usuario ja associado a outro paciente")
-        void shouldThrowWhenUserAlreadyAssociated() {
-            mockAuthenticatedDoctor();
-            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
-            when(patientRepository.existsByCpfAndActiveTrue("12345678901")).thenReturn(false);
-            when(patientRepository.findByUserId(USER_ID)).thenReturn(Optional.of(patient));
-
-            assertThatThrownBy(() -> patientService.createPatient(DOCTOR_EMAIL, request))
-                    .isInstanceOf(BusinessException.class)
-                    .hasMessageContaining("Usuário já está associado");
-
-            verify(patientRepository, never()).save(any());
-        }
-
-        @Test
-        @DisplayName("deve lancar excecao quando usuario nao encontrado")
-        void shouldThrowWhenUserNotFound() {
-            mockAuthenticatedDoctor();
-            when(userRepository.findById(USER_ID)).thenReturn(Optional.empty());
-
-            assertThatThrownBy(() -> patientService.createPatient(DOCTOR_EMAIL, request))
-                    .isInstanceOf(ResourceNotFoundException.class)
-                    .hasMessageContaining("Usuário não encontrado");
+            verify(userRepository, never()).save(any());
         }
 
         private void mockAuthenticatedDoctor() {
             when(userRepository.findByEmailAndActiveTrue(DOCTOR_EMAIL)).thenReturn(Optional.of(doctorUser));
             when(doctorRepository.findByUserId(DOCTOR_USER_ID)).thenReturn(Optional.of(doctor));
+        }
+
+        /** Caminho felizado cadastro com conta nova: e-mail livre, CPF livre, User salvo. */
+        private void mockNewAccountCreation() {
+            mockAuthenticatedDoctor();
+            when(userRepository.findByEmail("patient@test.com")).thenReturn(Optional.empty());
+            when(patientRepository.existsByCpfAndActiveTrue("12345678901")).thenReturn(false);
+            when(patientRepository.existsByEmailAndActiveTrue("patient@test.com")).thenReturn(false);
+            when(passwordEncoder.encode(any())).thenReturn(ENCODED_PASSWORD);
+            when(userRepository.save(any(User.class))).thenReturn(user);
+            when(patientMapper.toEntity(request, user)).thenReturn(patient);
+            when(patientRepository.save(patient)).thenReturn(patient);
+        }
+    }
+
+    @Nested
+    @DisplayName("generateAccessLink")
+    class GenerateAccessLink {
+
+        @Test
+        @DisplayName("doutor reemite o link do proprio paciente")
+        void doctorReissuesLinkOfOwnPatient() {
+            mockAuthenticatedDoctor();
+            when(patientRepository.findByIdAndActiveTrue(PATIENT_ID)).thenReturn(Optional.of(patient));
+            when(doctorPatientRepository.existsByDoctorIdAndPatientId(DOCTOR_ID, PATIENT_ID)).thenReturn(true);
+            when(accountActivationService.issueActivationToken(user, "Joao Silva")).thenReturn(ACTIVATION_LINK);
+
+            AccessLinkResponse result = patientService.generateAccessLink(DOCTOR_EMAIL, PATIENT_ID);
+
+            assertThat(result.activationLink()).isEqualTo(ACTIVATION_LINK);
+        }
+
+        @Test
+        @DisplayName("doutor nao reemite link de paciente de outro medico")
+        void doctorCannotReissueLinkOfUnlinkedPatient() {
+            mockAuthenticatedDoctor();
+            when(patientRepository.findByIdAndActiveTrue(PATIENT_ID)).thenReturn(Optional.of(patient));
+            when(doctorPatientRepository.existsByDoctorIdAndPatientId(DOCTOR_ID, PATIENT_ID)).thenReturn(false);
+
+            assertThatThrownBy(() -> patientService.generateAccessLink(DOCTOR_EMAIL, PATIENT_ID))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessageContaining("vinculado");
+
+            verifyNoInteractions(accountActivationService);
         }
     }
 
@@ -396,7 +516,9 @@ class PatientServiceImplTest {
             patientService.deletePatient(PATIENT_ID);
 
             assertThat(patient.getActive()).isFalse();
+            assertThat(user.getActive()).isFalse();
             verify(patientRepository).save(patient);
+            verify(userRepository).save(user);
             verify(patientRepository, never()).delete(any());
         }
 
@@ -461,6 +583,20 @@ class PatientServiceImplTest {
         }
 
         @Test
+        @DisplayName("deve desativar tambem a conta de acesso do paciente")
+        void shouldInactivateUserAccountToo() {
+            when(patientRepository.findByIdAndActiveTrue(PATIENT_ID)).thenReturn(Optional.of(patient));
+            when(userRepository.findByEmailAndActiveTrue(ADMIN_EMAIL)).thenReturn(Optional.of(adminUser()));
+            when(patientRepository.save(patient)).thenReturn(patient);
+
+            patientService.inactivatePatient(ADMIN_EMAIL, PATIENT_ID);
+
+            // Sem isso o paciente desativado continuaria autenticando.
+            assertThat(user.getActive()).isFalse();
+            verify(userRepository).save(user);
+        }
+
+        @Test
         @DisplayName("deve lancar excecao quando paciente nao encontrado")
         void shouldThrowWhenPatientNotFound() {
             when(patientRepository.findByIdAndActiveTrue(NONEXISTENT_ID)).thenReturn(Optional.empty());
@@ -485,5 +621,13 @@ class PatientServiceImplTest {
         User hospitalUser = new User(HOSPITAL_EMAIL, "encoded", Role.HOSPITAL);
         hospitalUser.setHospital(hospital);
         return hospitalUser;
+    }
+
+    /** Conta de paciente que foi inativada: cenário do recadastro por reativação. */
+    private User inactiveUserWithPatient() {
+        user.setActive(false);
+        user.setPatient(patient);
+        patient.setActive(false);
+        return user;
     }
 }

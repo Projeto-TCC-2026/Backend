@@ -24,7 +24,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.tcc.application.dto.request.PatientRequest;
 import com.tcc.application.dto.request.PatientUpdateRequest;
+import com.tcc.application.dto.response.AccessLinkResponse;
 import com.tcc.application.dto.response.ApiResponse;
+import com.tcc.application.dto.response.PatientRegistrationResponse;
 import com.tcc.application.dto.response.PatientResponse;
 import com.tcc.application.dto.response.ProcedureExecutionResponse;
 import com.tcc.application.service.PatientService;
@@ -50,23 +52,45 @@ public class PatientController {
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'HOSPITAL', 'DOCTOR')")
     @Operation(
-        summary = "Cadastrar novo paciente",
-        description = "Criar um novo paciente no sistema e vinculá-lo ao médico autenticado. " +
-                      "Doutores e Administradores podem cadastrar pacientes, e o paciente criado fica sob " +
-                      "responsabilidade de quem o cadastrou. " +
+        summary = "Cadastrar novo paciente com conta de acesso",
+        description = "Cria a conta de usuário do paciente (role PATIENT, com senha temporária " +
+                      "desconhecida), o paciente, e o vincula ao médico autenticado. O paciente recebe um " +
+                      "e-mail de boas-vindas para definir a própria senha; o link também volta em " +
+                      "'activationLink' para ser repassado manualmente. Não se informa 'userId': a conta é " +
+                      "criada a partir do 'email', que é obrigatório e único. " +
                       "É obrigatório informar pelo menos um procedimento em 'procedures': nenhum paciente " +
                       "existe sem procedimento ativo. Cada procedimento precisa estar ativo e autorizado ao " +
-                      "médico pelo hospital, e não pode repetir na mesma requisição."
+                      "médico pelo hospital, e não pode repetir na mesma requisição. " +
+                      "Se o e-mail pertencer a um paciente inativo, o cadastro reativa a conta existente."
     )
-    public ResponseEntity<ApiResponse<PatientResponse>> createPatient(
+    public ResponseEntity<ApiResponse<PatientRegistrationResponse>> createPatient(
             Authentication authentication,
             @Valid @RequestBody PatientRequest request) {
 
         String email = extractEmail(authentication);
-        PatientResponse patient = patientService.createPatient(email, request);
-        ApiResponse<PatientResponse> response = ApiResponse.success(patient);
-        
+        PatientRegistrationResponse patient = patientService.createPatient(email, request);
+        ApiResponse<PatientRegistrationResponse> response =
+                ApiResponse.success(patient, "Paciente cadastrado. E-mail de boas-vindas enviado.");
+
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/{id}/access-link")
+    @PreAuthorize("hasAnyRole('ADMIN', 'HOSPITAL', 'DOCTOR')")
+    @Operation(
+        summary = "Gerar novo link de primeiro acesso do paciente",
+        description = "Invalida o link de ativação pendente (se houver), gera um novo e reenvia o e-mail de " +
+                      "boas-vindas. Útil quando o anterior expirou ou o paciente não recebeu o e-mail. " +
+                      "O DOCTOR só reemite para paciente vinculado a ele, e o HOSPITAL apenas para paciente " +
+                      "de um médico do próprio hospital."
+    )
+    public ResponseEntity<ApiResponse<AccessLinkResponse>> generateAccessLink(
+            Authentication authentication,
+            @Parameter(description = "ID do paciente", required = true)
+            @PathVariable UUID id) {
+
+        AccessLinkResponse link = patientService.generateAccessLink(extractEmail(authentication), id);
+        return ResponseEntity.ok(ApiResponse.success(link));
     }
 
     @GetMapping

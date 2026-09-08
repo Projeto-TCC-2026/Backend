@@ -71,6 +71,26 @@ public class PatientMapper {
         return patient;
     }
 
+    /**
+     * Update-in-place a partir do corpo de cadastro, usado no recadastro de um paciente
+     * que estava inativo. Não toca no {@code user}: a conta é a que já existe.
+     */
+    public void updateEntity(Patient patient, PatientRequest request) {
+        patient.setFullName(request.fullName());
+        patient.setCpf(request.cpf());
+        patient.setBirthDate(request.birthDate());
+        patient.setGender(request.gender());
+        patient.setPhone(request.phone());
+        patient.setEmail(request.email());
+        patient.setAddress(request.address());
+        patient.setCity(request.city());
+        patient.setState(request.state());
+        patient.setZipCode(request.zipCode());
+        patient.setBloodType(request.bloodType());
+        patient.setWeight(request.weight());
+        patient.setHeight(request.height());
+    }
+
     public void updateEntity(Patient patient, PatientUpdateRequest request) {
         patient.setFullName(request.fullName());
         patient.setCpf(request.cpf());
