@@ -1,6 +1,8 @@
 package com.tcc.application.service;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.tcc.application.dto.request.AlertEvaluationRequest;
 import com.tcc.application.dto.request.AlertRequest;
 import com.tcc.application.dto.response.AlertEvaluationResponse;
+import com.tcc.application.dto.response.AlertResponse;
 import com.tcc.application.mapper.AlertMapper;
 import com.tcc.domain.model.Alert;
 import com.tcc.domain.model.Patient;
@@ -17,8 +20,12 @@ import com.tcc.domain.model.ReadingThreshold;
 import com.tcc.domain.repository.AlertRepository;
 import com.tcc.domain.repository.PatientRepository;
 import com.tcc.domain.repository.ReadingThresholdRepository;
+import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.ErrorMessages;
 import com.tcc.exception.ResourceNotFoundException;
+import com.tcc.exception.UnauthorizedException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 @Service
 public class AlertServiceImpl implements AlertService {
@@ -36,15 +43,18 @@ public class AlertServiceImpl implements AlertService {
     private final ReadingThresholdRepository readingThresholdRepository;
     private final AlertRepository alertRepository;
     private final AlertMapper alertMapper;
+    private final UserRepository userRepository;
 
     public AlertServiceImpl(PatientRepository patientRepository,
                             ReadingThresholdRepository readingThresholdRepository,
                             AlertRepository alertRepository,
-                            AlertMapper alertMapper) {
+                            AlertMapper alertMapper,
+                            UserRepository userRepository) {
         this.patientRepository = patientRepository;
         this.readingThresholdRepository = readingThresholdRepository;
         this.alertRepository = alertRepository;
         this.alertMapper = alertMapper;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -77,6 +87,22 @@ public class AlertServiceImpl implements AlertService {
                 savedAlert.getId(), patient.getId(), range.getReadingType());
 
         return new AlertEvaluationResponse(true, range.getSeverity(), savedAlert.getId(), reason);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<AlertResponse> listRecentForPatient(String email, Pageable pageable) {
+        UUID userId = userRepository.findByEmailAndActiveTrue(email)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundByEmail(email)))
+                .getId();
+        Patient patient = patientRepository.findByUserId(userId)
+                .orElseThrow(() -> new UnauthorizedException(
+                        "Paciente não encontrado para o usuário autenticado"));
+
+        return alertRepository
+                .findByPatientIdAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(
+                        patient.getId(), LocalDateTime.now().minusDays(7), pageable)
+                .map(alertMapper::toResponse);
     }
 
     /**

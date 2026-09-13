@@ -2,6 +2,8 @@ package com.tcc.domain.repository;
 
 import com.tcc.domain.model.Alert;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -24,6 +26,9 @@ public interface AlertRepository extends JpaRepository<Alert, UUID> {
     List<Alert> findByPatientIdAndStatus(UUID patientId, String status);
 
     List<Alert> findByPatientIdOrderByCreatedAtDesc(UUID patientId);
+
+    Page<Alert> findByPatientIdAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(
+            UUID patientId, LocalDateTime since, Pageable pageable);
 
     @Query("""
             SELECT a FROM Alert a

@@ -19,16 +19,21 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import com.tcc.application.dto.request.AlertEvaluationRequest;
 import com.tcc.application.dto.response.AlertEvaluationResponse;
+import com.tcc.application.dto.response.AlertResponse;
 import com.tcc.application.mapper.AlertMapper;
 import com.tcc.domain.model.Alert;
 import com.tcc.domain.model.Patient;
 import com.tcc.domain.model.ReadingThreshold;
+import com.tcc.domain.model.User;
 import com.tcc.domain.repository.AlertRepository;
 import com.tcc.domain.repository.PatientRepository;
 import com.tcc.domain.repository.ReadingThresholdRepository;
+import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.ResourceNotFoundException;
 
 @ExtendWith(MockitoExtension.class)
@@ -45,6 +50,9 @@ class AlertServiceImplTest {
 
     @Mock
     private AlertMapper alertMapper;
+
+    @Mock
+    private UserRepository userRepository;
 
     @InjectMocks
     private AlertServiceImpl alertService;
@@ -150,6 +158,34 @@ class AlertServiceImplTest {
 
             assertThat(result.alertGenerated()).isFalse();
             verify(alertRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("deve listar somente alertas do paciente autenticado dos últimos sete dias")
+        void shouldListRecentAlertsForAuthenticatedPatient() {
+            User user = new User("patient@tcc.com", "hash", com.tcc.domain.model.Role.PATIENT);
+            user.setId(UUID.randomUUID());
+            Alert alert = new Alert();
+            alert.setPatient(patient);
+            AlertResponse response = new AlertResponse(ALERT_ID, null, null, "CRITICAL",
+                    "Alerta", "Descrição", "PENDING", LocalDateTime.now());
+            PageRequest pageable = PageRequest.of(0, 20);
+
+            when(userRepository.findByEmailAndActiveTrue(user.getEmail())).thenReturn(Optional.of(user));
+            when(patientRepository.findByUserId(user.getId())).thenReturn(Optional.of(patient));
+            when(alertRepository.findByPatientIdAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(
+                    org.mockito.ArgumentMatchers.eq(PATIENT_ID),
+                    any(LocalDateTime.class),
+                    org.mockito.ArgumentMatchers.eq(pageable))).thenReturn(new PageImpl<>(java.util.List.of(alert)));
+            when(alertMapper.toResponse(alert)).thenReturn(response);
+
+            var result = alertService.listRecentForPatient(user.getEmail(), pageable);
+
+            assertThat(result.getContent()).containsExactly(response);
+            verify(alertRepository).findByPatientIdAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(
+                    org.mockito.ArgumentMatchers.eq(PATIENT_ID),
+                    any(LocalDateTime.class),
+                    org.mockito.ArgumentMatchers.eq(pageable));
         }
     }
 

@@ -2,6 +2,9 @@ package com.tcc.application.service;
 
 import com.tcc.application.dto.request.AlertEvaluationRequest;
 import com.tcc.application.dto.response.AlertEvaluationResponse;
+import com.tcc.application.dto.response.AlertResponse;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 public interface AlertService {
 
@@ -16,4 +19,6 @@ public interface AlertService {
      * e nenhuma exceção é lançada.
      */
     AlertEvaluationResponse evaluateReading(AlertEvaluationRequest request);
+
+    Page<AlertResponse> listRecentForPatient(String email, Pageable pageable);
 }
