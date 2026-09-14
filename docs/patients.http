@@ -15,16 +15,23 @@
 ### A resposta traz { "patient": {...}, "activationLink": "..." } — o link também pode
 ### ser repassado manualmente; ver o item 15 para reemitir.
 ### "email" é obrigatório e único entre contas de usuário.
-### O paciente é vinculado automaticamente ao médico autenticado (doctor_patients),
-### usando o e-mail do token.
+### O paciente é sempre vinculado a um médico responsável (doctor_patients). Quem é esse
+### médico depende do perfil autenticado — ver 1.a (DOCTOR) e 1.b (HOSPITAL).
 ### "procedures" é obrigatório e precisa ter pelo menos um item: nenhum paciente
 ### existe sem procedimento ativo. Cada procedureId precisa estar ativo e autorizado
 ### ao médico pelo hospital, e não pode repetir na mesma requisição.
 ### Se o e-mail pertencer a um paciente inativo, o cadastro reativa a conta existente
 ### e reemite o link, em vez de retornar erro de duplicidade.
+### Aceita apenas DOCTOR e HOSPITAL. ADMIN não cadastra paciente.
 ### Para consultar os procedimentos disponíveis e gerenciar os vínculos depois,
 ### ver docs/patient-procedures.http
 ### ============================================
+
+### 1.a - Cadastro por DOCTOR
+### Assume {{token}} de um usuário com role DOCTOR.
+### "doctorId" é dispensável: o responsável é o próprio médico autenticado, resolvido
+### pelo e-mail do token. Se informado, precisa ser o ID do próprio médico — o ID de
+### outro médico é recusado com 401, não ignorado.
 POST {{baseUrl}}/api/patients
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -43,6 +50,42 @@ Content-Type: application/json
   "zipCode": "01234567",
   "weight": 75.5,
   "height": 1.78,
+  "procedures": [
+    {
+      "procedureId": "660e8400-e29b-41d4-a716-446655440010",
+      "startDate": "2026-09-10",
+      "endDate": null,
+      "status": "EM_ANDAMENTO",
+      "notes": "Primeira sessão"
+    }
+  ]
+}
+
+### 1.b - Cadastro por HOSPITAL
+### Assume {{token}} de um usuário com role HOSPITAL (trocar o valor da variável).
+### "doctorId" é obrigatório aqui: sem ele o cadastro falha com 422. O médico informado
+### precisa estar ATIVO e pertencer ao PRÓPRIO hospital do usuário autenticado —
+### médico de outro hospital é recusado com 401. Hospital inativo não cadastra paciente.
+### Para obter os IDs de médicos elegíveis: GET {{baseUrl}}/api/hospital/doctors
+POST {{baseUrl}}/api/patients
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "fullName": "Maria Oliveira Costa",
+  "cpf": "98765432101",
+  "birthDate": "1988-11-22",
+  "gender": "FEMALE",
+  "bloodType": "A_POSITIVE",
+  "phone": "11976543210",
+  "email": "maria.costa@email.com",
+  "address": "Avenida Paulista, 900",
+  "city": "São Paulo",
+  "state": "SP",
+  "zipCode": "01310100",
+  "weight": 62.0,
+  "height": 1.65,
+  "doctorId": "770e8400-e29b-41d4-a716-446655440020",
   "procedures": [
     {
       "procedureId": "660e8400-e29b-41d4-a716-446655440010",
@@ -109,13 +152,6 @@ Content-Type: application/json
   "weight": 76.0,
   "height": 1.78
 }
-
-### ============================================
-### 5. DELETE - Excluir paciente (hard delete)
-### ============================================
-### ⚠️ ATENÇÃO: Esta operação é IRREVERSÍVEL!
-DELETE {{baseUrl}}/api/patients/550e8400-e29b-41d4-a716-446655440001
-Authorization: Bearer {{token}}
 
 ### ============================================
 ### 6. PATCH - Inativar paciente (soft delete)
