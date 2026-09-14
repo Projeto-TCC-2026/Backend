@@ -1,7 +1,6 @@
 package com.tcc.application.service;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,10 +39,8 @@ import com.tcc.application.mapper.PatientMapper;
 import com.tcc.application.mapper.ProcedureExecutionMapper;
 import com.tcc.domain.model.Doctor;
 import com.tcc.domain.model.DoctorPatient;
-import com.tcc.domain.model.HealthReading;
 import com.tcc.domain.model.Hospital;
 import com.tcc.domain.model.Patient;
-import com.tcc.domain.model.ProcedureExecution;
 import com.tcc.domain.model.Role;
 import com.tcc.domain.model.User;
 import com.tcc.domain.repository.DoctorPatientRepository;
@@ -132,11 +129,12 @@ class PatientServiceImplTest {
         procedureRequest = new PatientProcedureRequest(PROCEDURE_ID, LocalDate.of(2026, 8, 10),
                 null, "EM_ANDAMENTO", "Primeira sessão");
 
+        // doctorId nulo: é o corpo que o DOCTOR manda, sem informar médico responsável.
         request = new PatientRequest(
                 "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1),
                 "M", "11999999999", "patient@test.com", "Rua A",
                 "Sao Paulo", "SP", "01000000", "O+", 70.0, 1.75,
-                List.of(procedureRequest)
+                null, List.of(procedureRequest)
         );
 
         updateRequest = new PatientUpdateRequest(
@@ -286,7 +284,7 @@ class PatientServiceImplTest {
                     "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1),
                     "M", "11999999999", "patient@test.com", "Rua A",
                     "Sao Paulo", "SP", "01000000", "O+", 70.0, 1.75,
-                    List.of(procedureRequest, second)
+                    null, List.of(procedureRequest, second)
             );
 
             mockAuthenticatedDoctor();
@@ -380,6 +378,191 @@ class PatientServiceImplTest {
             when(userRepository.save(any(User.class))).thenReturn(user);
             when(patientMapper.toEntity(request, user)).thenReturn(patient);
             when(patientRepository.save(patient)).thenReturn(patient);
+        }
+    }
+
+    @Nested
+    @DisplayName("createPatient pelo hospital")
+    class CreatePatientByHospital {
+
+        private PatientRequest requestWithDoctor;
+
+        @BeforeEach
+        void setUpHospitalRequest() {
+            requestWithDoctor = new PatientRequest(
+                    "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1),
+                    "M", "11999999999", "patient@test.com", "Rua A",
+                    "Sao Paulo", "SP", "01000000", "O+", 70.0, 1.75,
+                    DOCTOR_ID, List.of(procedureRequest)
+            );
+        }
+
+        @Test
+        @DisplayName("deve cadastrar paciente vinculado ao medico informado quando o medico e do hospital")
+        void shouldCreatePatientLinkedToInformedDoctor() {
+            User hospitalUser = hospitalUser();
+            doctor.setHospital(hospitalUser.getHospital());
+
+            when(userRepository.findByEmailAndActiveTrue(HOSPITAL_EMAIL)).thenReturn(Optional.of(hospitalUser));
+            when(doctorRepository.findById(DOCTOR_ID)).thenReturn(Optional.of(doctor));
+            when(userRepository.findByEmail("patient@test.com")).thenReturn(Optional.empty());
+            when(patientRepository.existsByCpfAndActiveTrue("12345678901")).thenReturn(false);
+            when(patientRepository.existsByEmailAndActiveTrue("patient@test.com")).thenReturn(false);
+            when(passwordEncoder.encode(any())).thenReturn(ENCODED_PASSWORD);
+            when(userRepository.save(any(User.class))).thenReturn(user);
+            when(patientMapper.toEntity(requestWithDoctor, user)).thenReturn(patient);
+            when(patientRepository.save(patient)).thenReturn(patient);
+            when(patientMapper.toResponse(patient)).thenReturn(response);
+            when(accountActivationService.issueActivationToken(user, "Joao Silva")).thenReturn(ACTIVATION_LINK);
+
+            PatientRegistrationResponse result = patientService.createPatient(HOSPITAL_EMAIL, requestWithDoctor);
+
+            assertThat(result.activationLink()).isEqualTo(ACTIVATION_LINK);
+
+            // O vínculo sai com o médico informado, não com quem cadastrou.
+            ArgumentCaptor<DoctorPatient> captor = ArgumentCaptor.forClass(DoctorPatient.class);
+            verify(doctorPatientRepository).save(captor.capture());
+            assertThat(captor.getValue().getDoctor()).isEqualTo(doctor);
+            assertThat(captor.getValue().getPatient()).isEqualTo(patient);
+
+            verify(patientProcedureService)
+                    .assignInitialProcedures(doctor, patient, List.of(procedureRequest));
+        }
+
+        @Test
+        @DisplayName("deve lancar excecao quando hospital nao informa o medico responsavel")
+        void shouldThrowWhenHospitalOmitsDoctorId() {
+            when(userRepository.findByEmailAndActiveTrue(HOSPITAL_EMAIL)).thenReturn(Optional.of(hospitalUser()));
+
+            // request do setUp externo: doctorId nulo
+            assertThatThrownBy(() -> patientService.createPatient(HOSPITAL_EMAIL, request))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("médico responsável");
+
+            verify(patientRepository, never()).save(any());
+            verify(userRepository, never()).save(any());
+            verifyNoInteractions(accountActivationService);
+        }
+
+        @Test
+        @DisplayName("deve lancar excecao quando o medico informado e de outro hospital")
+        void shouldThrowWhenDoctorBelongsToAnotherHospital() {
+            Hospital otherHospital = new Hospital();
+            otherHospital.setId(UUID.randomUUID());
+            doctor.setHospital(otherHospital);
+
+            when(userRepository.findByEmailAndActiveTrue(HOSPITAL_EMAIL)).thenReturn(Optional.of(hospitalUser()));
+            when(doctorRepository.findById(DOCTOR_ID)).thenReturn(Optional.of(doctor));
+
+            assertThatThrownBy(() -> patientService.createPatient(HOSPITAL_EMAIL, requestWithDoctor))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessageContaining("não pertence ao seu hospital");
+
+            verify(patientRepository, never()).save(any());
+            verify(doctorPatientRepository, never()).save(any());
+            verifyNoInteractions(accountActivationService);
+        }
+
+        @Test
+        @DisplayName("deve lancar excecao quando o medico informado esta inativo")
+        void shouldThrowWhenInformedDoctorIsInactive() {
+            User hospitalUser = hospitalUser();
+            doctor.setHospital(hospitalUser.getHospital());
+            doctor.setActive(false);
+
+            when(userRepository.findByEmailAndActiveTrue(HOSPITAL_EMAIL)).thenReturn(Optional.of(hospitalUser));
+            when(doctorRepository.findById(DOCTOR_ID)).thenReturn(Optional.of(doctor));
+
+            assertThatThrownBy(() -> patientService.createPatient(HOSPITAL_EMAIL, requestWithDoctor))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("inativo");
+
+            verify(patientRepository, never()).save(any());
+            verifyNoInteractions(accountActivationService);
+        }
+
+        @Test
+        @DisplayName("deve lancar excecao quando o hospital do usuario autenticado esta inativo")
+        void shouldThrowWhenHospitalIsInactive() {
+            User hospitalUser = hospitalUser();
+            hospitalUser.getHospital().setActive(false);
+
+            when(userRepository.findByEmailAndActiveTrue(HOSPITAL_EMAIL)).thenReturn(Optional.of(hospitalUser));
+
+            assertThatThrownBy(() -> patientService.createPatient(HOSPITAL_EMAIL, requestWithDoctor))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessageContaining("Hospital inativo");
+
+            // Nem chega a consultar o médico: o hospital inativo barra antes.
+            verifyNoInteractions(doctorPatientRepository);
+            verify(patientRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("deve lancar excecao quando o medico informado nao existe")
+        void shouldThrowWhenInformedDoctorNotFound() {
+            when(userRepository.findByEmailAndActiveTrue(HOSPITAL_EMAIL)).thenReturn(Optional.of(hospitalUser()));
+            when(doctorRepository.findById(DOCTOR_ID)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> patientService.createPatient(HOSPITAL_EMAIL, requestWithDoctor))
+                    .isInstanceOf(ResourceNotFoundException.class);
+
+            verify(patientRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("medico nao pode cadastrar paciente vinculado a outro medico")
+        void doctorCannotAssignPatientToAnotherDoctor() {
+            PatientRequest requestWithOtherDoctor = new PatientRequest(
+                    "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1),
+                    "M", "11999999999", "patient@test.com", "Rua A",
+                    "Sao Paulo", "SP", "01000000", "O+", 70.0, 1.75,
+                    UUID.randomUUID(), List.of(procedureRequest)
+            );
+
+            when(userRepository.findByEmailAndActiveTrue(DOCTOR_EMAIL)).thenReturn(Optional.of(doctorUser));
+            when(doctorRepository.findByUserId(DOCTOR_USER_ID)).thenReturn(Optional.of(doctor));
+
+            assertThatThrownBy(() -> patientService.createPatient(DOCTOR_EMAIL, requestWithOtherDoctor))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessageContaining("vinculados a você");
+
+            // Recusa explícita, não silenciosa: nada é criado.
+            verify(patientRepository, never()).save(any());
+            verify(doctorPatientRepository, never()).save(any());
+            verifyNoInteractions(accountActivationService);
+        }
+
+        @Test
+        @DisplayName("medico pode informar o proprio doctorId, sem alterar o vinculo")
+        void doctorMayInformOwnDoctorId() {
+            PatientRequest requestWithOwnId = new PatientRequest(
+                    "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1),
+                    "M", "11999999999", "patient@test.com", "Rua A",
+                    "Sao Paulo", "SP", "01000000", "O+", 70.0, 1.75,
+                    DOCTOR_ID, List.of(procedureRequest)
+            );
+
+            when(userRepository.findByEmailAndActiveTrue(DOCTOR_EMAIL)).thenReturn(Optional.of(doctorUser));
+            when(doctorRepository.findByUserId(DOCTOR_USER_ID)).thenReturn(Optional.of(doctor));
+            when(userRepository.findByEmail("patient@test.com")).thenReturn(Optional.empty());
+            when(patientRepository.existsByCpfAndActiveTrue("12345678901")).thenReturn(false);
+            when(patientRepository.existsByEmailAndActiveTrue("patient@test.com")).thenReturn(false);
+            when(passwordEncoder.encode(any())).thenReturn(ENCODED_PASSWORD);
+            when(userRepository.save(any(User.class))).thenReturn(user);
+            when(patientMapper.toEntity(requestWithOwnId, user)).thenReturn(patient);
+            when(patientRepository.save(patient)).thenReturn(patient);
+            when(patientMapper.toResponse(patient)).thenReturn(response);
+            when(accountActivationService.issueActivationToken(user, "Joao Silva")).thenReturn(ACTIVATION_LINK);
+
+            patientService.createPatient(DOCTOR_EMAIL, requestWithOwnId);
+
+            ArgumentCaptor<DoctorPatient> captor = ArgumentCaptor.forClass(DoctorPatient.class);
+            verify(doctorPatientRepository).save(captor.capture());
+            assertThat(captor.getValue().getDoctor()).isEqualTo(doctor);
+
+            // O médico é resolvido pelo autenticado, não buscado pelo ID informado.
+            verify(doctorRepository, never()).findById(any());
         }
     }
 
@@ -499,69 +682,6 @@ class PatientServiceImplTest {
             assertThat(result).isEqualTo(response);
             verify(patientMapper).updateEntity(patient, updateRequest);
             verifyNoInteractions(patientProcedureService);
-        }
-    }
-
-    @Nested
-    @DisplayName("deletePatient")
-    class DeletePatient {
-
-        @Test
-        @DisplayName("deve inativar paciente sem relacionamentos, sem remover do banco")
-        void shouldInactivatePatientWithoutRelationships() {
-            patient.setProcedureExecutions(new ArrayList<>());
-            patient.setHealthReadings(new ArrayList<>());
-            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
-
-            patientService.deletePatient(PATIENT_ID);
-
-            assertThat(patient.getActive()).isFalse();
-            assertThat(user.getActive()).isFalse();
-            verify(patientRepository).save(patient);
-            verify(userRepository).save(user);
-            verify(patientRepository, never()).delete(any());
-        }
-
-        @Test
-        @DisplayName("deve lancar excecao quando ha ProcedureExecution associados")
-        void shouldThrowWhenHasProcedureExecutions() {
-            List<ProcedureExecution> executions = List.of(new ProcedureExecution());
-            patient.setProcedureExecutions(new ArrayList<>(executions));
-            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
-
-            assertThatThrownBy(() -> patientService.deletePatient(PATIENT_ID))
-                    .isInstanceOf(BusinessException.class)
-                    .hasMessageContaining("procedimento");
-
-            assertThat(patient.getActive()).isTrue();
-            verify(patientRepository, never()).save(any());
-            verify(patientRepository, never()).delete(any());
-        }
-
-        @Test
-        @DisplayName("deve lancar excecao quando ha HealthReading associados")
-        void shouldThrowWhenHasHealthReadings() {
-            patient.setProcedureExecutions(new ArrayList<>());
-            List<HealthReading> readings = List.of(new HealthReading());
-            patient.setHealthReadings(new ArrayList<>(readings));
-            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
-
-            assertThatThrownBy(() -> patientService.deletePatient(PATIENT_ID))
-                    .isInstanceOf(BusinessException.class)
-                    .hasMessageContaining("leituras de saúde");
-
-            assertThat(patient.getActive()).isTrue();
-            verify(patientRepository, never()).save(any());
-            verify(patientRepository, never()).delete(any());
-        }
-
-        @Test
-        @DisplayName("deve lancar excecao quando paciente nao encontrado")
-        void shouldThrowWhenPatientNotFound() {
-            when(patientRepository.findById(NONEXISTENT_ID)).thenReturn(Optional.empty());
-
-            assertThatThrownBy(() -> patientService.deletePatient(NONEXISTENT_ID))
-                    .isInstanceOf(ResourceNotFoundException.class);
         }
     }
 

@@ -11,7 +11,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -50,14 +49,18 @@ public class PatientController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'HOSPITAL', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
     @Operation(
         summary = "Cadastrar novo paciente com conta de acesso",
         description = "Cria a conta de usuário do paciente (role PATIENT, com senha temporária " +
-                      "desconhecida), o paciente, e o vincula ao médico autenticado. O paciente recebe um " +
+                      "desconhecida), o paciente, e o vincula a um médico responsável. O paciente recebe um " +
                       "e-mail de boas-vindas para definir a própria senha; o link também volta em " +
                       "'activationLink' para ser repassado manualmente. Não se informa 'userId': a conta é " +
                       "criada a partir do 'email', que é obrigatório e único. " +
+                      "O médico responsável depende do perfil autenticado: o DOCTOR é sempre o responsável " +
+                      "pelos pacientes que cadastra e pode omitir 'doctorId' — se informar, precisa ser o " +
+                      "próprio ID; o HOSPITAL é obrigado a informar 'doctorId', que precisa ser de um médico " +
+                      "ativo do próprio hospital. Hospital inativo não cadastra paciente. " +
                       "É obrigatório informar pelo menos um procedimento em 'procedures': nenhum paciente " +
                       "existe sem procedimento ativo. Cada procedimento precisa estar ativo e autorizado ao " +
                       "médico pelo hospital, e não pode repetir na mesma requisição. " +
@@ -142,23 +145,6 @@ public class PatientController {
 
         PatientResponse patient = patientService.updatePatient(extractEmail(authentication), id, request);
         ApiResponse<PatientResponse> response = ApiResponse.success(patient);
-        
-        return ResponseEntity.ok(response);
-    }
-
-    @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(
-        summary = "Excluir paciente",
-        description = "Remove um paciente do sistema permanentemente (hard delete). " +
-                      "Apenas Administradores podem excluir pacientes. Use com cautela, pois esta ação é irreversível."
-    )
-    public ResponseEntity<ApiResponse<Void>> deletePatient(
-            @Parameter(description = "ID do paciente", example = "1", required = true)
-            @PathVariable UUID id) {
-        
-        patientService.deletePatient(id);
-        ApiResponse<Void> response = ApiResponse.success();
         
         return ResponseEntity.ok(response);
     }

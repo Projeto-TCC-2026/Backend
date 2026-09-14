@@ -70,7 +70,7 @@ public class PatientServiceImpl implements PatientService {
     @Override
     @Transactional
     public PatientRegistrationResponse createPatient(String email, PatientRequest request) {
-        Doctor doctor = resolveDoctor(email);
+        Doctor doctor = resolveResponsibleDoctor(email, request.doctorId());
 
         User existingUser = userRepository.findByEmail(request.email()).orElse(null);
         if (existingUser != null) {
@@ -189,26 +189,6 @@ public class PatientServiceImpl implements PatientService {
         Patient updatedPatient = patientRepository.save(existingPatient);
 
         return patientMapper.toResponse(updatedPatient);
-    }
-
-    @Override
-    @Transactional
-    public void deletePatient(UUID id) {
-        Patient patient = patientRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.patientNotFoundById(id)));
-
-        if (patient.hasProcedureExecutions()) {
-            throw new BusinessException(ErrorMessages.patientHasProcedureExecutions(
-                    patient.countProcedureExecutions()));
-        }
-
-        if (!patient.getHealthReadings().isEmpty()) {
-            throw new BusinessException(ErrorMessages.PATIENT_HAS_HEALTH_READINGS);
-        }
-
-        patient.inactivate();
-        patientRepository.save(patient);
-        inactivateAccount(patient);
     }
 
     @Override
@@ -377,5 +357,74 @@ public class PatientServiceImpl implements PatientService {
 
         return doctorRepository.findByUserId(doctorUser.getId())
                 .orElseThrow(() -> new UnauthorizedException(ErrorMessages.doctorProfileNotFound()));
+    }
+
+    /**
+     * Define o médico responsável pelo paciente conforme o perfil de quem cadastra.
+     *
+     * <p>DOCTOR continua sem informar nada: o responsável é ele mesmo. Se mandar um
+     * {@code doctorId} de terceiro, é recusado em vez de ignorado — ignorar em silêncio
+     * criaria o paciente num vínculo diferente do que o cliente pediu.
+     *
+     * <p>HOSPITAL precisa informar o {@code doctorId}, e o médico é conferido contra o
+     * hospital do usuário autenticado. Sem essa conferência, o gestor poderia vincular
+     * paciente a médico de outro hospital e, pela regra de escopo de
+     * {@code assertCanAccess}, passar a ver dado de paciente fora do próprio hospital.
+     */
+    private Doctor resolveResponsibleDoctor(String requesterEmail, UUID requestedDoctorId) {
+        User requester = findRequester(requesterEmail);
+
+        return switch (requester.getRole()) {
+            case DOCTOR -> {
+                Doctor ownDoctor = resolveDoctor(requesterEmail);
+
+                if (requestedDoctorId != null && !requestedDoctorId.equals(ownDoctor.getId())) {
+                    throw new UnauthorizedException(ErrorMessages.doctorCannotAssignAnotherDoctor());
+                }
+
+                yield ownDoctor;
+            }
+            case HOSPITAL -> {
+                if (requestedDoctorId == null) {
+                    throw new BusinessException(ErrorMessages.doctorIdRequiredForHospital());
+                }
+
+                yield resolveHospitalDoctor(requireActiveHospitalId(requester), requestedDoctorId);
+            }
+            default -> throw new UnauthorizedException(ErrorMessages.doctorProfileNotFound());
+        };
+    }
+
+    /** Médico informado pelo hospital: precisa existir, pertencer ao hospital e estar ativo. */
+    private Doctor resolveHospitalDoctor(UUID hospitalId, UUID doctorId) {
+        Doctor doctor = doctorRepository.findById(doctorId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.doctorNotFoundById(doctorId)));
+
+        if (doctor.getHospital() == null || !doctor.getHospital().getId().equals(hospitalId)) {
+            throw new UnauthorizedException(ErrorMessages.doctorNotInHospital());
+        }
+
+        if (!Boolean.TRUE.equals(doctor.getActive())) {
+            throw new BusinessException(ErrorMessages.doctorInactiveForPatientAssignment());
+        }
+
+        return doctor;
+    }
+
+    /**
+     * Como {@link #requireHospitalId}, mais a checagem de hospital ativo: hospital
+     * desativado não cadastra paciente novo, espelhando o que o login de hospital já faz.
+     * Separado do outro para não mudar o comportamento das consultas de leitura.
+     */
+    private UUID requireActiveHospitalId(User requester) {
+        if (requester.getHospital() == null) {
+            throw new UnauthorizedException(ErrorMessages.hospitalProfileNotFound());
+        }
+
+        if (!Boolean.TRUE.equals(requester.getHospital().getActive())) {
+            throw new UnauthorizedException(ErrorMessages.inactiveHospitalAccount());
+        }
+
+        return requester.getHospital().getId();
     }
 }

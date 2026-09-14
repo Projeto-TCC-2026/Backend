@@ -136,6 +136,22 @@ public final class ErrorMessages {
         return "Usuário autenticado não possui hospital vinculado";
     }
 
+    public static String doctorIdRequiredForHospital() {
+        return "Informe o médico responsável pelo paciente";
+    }
+
+    public static String doctorInactiveForPatientAssignment() {
+        return "Este médico está inativo e não pode receber pacientes";
+    }
+
+    public static String doctorCannotAssignAnotherDoctor() {
+        return "Você só pode cadastrar pacientes vinculados a você";
+    }
+
+    public static String inactiveHospitalAccount() {
+        return "Hospital inativo. Entre em contato com o administrador";
+    }
+
     public static String inactiveUserAccount() {
         return "Conta inativa. Entre em contato com o administrador";
     }

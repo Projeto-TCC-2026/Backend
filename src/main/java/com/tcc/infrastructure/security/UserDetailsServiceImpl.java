@@ -1,14 +1,15 @@
 package com.tcc.infrastructure.security;
 
-import com.tcc.domain.model.User;
-import com.tcc.domain.repository.UserRepository;
+import java.util.List;
+
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
+import com.tcc.domain.model.User;
+import com.tcc.domain.repository.UserRepository;
 
 @Service
 public class UserDetailsServiceImpl implements UserDetailsService {
@@ -21,7 +22,10 @@ public class UserDetailsServiceImpl implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        User user = userRepository.findByEmail(email)
+        // Filtra por active: este método roda a cada requisição autenticada, via
+        // JwtAuthFilter. Sem o filtro, um usuário inativado continuaria autenticado
+        // com o token emitido antes da inativação até ele expirar.
+        User user = userRepository.findByEmailAndActiveTrue(email)
                 .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado: " + email));
 
         return org.springframework.security.core.userdetails.User.builder()

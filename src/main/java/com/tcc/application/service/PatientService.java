@@ -41,8 +41,6 @@ public interface PatientService {
      */
     PatientResponse updatePatient(String requesterEmail, UUID id, PatientUpdateRequest request);
 
-    void deletePatient(UUID id);
-
     void inactivatePatient(String requesterEmail, UUID id);
 
     Page<PatientResponse> searchByName(String requesterEmail, String name, Pageable pageable);

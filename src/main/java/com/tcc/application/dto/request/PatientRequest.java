@@ -2,6 +2,7 @@ package com.tcc.application.dto.request;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
@@ -16,6 +17,10 @@ import jakarta.validation.constraints.Size;
  * Corpo do cadastro de paciente. Não recebe {@code userId}: a conta de acesso é criada
  * pelo backend a partir do {@code email}, com senha temporária desconhecida, e o paciente
  * define a própria senha pelo link de ativação.
+ *
+ * <p>{@code doctorId} é condicional ao perfil do requisitante e por isso não tem
+ * {@code @NotNull}: obrigatório para HOSPITAL, dispensável para DOCTOR. A validação
+ * está no service, que conhece quem está autenticado.
  *
  * <p>A atualização usa {@link PatientUpdateRequest}, que não tem {@code procedures}:
  * procedimento é atribuído e removido pelos endpoints de
@@ -66,6 +71,14 @@ public record PatientRequest(
         Double weight,
 
         Double height,
+
+        /**
+         * Médico responsável pelo paciente. Sem anotação de obrigatoriedade porque a
+         * exigência depende do perfil de quem chama, e isso o Bean Validation não vê:
+         * o HOSPITAL precisa informar, o DOCTOR não — para ele o médico responsável é
+         * o próprio usuário autenticado. A regra fica no service.
+         */
+        UUID doctorId,
 
         /**
          * Nenhum paciente existe sem procedimento: o médico define ao menos um no
