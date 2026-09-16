@@ -53,7 +53,7 @@ public class ForgotPasswordServiceImpl implements ForgotPasswordService {
                 userRepository.findByEmailAndActiveTrue(email)
                                 .ifPresent(user -> {
 
-                                        String rawToken = UUID.randomUUID().toString();
+                                        String rawToken = String.format("%06d", java.util.concurrent.ThreadLocalRandom.current().nextInt(1000000));
                                         String tokenHash = hashToken(rawToken);
 
                                         // Invalida tokens anteriores do usuário
@@ -96,22 +96,27 @@ public class ForgotPasswordServiceImpl implements ForgotPasswordService {
         @Transactional
         public void resetPassword(ResetPasswordRequest request) {
 
+                String tokenOrCode = request.codeOrToken();
+                if (tokenOrCode.isBlank()) {
+                        throw new InvalidTokenException("O código de verificação é obrigatório");
+                }
+
                 PasswordResetToken resetToken = passwordResetTokenRepository
-                                .findByTokenHash(hashToken(request.token()))
+                                .findByTokenHash(hashToken(tokenOrCode))
                                 .orElseThrow(
                                                 () -> new InvalidTokenException(
-                                                                "Token de recuperação inválido"));
+                                                                "Código de verificação inválido"));
 
                 // Token já utilizado
                 if (resetToken.isUsed()) {
                         throw new InvalidTokenException(
-                                        "Token de recuperação já foi usado");
+                                        "Código de verificação já foi usado");
                 }
 
                 // Token expirado
                 if (resetToken.getExpiresAt().isBefore(LocalDateTime.now())) {
                         throw new InvalidTokenException(
-                                        "Token de recuperação expirado");
+                                        "Código de verificação expirado");
                 }
 
                 // Senhas diferentes
