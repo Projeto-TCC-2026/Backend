@@ -7,10 +7,12 @@ import org.springframework.data.domain.Pageable;
 
 import com.tcc.application.dto.request.PatientRequest;
 import com.tcc.application.dto.request.PatientUpdateRequest;
+import com.tcc.application.dto.request.UpdatePatientProfileRequest;
 import com.tcc.application.dto.response.AccessLinkResponse;
 import com.tcc.application.dto.response.PatientRegistrationResponse;
 import com.tcc.application.dto.response.PatientResponse;
 import com.tcc.application.dto.response.ProcedureExecutionResponse;
+import com.tcc.application.dto.response.UserProfileResponse;
 
 public interface PatientService {
 
@@ -40,6 +42,13 @@ public interface PatientService {
      * gerenciado pelo {@link PatientProcedureService}.
      */
     PatientResponse updatePatient(String requesterEmail, UUID id, PatientUpdateRequest request);
+
+    /**
+     * Permite ao próprio paciente autenticado atualizar os dados do seu perfil.
+     * CPF, e-mail e tipo sanguíneo são excluídos desta operação: só podem ser
+     * alterados por um médico via {@code PUT /api/patients/{id}}.
+     */
+    UserProfileResponse updateOwnProfile(String email, UpdatePatientProfileRequest request);
 
     void inactivatePatient(String requesterEmail, UUID id);
 

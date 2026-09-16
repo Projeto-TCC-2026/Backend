@@ -10,10 +10,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.tcc.application.dto.request.PatientRequest;
 import com.tcc.application.dto.request.PatientUpdateRequest;
+import com.tcc.application.dto.request.UpdatePatientProfileRequest;
 import com.tcc.application.dto.response.AccessLinkResponse;
 import com.tcc.application.dto.response.PatientRegistrationResponse;
 import com.tcc.application.dto.response.PatientResponse;
 import com.tcc.application.dto.response.ProcedureExecutionResponse;
+import com.tcc.application.dto.response.UserProfileResponse;
 import com.tcc.application.mapper.PatientMapper;
 import com.tcc.application.mapper.ProcedureExecutionMapper;
 import com.tcc.domain.model.Doctor;
@@ -273,6 +275,39 @@ public class PatientServiceImpl implements PatientService {
     @Transactional(readOnly = true)
     public long countActivePatients() {
         return patientRepository.countByActiveTrue();
+    }
+
+    @Override
+    @Transactional
+    public UserProfileResponse updateOwnProfile(String email, UpdatePatientProfileRequest request) {
+        User user = userRepository.findByEmailAndActiveTrue(email)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundByEmail(email)));
+
+        Patient patient = patientRepository.findByUserId(user.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Perfil de paciente não encontrado"));
+
+        patient.setFullName(request.fullName());
+        if (request.birthDate() != null) {
+            patient.setBirthDate(request.birthDate());
+        }
+        patient.setGender(request.gender());
+        patient.setPhone(request.phone());
+        patient.setAddress(request.address());
+        patient.setCity(request.city());
+        patient.setState(request.state());
+        patient.setZipCode(request.zipCode());
+        if (request.weight() != null) {
+            patient.setWeight(request.weight());
+        }
+        if (request.height() != null) {
+            patient.setHeight(request.height());
+        }
+        patientRepository.save(patient);
+
+        return new UserProfileResponse(
+                user.getId(), user.getEmail(), user.getRole().name(),
+                patient.getId(), patient.getFullName(), true
+        );
     }
 
     private Page<Patient> listVisible(User requester,

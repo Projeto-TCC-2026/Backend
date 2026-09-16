@@ -20,6 +20,9 @@ public class UserProfileResponse {
     // Hospital-specific fields
     private UUID hospitalId;
 
+    // Patient-specific fields
+    private UUID patientId;
+
     public UserProfileResponse() {}
 
     // Constructor for ADMIN
@@ -52,6 +55,16 @@ public class UserProfileResponse {
         this.hospitalName = hospitalName;
     }
 
+    // Constructor for PATIENT
+    public UserProfileResponse(UUID id, String email, String role,
+                               UUID patientId, String fullName, boolean isPatient) {
+        this.id = id;
+        this.email = email;
+        this.role = role;
+        this.patientId = patientId;
+        this.fullName = fullName;
+    }
+
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
 
@@ -78,4 +91,7 @@ public class UserProfileResponse {
 
     public UUID getHospitalId() { return hospitalId; }
     public void setHospitalId(UUID hospitalId) { this.hospitalId = hospitalId; }
+
+    public UUID getPatientId() { return patientId; }
+    public void setPatientId(UUID patientId) { this.patientId = patientId; }
 }

@@ -6,6 +6,7 @@ import com.tcc.application.dto.request.LoginRequest;
 import com.tcc.application.dto.request.RefreshTokenRequest;
 import com.tcc.application.dto.request.UpdateDoctorProfileRequest;
 import com.tcc.application.dto.request.UpdateHospitalProfileRequest;
+import com.tcc.application.dto.request.UpdatePatientProfileRequest;
 import com.tcc.application.dto.response.ApiResponse;
 import com.tcc.application.dto.response.AuthResponse;
 import com.tcc.application.dto.response.DoctorAuthResponse;
@@ -17,6 +18,7 @@ import com.tcc.application.dto.response.UserProfileResponse;
 import com.tcc.application.service.AuthService;
 import com.tcc.application.service.DoctorService;
 import com.tcc.application.service.HospitalService;
+import com.tcc.application.service.PatientService;
 import com.tcc.application.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -42,15 +44,18 @@ public class AuthController {
     private final UserService userService;
     private final DoctorService doctorService;
     private final HospitalService hospitalService;
+    private final PatientService patientService;
 
     public AuthController(AuthService authService,
                           UserService userService,
                           DoctorService doctorService,
-                          HospitalService hospitalService) {
+                          HospitalService hospitalService,
+                          PatientService patientService) {
         this.authService = authService;
         this.userService = userService;
         this.doctorService = doctorService;
         this.hospitalService = hospitalService;
+        this.patientService = patientService;
     }
 
     @PostMapping("/login")
@@ -147,6 +152,22 @@ public class AuthController {
             Authentication authentication) {
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
         UserProfileResponse profile = hospitalService.updateOwnProfile(userDetails.getUsername(), request);
+        return ResponseEntity.ok(ApiResponse.success(profile, "Perfil atualizado com sucesso."));
+    }
+
+    @PatchMapping("/profile/patient")
+    @PreAuthorize("hasRole('PATIENT')")
+    @Operation(
+        summary = "Editar perfil do paciente",
+        description = "Permite ao paciente autenticado atualizar seus próprios dados cadastrais. " +
+                      "CPF, e-mail e tipo sanguíneo não são editáveis por este endpoint: " +
+                      "essas alterações exigem um médico via PUT /api/patients/{id}."
+    )
+    public ResponseEntity<ApiResponse<UserProfileResponse>> updatePatientProfile(
+            @Valid @RequestBody UpdatePatientProfileRequest request,
+            Authentication authentication) {
+        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+        UserProfileResponse profile = patientService.updateOwnProfile(userDetails.getUsername(), request);
         return ResponseEntity.ok(ApiResponse.success(profile, "Perfil atualizado com sucesso."));
     }
 }
