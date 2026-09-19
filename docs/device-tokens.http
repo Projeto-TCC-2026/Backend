@@ -1,0 +1,130 @@
+### Variáveis
+@baseUrl = http://localhost:8080/api
+@patientToken = YOUR_PATIENT_JWT_HERE
+@doctorToken = YOUR_DOCTOR_JWT_HERE
+@pushToken = fcm-token-abc123
+@otherPushToken = fcm-token-xyz789
+
+### Registro de token de push do aplicativo mobile
+###
+### Rota base: /api/mobile/devices — exige JWT de perfil PATIENT.
+### O usuário vem sempre do token autenticado, nunca do corpo da requisição.
+###
+### A chave de unicidade é o token de push, não o usuário: o mesmo paciente pode
+### ter vários dispositivos registrados. Quando o token já existe, o registro é
+### atualizado em vez de duplicado.
+###
+### Obtenha o JWT pelo fluxo normal de login em /auth/login.
+
+### 1. Registro de um novo token -> 200, ApiResponse com success=true e data nulo
+POST {{baseUrl}}/mobile/devices
+Content-Type: application/json
+Authorization: Bearer {{patientToken}}
+
+{
+  "token": "{{pushToken}}",
+  "platform": "ANDROID",
+  "deviceId": "device-001"
+}
+
+### 2. Registro sem deviceId -> 200 (campo é opcional)
+POST {{baseUrl}}/mobile/devices
+Content-Type: application/json
+Authorization: Bearer {{patientToken}}
+
+{
+  "token": "{{otherPushToken}}",
+  "platform": "IOS"
+}
+
+### 3. Mesmo token de novo, com plataforma e aparelho diferentes -> 200
+###    Atualiza o registro existente. Não cria duplicado nem devolve erro de unicidade.
+POST {{baseUrl}}/mobile/devices
+Content-Type: application/json
+Authorization: Bearer {{patientToken}}
+
+{
+  "token": "{{pushToken}}",
+  "platform": "IOS",
+  "deviceId": "device-002"
+}
+
+### 4. Segundo dispositivo do mesmo paciente -> 200
+###    Um usuário pode acumular vários tokens ao mesmo tempo.
+POST {{baseUrl}}/mobile/devices
+Content-Type: application/json
+Authorization: Bearer {{patientToken}}
+
+{
+  "token": "fcm-token-tablet-555",
+  "platform": "ANDROID",
+  "deviceId": "device-tablet"
+}
+
+### 5. Token em branco -> 400
+POST {{baseUrl}}/mobile/devices
+Content-Type: application/json
+Authorization: Bearer {{patientToken}}
+
+{
+  "token": "",
+  "platform": "ANDROID",
+  "deviceId": "device-001"
+}
+
+### 6. Plataforma ausente -> 400
+POST {{baseUrl}}/mobile/devices
+Content-Type: application/json
+Authorization: Bearer {{patientToken}}
+
+{
+  "token": "{{pushToken}}",
+  "deviceId": "device-001"
+}
+
+### 7. Sem JWT -> 401
+POST {{baseUrl}}/mobile/devices
+Content-Type: application/json
+
+{
+  "token": "{{pushToken}}",
+  "platform": "ANDROID",
+  "deviceId": "device-001"
+}
+
+### 8. JWT de perfil DOCTOR -> 403 (a rota é exclusiva de PATIENT)
+POST {{baseUrl}}/mobile/devices
+Content-Type: application/json
+Authorization: Bearer {{doctorToken}}
+
+{
+  "token": "{{pushToken}}",
+  "platform": "ANDROID",
+  "deviceId": "device-001"
+}
+
+### 9. Remoção do token -> 200, ApiResponse com success=true e data nulo
+###    O token vai na query string, não no corpo.
+DELETE {{baseUrl}}/mobile/devices?token={{pushToken}}
+Authorization: Bearer {{patientToken}}
+
+### 10. Remoção do mesmo token de novo -> 404
+###     Já não existe vínculo com o usuário autenticado.
+DELETE {{baseUrl}}/mobile/devices?token={{pushToken}}
+Authorization: Bearer {{patientToken}}
+
+### 11. Remoção de token de outro paciente -> 404
+###     Mesma resposta de token inexistente, de propósito: não revela que o token existe.
+DELETE {{baseUrl}}/mobile/devices?token=fcm-token-de-outro-paciente
+Authorization: Bearer {{patientToken}}
+
+### 12. Remoção sem o parâmetro token -> 400
+DELETE {{baseUrl}}/mobile/devices
+Authorization: Bearer {{patientToken}}
+
+### 13. Remoção sem JWT -> 401
+DELETE {{baseUrl}}/mobile/devices?token={{pushToken}}
+
+### 14. Remoção com JWT de perfil DOCTOR -> 403
+DELETE {{baseUrl}}/mobile/devices?token={{pushToken}}
+Authorization: Bearer {{doctorToken}}
