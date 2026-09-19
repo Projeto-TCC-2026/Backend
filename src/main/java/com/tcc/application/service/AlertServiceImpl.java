@@ -6,6 +6,9 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +17,7 @@ import com.tcc.application.dto.request.AlertRequest;
 import com.tcc.application.dto.response.AlertEvaluationResponse;
 import com.tcc.application.dto.response.AlertResponse;
 import com.tcc.application.mapper.AlertMapper;
+import com.tcc.domain.event.AlertCreatedEvent;
 import com.tcc.domain.model.Alert;
 import com.tcc.domain.model.Patient;
 import com.tcc.domain.model.ReadingThreshold;
@@ -24,8 +28,6 @@ import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.ErrorMessages;
 import com.tcc.exception.ResourceNotFoundException;
 import com.tcc.exception.UnauthorizedException;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 
 @Service
 public class AlertServiceImpl implements AlertService {
@@ -44,17 +46,20 @@ public class AlertServiceImpl implements AlertService {
     private final AlertRepository alertRepository;
     private final AlertMapper alertMapper;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public AlertServiceImpl(PatientRepository patientRepository,
                             ReadingThresholdRepository readingThresholdRepository,
                             AlertRepository alertRepository,
                             AlertMapper alertMapper,
-                            UserRepository userRepository) {
+                            UserRepository userRepository,
+                            ApplicationEventPublisher eventPublisher) {
         this.patientRepository = patientRepository;
         this.readingThresholdRepository = readingThresholdRepository;
         this.alertRepository = alertRepository;
         this.alertMapper = alertMapper;
         this.userRepository = userRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -82,6 +87,10 @@ public class AlertServiceImpl implements AlertService {
 
         Alert alert = buildAlert(patient, range, reason);
         Alert savedAlert = alertRepository.save(alert);
+
+        // Consumido em AFTER_COMMIT: se esta transação sofrer rollback, nenhuma
+        // notificação é enviada para um alerta que não existe.
+        eventPublisher.publishEvent(new AlertCreatedEvent(savedAlert));
 
         log.info("Alerta {} gerado para o paciente {} a partir do tipo de leitura {}.",
                 savedAlert.getId(), patient.getId(), range.getReadingType());

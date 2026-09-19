@@ -1,5 +1,6 @@
 package com.tcc.domain.repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -14,4 +15,6 @@ public interface DeviceTokenRepository extends JpaRepository<DeviceToken, UUID> 
     Optional<DeviceToken> findByToken(String token);
 
     Optional<DeviceToken> findByTokenAndUserId(String token, UUID userId);
+
+    List<DeviceToken> findByUserId(UUID userId);
 }
