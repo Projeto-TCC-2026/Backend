@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
 @RestController
-@RequestMapping("/api/mobile/patient-procedures")
+@RequestMapping("/api/mobile/patient-procedures/{patientProcedureId}")
 @PreAuthorize("hasRole('PATIENT')")
 public class MobileCheckinFormController {
   private final DoctorProcedureConfigurationService service;
@@ -34,14 +34,14 @@ public class MobileCheckinFormController {
     this.checkinService = checkinService;
   }
 
-  @GetMapping("/{patientProcedureId}/checkin-form")
+  @GetMapping("/checkin-form")
   public ResponseEntity<ApiResponse<CheckinFormResponse>> getForm(
       Authentication authentication, @PathVariable UUID patientProcedureId) {
     String email = ((UserDetails) authentication.getPrincipal()).getUsername();
     return ResponseEntity.ok(ApiResponse.success(service.getPatientCheckinForm(email, patientProcedureId)));
   }
 
-  @PostMapping("/{patientProcedureId}/checkins")
+  @PostMapping("/checkins")
   public ResponseEntity<ApiResponse<CheckinResponse>> submitManualCheckin(
       Authentication authentication,
       @PathVariable UUID patientProcedureId,

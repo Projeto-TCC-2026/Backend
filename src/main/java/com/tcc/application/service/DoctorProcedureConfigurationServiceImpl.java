@@ -169,7 +169,7 @@ public class DoctorProcedureConfigurationServiceImpl implements DoctorProcedureC
 
   private DoctorProcedureFieldResponse toResponse(DoctorProcedureField field) {
     List<DoctorProcedureFieldResponse.FieldThresholdResponse> thresholds = field.getThresholds().stream()
-        .sorted(Comparator.comparing(FieldThreshold::getSeverityOrder).reversed())
+        .sorted(Comparator.comparing((FieldThreshold item) -> item.getSeverityOrder()).reversed())
         .map(item -> new DoctorProcedureFieldResponse.FieldThresholdResponse(item.getId(), item.getSeverityOrder(),
             item.getLabel(), item.getColor(), item.getMinValue(), item.getMaxValue()))
         .toList();
