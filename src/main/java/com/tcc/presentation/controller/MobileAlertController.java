@@ -3,7 +3,6 @@ package com.tcc.presentation.controller;
 import com.tcc.application.dto.response.AlertResponse;
 import com.tcc.application.dto.response.ApiResponse;
 import com.tcc.application.service.AlertService;
-import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;

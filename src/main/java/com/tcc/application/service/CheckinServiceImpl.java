@@ -108,7 +108,7 @@ public class CheckinServiceImpl implements CheckinService {
             .orElse(null);
         if (existing != null) {
             List<UUID> checkinIds = checkinRepository.findBySubmissionId(existing.getId()).stream()
-                .map(Checkin::getId)
+                .map(checkin -> checkin.getId())
                 .toList();
             return new AggregatedCheckinResponse(existing.getId(), checkinIds,
                 existing.getSubmittedAt(), existing.getEditUntil());
@@ -216,7 +216,7 @@ public class CheckinServiceImpl implements CheckinService {
             .orElseThrow(() -> new ResourceNotFoundException("Configuração do procedimento não encontrada"));
         Set<UUID> fieldIds = fieldRepository
             .findByDoctorProcedureIdAndActiveTrueOrderByDisplayOrderAsc(doctorProcedure.getId()).stream()
-            .map(DoctorProcedureField::getId)
+            .map(doctorProcedureField -> doctorProcedureField.getId())
             .collect(java.util.stream.Collectors.toSet());
         return submittedFields.stream().filter(value -> fieldIds.contains(value.fieldId())).toList();
         }

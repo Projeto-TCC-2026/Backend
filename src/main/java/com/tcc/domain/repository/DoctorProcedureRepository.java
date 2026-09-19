@@ -7,11 +7,9 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.stereotype.Repository;
 
 import com.tcc.domain.model.DoctorProcedure;
 
-@Repository
 public interface DoctorProcedureRepository extends JpaRepository<DoctorProcedure, UUID> {
 
     List<DoctorProcedure> findByProcedureIdAndActiveTrue(UUID procedureId);

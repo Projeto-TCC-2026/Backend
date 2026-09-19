@@ -296,7 +296,7 @@ public class ReportServiceImpl implements ReportService {
                 .filter(assignment -> !alert.getCreatedAt().toLocalDate().isBefore(assignment.getStartDate()))
                 .filter(assignment -> assignment.getEndDate() == null
                         || !alert.getCreatedAt().toLocalDate().isAfter(assignment.getEndDate()))
-                .max(Comparator.comparing(PatientProcedure::getStartDate));
+                .max(Comparator.comparing(patientProcedure -> patientProcedure.getStartDate()));
     }
 
     private void writeHeader(Sheet sheet, String... labels) {

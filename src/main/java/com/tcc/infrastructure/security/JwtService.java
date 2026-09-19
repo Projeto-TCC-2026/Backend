@@ -48,11 +48,11 @@ public class JwtService {
     }
 
     public String extractUsername(String token) {
-        return extractClaim(token, Claims::getSubject);
+        return extractClaim(token, (Claims claims) -> claims.getSubject());
     }
 
     public Date extractExpiration(String token) {
-        return extractClaim(token, Claims::getExpiration);
+        return extractClaim(token, (Claims claims) -> claims.getExpiration());
     }
 
     public boolean isTokenValid(String token) {

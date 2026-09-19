@@ -2,13 +2,11 @@ package com.tcc.domain.repository;
 
 import com.tcc.domain.model.HealthReading;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-@Repository
 public interface HealthReadingRepository extends JpaRepository<HealthReading, UUID> {
     
     List<HealthReading> findByPatientId(UUID patientId);
