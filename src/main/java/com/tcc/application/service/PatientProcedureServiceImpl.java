@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.tcc.application.dto.request.PatientProcedureRequest;
 import com.tcc.application.dto.response.PatientProcedureResponse;
+import com.tcc.application.dto.response.PatientProcedureSummaryResponse;
 import com.tcc.application.dto.response.ProcedureResponse;
 import com.tcc.application.mapper.PatientProcedureMapper;
 import com.tcc.application.mapper.ProcedureMapper;
@@ -136,6 +137,16 @@ public class PatientProcedureServiceImpl implements PatientProcedureService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<PatientProcedureSummaryResponse> listOwnProcedures(String email) {
+        requireOwnActivePatient(email);
+
+        return patientProcedureRepository.findActiveByPatientUserEmail(email).stream()
+                .map(patientProcedureMapper::toSummaryResponse)
+                .toList();
+    }
+
+    @Override
     @Transactional
     public PatientProcedureResponse updateAssignment(String email, UUID patientId, UUID assignmentId,
                                                      PatientProcedureRequest request) {
@@ -175,6 +186,24 @@ public class PatientProcedureServiceImpl implements PatientProcedureService {
 
         return doctorRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new UnauthorizedException(ErrorMessages.doctorProfileNotFound()));
+    }
+
+    /**
+     * Garante que o usuário autenticado tem paciente ativo vinculado antes de listar.
+     * Sem isso, um usuário sem paciente receberia lista vazia em vez de "não encontrado",
+     * escondendo um cadastro incompleto.
+     */
+    private void requireOwnActivePatient(String email) {
+        var user = userRepository.findByEmailAndActiveTrue(email)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundByEmail(email)));
+
+        Patient patient = patientRepository.findByUserId(user.getId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Paciente não encontrado para o usuário autenticado"));
+
+        if (!patient.isActive()) {
+            throw new ResourceNotFoundException(ErrorMessages.patientNotFoundById(patient.getId()));
+        }
     }
 
     private Patient findPatientLinkedToDoctor(UUID patientId, UUID doctorId) {

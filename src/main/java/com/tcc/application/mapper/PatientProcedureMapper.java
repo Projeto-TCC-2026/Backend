@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component;
 
 import com.tcc.application.dto.request.PatientProcedureRequest;
 import com.tcc.application.dto.response.PatientProcedureResponse;
+import com.tcc.application.dto.response.PatientProcedureSummaryResponse;
 import com.tcc.domain.model.Doctor;
 import com.tcc.domain.model.Patient;
 import com.tcc.domain.model.PatientProcedure;
@@ -35,6 +36,22 @@ public class PatientProcedureMapper {
                 patientProcedure.getEndDate(),
                 patientProcedure.getStatus(),
                 patientProcedure.getNotes()
+        );
+    }
+
+    /**
+     * Visão reduzida para o próprio paciente: sem o paciente (redundante) e sem as
+     * anotações clínicas do médico.
+     */
+    public PatientProcedureSummaryResponse toSummaryResponse(PatientProcedure patientProcedure) {
+        if (patientProcedure == null) return null;
+        return new PatientProcedureSummaryResponse(
+                patientProcedure.getId(),
+                procedureMapper.toSummary(patientProcedure.getProcedure()),
+                doctorMapper.toSummary(patientProcedure.getDoctor()),
+                patientProcedure.getStartDate(),
+                patientProcedure.getEndDate(),
+                patientProcedure.getStatus()
         );
     }
 

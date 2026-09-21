@@ -36,6 +36,18 @@ public interface PatientProcedureRepository extends JpaRepository<PatientProcedu
      */
     long countByPatientIdAndActiveTrue(UUID patientId);
 
+    /**
+     * Procedimentos ativos do paciente identificado pelo e-mail do usuário autenticado.
+     * O paciente nunca vem por parâmetro de request: o vínculo é resolvido pelo próprio
+     * {@code User} dono do token.
+     */
+    @Query("SELECT pp FROM PatientProcedure pp "
+            + "WHERE pp.patient.user.email = :email "
+            + "AND pp.patient.active = true "
+            + "AND pp.active = true "
+            + "ORDER BY pp.startDate DESC")
+    List<PatientProcedure> findActiveByPatientUserEmail(@Param("email") String email);
+
     @Query("SELECT CASE WHEN COUNT(pp) > 0 THEN true ELSE false END FROM PatientProcedure pp "
             + "WHERE pp.patient.id = :patientId AND pp.doctor.hospital.id = :hospitalId "
             + "AND pp.active = true "

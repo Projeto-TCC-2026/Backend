@@ -42,3 +42,5 @@ run-dev.ps1
 
 # Script local que carrega credencial de produção — NÃO versionar
 run-prod.ps1
+
+seed-data.sql
