@@ -38,7 +38,7 @@ import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/patients")
-@Tag(name = "Pacientes", description = "CRUD de Pacientes — ADMIN, HOSPITAL e DOCTOR")
+@Tag(name = "Pacientes", description = "CRUD de Pacientes — DOCTOR e HOSPITAL")
 @SecurityRequirement(name = "Bearer Authentication")
 public class PatientController {
 
@@ -79,7 +79,7 @@ public class PatientController {
     }
 
     @PostMapping("/{id}/access-link")
-    @PreAuthorize("hasAnyRole('ADMIN', 'HOSPITAL', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
     @Operation(
         summary = "Gerar novo link de primeiro acesso do paciente",
         description = "Invalida o link de ativação pendente (se houver), gera um novo e reenvia o e-mail de " +
@@ -97,7 +97,7 @@ public class PatientController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'HOSPITAL', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
     @Operation(
         summary = "Listar pacientes visíveis ao perfil autenticado",
         description = "ADMIN vê todos os pacientes ativos. HOSPITAL vê apenas pacientes vinculados a médicos do próprio hospital. DOCTOR vê apenas os seus pacientes."
@@ -113,7 +113,7 @@ public class PatientController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'HOSPITAL', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
     @Operation(
         summary = "Buscar paciente por ID",
         description = "Retorna os dados de um paciente específico pelo seu ID"
@@ -130,7 +130,7 @@ public class PatientController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'HOSPITAL', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
     @Operation(
         summary = "Atualizar dados do paciente",
         description = "Atualiza os dados cadastrais de um paciente existente. " +
@@ -150,7 +150,7 @@ public class PatientController {
     }
 
     @PatchMapping("/{id}/inactive")
-    @PreAuthorize("hasAnyRole('ADMIN', 'HOSPITAL', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
     @Operation(
         summary = "Inativar paciente",
         description = "Marca um paciente como inativo no sistema (soft delete)"
@@ -167,7 +167,7 @@ public class PatientController {
     }
 
     @GetMapping("/search/name")
-    @PreAuthorize("hasAnyRole('ADMIN', 'HOSPITAL', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
     @Operation(
         summary = "Buscar pacientes por nome",
         description = "Pesquisa pacientes pelo nome completo (busca parcial, case-insensitive). " +
@@ -186,7 +186,7 @@ public class PatientController {
     }
 
     @GetMapping("/search/cpf")
-    @PreAuthorize("hasAnyRole('ADMIN', 'HOSPITAL', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
     @Operation(
         summary = "Buscar pacientes por CPF",
         description = "Pesquisa pacientes pelo CPF (busca parcial). " +
@@ -205,7 +205,7 @@ public class PatientController {
     }
 
     @GetMapping("/search/email")
-    @PreAuthorize("hasAnyRole('ADMIN', 'HOSPITAL', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
     @Operation(
         summary = "Buscar pacientes por e-mail",
         description = "Pesquisa pacientes pelo e-mail (busca parcial, case-insensitive). " +
@@ -224,7 +224,7 @@ public class PatientController {
     }
 
     @GetMapping("/search/phone")
-    @PreAuthorize("hasAnyRole('ADMIN', 'HOSPITAL', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
     @Operation(
         summary = "Buscar pacientes por telefone",
         description = "Pesquisa pacientes pelo telefone (busca parcial). " +
@@ -243,7 +243,7 @@ public class PatientController {
     }
 
     @GetMapping("/filter")
-    @PreAuthorize("hasAnyRole('ADMIN', 'HOSPITAL', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
     @Operation(
         summary = "Filtrar pacientes",
         description = "Filtra pacientes por múltiplos critérios: nome, gênero, cidade e estado. " +
@@ -274,7 +274,7 @@ public class PatientController {
     }
 
     @GetMapping("/{id}/procedures")
-    @PreAuthorize("hasAnyRole('ADMIN', 'HOSPITAL', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
     @Operation(
         summary = "Listar procedimentos realizados de um paciente",
         description = "Retorna todos os procedimentos realizados (ProcedureExecution) associados a um paciente específico. " +
@@ -294,7 +294,7 @@ public class PatientController {
     }
 
     @GetMapping("/{id}/procedures/count")
-    @PreAuthorize("hasAnyRole('ADMIN', 'HOSPITAL', 'DOCTOR')")
+    @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
     @Operation(
         summary = "Contar procedimentos realizados de um paciente",
         description = "Retorna o total de procedimentos realizados associados a um paciente específico"

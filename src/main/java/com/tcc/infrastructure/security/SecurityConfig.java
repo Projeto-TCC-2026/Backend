@@ -83,7 +83,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/integration/**").hasAuthority("ROLE_INTEGRATION")
                         .requestMatchers("/api/doctors/**").hasAnyRole("ADMIN", "DOCTOR")
                         .requestMatchers("/api/doctor/**").hasRole("DOCTOR")
-                        .requestMatchers("/api/patients/**").hasAnyRole("ADMIN", "HOSPITAL", "DOCTOR")
+                        // CRUD de pacientes: só DOCTOR e HOSPITAL, cada um no seu escopo.
+                        // ADMIN é global e não acessa dado de paciente; PATIENT não acessa
+                        // registro de paciente, nem o próprio.
+                        .requestMatchers("/api/patients/**").hasAnyRole("HOSPITAL", "DOCTOR")
                         .requestMatchers("/api/users/**").hasRole("ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/dashboard/**").hasRole("ADMIN")

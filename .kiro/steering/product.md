@@ -16,13 +16,17 @@ Dado de saúde e dado de identificação são sensíveis. Toda regra deste arqui
 
 ## Perfis e autorização
 
-Perfis: `ADMIN`, `DOCTOR`, `PATIENT`.
+Perfis: `ADMIN`, `DOCTOR`, `HOSPITAL`, `PATIENT`.
 
 **`DOCTOR` acessa apenas pacientes do próprio hospital.** Todo endpoint que devolva paciente, ou dado derivado de paciente, filtra pelo hospital do médico autenticado. `@PreAuthorize` com a role não é suficiente: o escopo é aplicado na consulta ao repository.
 
-**`ADMIN` é global**, sem vínculo nem escopo por hospital: administra todos os hospitais e usuários, e os relatórios agregam a plataforma inteira. `ADMIN` não acessa o CRUD de pacientes; esse CRUD é exclusivo de `DOCTOR`.
+**`HOSPITAL` acessa apenas pacientes vinculados a médicos do próprio hospital.** Vale a mesma regra do `DOCTOR`: o escopo é aplicado na consulta, não só pela role.
 
-**`PATIENT` não acessa registro de paciente**, nem o próprio. `/api/patients/**` exige `DOCTOR`.
+**`ADMIN` é global**, sem vínculo nem escopo por hospital: administra todos os hospitais e usuários, e os relatórios agregam a plataforma inteira. `ADMIN` **não acessa o CRUD de pacientes**.
+
+**`PATIENT` não acessa registro de paciente**, nem o próprio.
+
+**`/api/patients/**` é exclusivo de `DOCTOR` e `HOSPITAL`**, cada um no seu escopo. `ADMIN` e `PATIENT` recebem `403`.
 
 **Identidade do usuário autenticado** é derivada só em `/auth/me` e `/api/admin/profile`. Nenhum endpoint de paciente deriva o `patientId` do usuário autenticado; quando é necessário, o identificador vem pela URL, pela query string ou pelo corpo da requisição.
 
