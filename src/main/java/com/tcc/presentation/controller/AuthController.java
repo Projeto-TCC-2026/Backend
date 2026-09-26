@@ -78,7 +78,7 @@ public class AuthController {
 
     @PostMapping("/admin/login")
     @Operation(summary = "Login administrador", description = "Autentica um administrador e retorna tokens com dados do perfil")
-    public ResponseEntity<AuthResponse> loginAdmin(@RequestBody LoginRequest request) {
+    public ResponseEntity<AuthResponse> loginAdmin(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.loginAdmin(request));
     }
 

@@ -15,6 +15,6 @@ public class NoOpAccountActivationPublisher implements AccountActivationPublishe
 
     @Override
     public void publishAccountCreated(String email, String fullName, String token, String frontendBaseUrl) {
-        log.warn("SQS desabilitado. E-mail de boas-vindas/ativação de conta não foi publicado. email={}", email);
+        log.warn("SQS desabilitado. E-mail de boas-vindas/ativação de conta não foi publicado.");
     }
 }
