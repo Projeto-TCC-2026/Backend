@@ -1,14 +1,16 @@
 package com.tcc.application.service;
 
+import java.util.Map;
+import java.util.UUID;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 import com.tcc.application.dto.request.HospitalRequest;
 import com.tcc.application.dto.request.UpdateHospitalProfileRequest;
 import com.tcc.application.dto.response.HospitalResponse;
 import com.tcc.application.dto.response.HospitalSummary;
 import com.tcc.application.dto.response.UserProfileResponse;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-
-import java.util.UUID;
 
 public interface HospitalService {
     
@@ -25,6 +27,12 @@ public interface HospitalService {
     Page<HospitalResponse> searchByName(String name, Pageable pageable);
     
     Page<HospitalResponse> filterHospitals(String name, String city, String state, Pageable pageable);
+    
+    Page<HospitalResponse> getHospitalsByActive(Boolean active, Pageable pageable);
+    
+    Page<HospitalResponse> filterHospitals(String name, String city, String state, Boolean active, Pageable pageable);
+    
+    Map<String, Object> getHospitalStats();
     
     long countHospitals();
     

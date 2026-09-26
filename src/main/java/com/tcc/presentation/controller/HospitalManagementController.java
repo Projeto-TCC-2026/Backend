@@ -1,15 +1,8 @@
 package com.tcc.presentation.controller;
 
-import com.tcc.application.dto.request.HospitalRequest;
-import com.tcc.application.dto.response.ApiResponse;
-import com.tcc.application.dto.response.HospitalResponse;
-import com.tcc.application.dto.response.HospitalSummary;
-import com.tcc.application.service.HospitalService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
+import java.util.Map;
+import java.util.UUID;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -17,10 +10,27 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
-import java.util.UUID;
+import com.tcc.application.dto.request.HospitalRequest;
+import com.tcc.application.dto.response.ApiResponse;
+import com.tcc.application.dto.response.HospitalResponse;
+import com.tcc.application.dto.response.HospitalSummary;
+import com.tcc.application.service.HospitalService;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/admin/hospital-management")
@@ -40,8 +50,9 @@ public class HospitalManagementController {
     @GetMapping
     @Operation(
         summary = "Listar todos os hospitais",
-        description = "Lista todos os hospitais cadastrados no sistema com paginação, ordenação e filtros. " +
-                      "Inclui informações sobre status ativo/inativo e permite busca por múltiplos critérios."
+        description = "Lista os hospitais cadastrados no sistema com paginação, ordenação e filtros opcionais " +
+                      "por nome, cidade, estado e status ativo/inativo. Todos os filtros são aplicados no banco. " +
+                      "Sem filtros, retorna todos os hospitais."
     )
     public ResponseEntity<ApiResponse<Page<HospitalResponse>>> listHospitals(
             @Parameter(description = "Filtrar por nome do hospital (busca parcial)")
@@ -60,16 +71,10 @@ public class HospitalManagementController {
         
         Page<HospitalResponse> hospitals;
         
-        if (name != null || city != null || state != null) {
-            hospitals = hospitalService.filterHospitals(name, city, state, pageable);
+        if (name != null || city != null || state != null || active != null) {
+            hospitals = hospitalService.filterHospitals(name, city, state, active, pageable);
         } else {
             hospitals = hospitalService.getAllHospitals(pageable);
-        }
-        
-        // Se filtro por status ativo for especificado, aplicar filtro adicional
-        if (active != null) {
-            hospitals = hospitals.map(h -> h.active().equals(active) ? h : null)
-                              .map(h -> h); // Simplificado - em produção usar query personalizada
         }
         
         ApiResponse<Page<HospitalResponse>> response = ApiResponse.success(hospitals);
@@ -110,17 +115,11 @@ public class HospitalManagementController {
     @GetMapping("/stats")
     @Operation(
         summary = "Estatísticas dos hospitais",
-        description = "Retorna estatísticas gerais sobre os hospitais cadastrados no sistema"
+        description = "Retorna o total de hospitais cadastrados e as contagens reais de hospitais ativos e inativos, " +
+                      "além do instante da consulta."
     )
     public ResponseEntity<ApiResponse<Map<String, Object>>> getHospitalStats() {
-        long totalHospitals = hospitalService.countHospitals();
-        
-        Map<String, Object> stats = Map.of(
-            "totalHospitals", totalHospitals,
-            "activeHospitals", totalHospitals, // TODO: implementar contagem específica
-            "inactiveHospitals", 0L, // TODO: implementar contagem específica
-            "lastUpdate", java.time.LocalDateTime.now()
-        );
+        Map<String, Object> stats = hospitalService.getHospitalStats();
         
         ApiResponse<Map<String, Object>> response = ApiResponse.success(stats);
         return ResponseEntity.ok(response);
@@ -259,8 +258,7 @@ public class HospitalManagementController {
     public ResponseEntity<ApiResponse<Page<HospitalResponse>>> getActiveHospitals(
             @PageableDefault(size = 10, sort = "name", direction = Sort.Direction.ASC) Pageable pageable) {
         
-        // TODO: Implementar método específico no service para filtrar apenas ativos
-        Page<HospitalResponse> hospitals = hospitalService.getAllHospitals(pageable);
+        Page<HospitalResponse> hospitals = hospitalService.getHospitalsByActive(true, pageable);
         
         ApiResponse<Page<HospitalResponse>> response = ApiResponse.success(hospitals);
         return ResponseEntity.ok(response);
@@ -274,8 +272,7 @@ public class HospitalManagementController {
     public ResponseEntity<ApiResponse<Page<HospitalResponse>>> getInactiveHospitals(
             @PageableDefault(size = 10, sort = "name", direction = Sort.Direction.ASC) Pageable pageable) {
         
-        // TODO: Implementar método específico no service para filtrar apenas inativos
-        Page<HospitalResponse> hospitals = hospitalService.getAllHospitals(pageable);
+        Page<HospitalResponse> hospitals = hospitalService.getHospitalsByActive(false, pageable);
         
         ApiResponse<Page<HospitalResponse>> response = ApiResponse.success(hospitals);
         return ResponseEntity.ok(response);

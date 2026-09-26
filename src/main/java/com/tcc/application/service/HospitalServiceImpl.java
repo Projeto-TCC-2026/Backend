@@ -1,5 +1,8 @@
 package com.tcc.application.service;
 
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.data.domain.Page;
@@ -108,6 +111,43 @@ public class HospitalServiceImpl implements HospitalService {
     public Page<HospitalResponse> filterHospitals(String name, String city, String state, Pageable pageable) {
         return hospitalRepository.findByFilters(name, city, state, pageable)
                 .map(hospitalMapper::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<HospitalResponse> getHospitalsByActive(Boolean active, Pageable pageable) {
+        return hospitalRepository.findByActive(active, pageable)
+                .map(hospitalMapper::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<HospitalResponse> filterHospitals(String name, String city, String state, Boolean active, Pageable pageable) {
+        if (active == null) {
+            return filterHospitals(name, city, state, pageable);
+        }
+
+        if (name == null && city == null && state == null) {
+            return getHospitalsByActive(active, pageable);
+        }
+
+        return hospitalRepository.findByFiltersAndActive(name, city, state, active, pageable)
+                .map(hospitalMapper::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, Object> getHospitalStats() {
+        long activeHospitals = hospitalRepository.countByActiveTrue();
+        long inactiveHospitals = hospitalRepository.countByActiveFalse();
+
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("totalHospitals", activeHospitals + inactiveHospitals);
+        stats.put("activeHospitals", activeHospitals);
+        stats.put("inactiveHospitals", inactiveHospitals);
+        stats.put("lastUpdate", LocalDateTime.now());
+
+        return stats;
     }
 
     @Override

@@ -1,7 +1,9 @@
 package com.tcc.application.service;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -19,6 +21,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import com.tcc.application.dto.request.HospitalRequest;
 import com.tcc.application.dto.response.HospitalResponse;
@@ -129,6 +135,138 @@ class HospitalServiceImplTest {
 
             assertThatThrownBy(() -> hospitalService.deleteHospital(NONEXISTENT_ID))
                     .isInstanceOf(ResourceNotFoundException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("getHospitalsByActive")
+    class GetHospitalsByActive {
+
+        @Test
+        @DisplayName("deve consultar o repository filtrando por active true")
+        void shouldQueryRepositoryWithActiveTrue() {
+            Pageable pageable = PageRequest.of(0, 10);
+            when(hospitalRepository.findByActive(true, pageable))
+                    .thenReturn(new PageImpl<>(List.of(hospital)));
+            when(hospitalMapper.toResponse(hospital)).thenReturn(response);
+
+            Page<HospitalResponse> result = hospitalService.getHospitalsByActive(true, pageable);
+
+            assertThat(result.getContent()).containsExactly(response);
+            verify(hospitalRepository).findByActive(true, pageable);
+            verify(hospitalRepository, never()).findAll(any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("deve consultar o repository filtrando por active false")
+        void shouldQueryRepositoryWithActiveFalse() {
+            Pageable pageable = PageRequest.of(0, 10);
+            when(hospitalRepository.findByActive(false, pageable))
+                    .thenReturn(new PageImpl<>(List.of()));
+
+            Page<HospitalResponse> result = hospitalService.getHospitalsByActive(false, pageable);
+
+            assertThat(result.getContent()).isEmpty();
+            verify(hospitalRepository).findByActive(false, pageable);
+            verify(hospitalRepository, never()).findAll(any(Pageable.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("filterHospitals com status")
+    class FilterHospitalsWithActive {
+
+        @Test
+        @DisplayName("deve delegar para busca por status quando so o active e informado")
+        void shouldDelegateToActiveSearchWhenOnlyActiveIsProvided() {
+            Pageable pageable = PageRequest.of(0, 10);
+            when(hospitalRepository.findByActive(true, pageable))
+                    .thenReturn(new PageImpl<>(List.of(hospital)));
+            when(hospitalMapper.toResponse(hospital)).thenReturn(response);
+
+            Page<HospitalResponse> result = hospitalService.filterHospitals(null, null, null, true, pageable);
+
+            assertThat(result.getContent()).containsExactly(response);
+            verify(hospitalRepository).findByActive(true, pageable);
+        }
+
+        @Test
+        @DisplayName("deve combinar filtros textuais com o status no banco")
+        void shouldCombineTextFiltersWithActive() {
+            Pageable pageable = PageRequest.of(0, 10);
+            when(hospitalRepository.findByFiltersAndActive("Central", null, null, false, pageable))
+                    .thenReturn(new PageImpl<>(List.of(hospital)));
+            when(hospitalMapper.toResponse(hospital)).thenReturn(response);
+
+            Page<HospitalResponse> result = hospitalService.filterHospitals("Central", null, null, false, pageable);
+
+            assertThat(result.getContent()).containsExactly(response);
+            verify(hospitalRepository).findByFiltersAndActive("Central", null, null, false, pageable);
+        }
+
+        @Test
+        @DisplayName("deve usar filtro sem status quando active e nulo")
+        void shouldUseFilterWithoutActiveWhenActiveIsNull() {
+            Pageable pageable = PageRequest.of(0, 10);
+            when(hospitalRepository.findByFilters("Central", null, null, pageable))
+                    .thenReturn(new PageImpl<>(List.of(hospital)));
+            when(hospitalMapper.toResponse(hospital)).thenReturn(response);
+
+            hospitalService.filterHospitals("Central", null, null, null, pageable);
+
+            verify(hospitalRepository).findByFilters("Central", null, null, pageable);
+            verify(hospitalRepository, never()).findByActive(any(), any());
+        }
+    }
+
+    @Nested
+    @DisplayName("getAllHospitals")
+    class GetAllHospitals {
+
+        @Test
+        @DisplayName("deve buscar todos os hospitais sem aplicar filtro de status")
+        void shouldFetchAllWithoutActiveFilter() {
+            Pageable pageable = PageRequest.of(0, 200);
+            when(hospitalRepository.findAll(pageable)).thenReturn(new PageImpl<>(List.of(hospital)));
+            when(hospitalMapper.toResponse(hospital)).thenReturn(response);
+
+            Page<HospitalResponse> result = hospitalService.getAllHospitals(pageable);
+
+            assertThat(result.getContent()).containsExactly(response);
+            verify(hospitalRepository).findAll(pageable);
+            verify(hospitalRepository, never()).findByActive(any(), any());
+        }
+    }
+
+    @Nested
+    @DisplayName("getHospitalStats")
+    class GetHospitalStats {
+
+        @Test
+        @DisplayName("deve retornar as contagens vindas do repository")
+        void shouldReturnCountsFromRepository() {
+            when(hospitalRepository.countByActiveTrue()).thenReturn(7L);
+            when(hospitalRepository.countByActiveFalse()).thenReturn(3L);
+
+            Map<String, Object> stats = hospitalService.getHospitalStats();
+
+            assertThat(stats.get("totalHospitals")).isEqualTo(10L);
+            assertThat(stats.get("activeHospitals")).isEqualTo(7L);
+            assertThat(stats.get("inactiveHospitals")).isEqualTo(3L);
+            assertThat(stats.get("lastUpdate")).isInstanceOf(LocalDateTime.class);
+        }
+
+        @Test
+        @DisplayName("deve retornar zero para inativos quando todos estao ativos")
+        void shouldReturnZeroInactiveWhenAllActive() {
+            when(hospitalRepository.countByActiveTrue()).thenReturn(4L);
+            when(hospitalRepository.countByActiveFalse()).thenReturn(0L);
+
+            Map<String, Object> stats = hospitalService.getHospitalStats();
+
+            assertThat(stats.get("totalHospitals")).isEqualTo(4L);
+            assertThat(stats.get("activeHospitals")).isEqualTo(4L);
+            assertThat(stats.get("inactiveHospitals")).isEqualTo(0L);
         }
     }
 }
