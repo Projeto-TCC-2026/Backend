@@ -22,6 +22,7 @@ import com.tcc.domain.model.User;
 import com.tcc.domain.repository.DoctorProcedureRepository;
 import com.tcc.domain.repository.DoctorRepository;
 import com.tcc.domain.repository.HospitalRepository;
+import com.tcc.domain.repository.PatientProcedureRepository;
 import com.tcc.domain.repository.ProcedureRepository;
 import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.BusinessException;
@@ -35,6 +36,7 @@ public class ProcedureServiceImpl implements ProcedureService {
     private final ProcedureRepository procedureRepository;
     private final HospitalRepository hospitalRepository;
     private final DoctorProcedureRepository doctorProcedureRepository;
+    private final PatientProcedureRepository patientProcedureRepository;
     private final DoctorRepository doctorRepository;
     private final UserRepository userRepository;
     private final ProcedureMapper procedureMapper;
@@ -43,6 +45,7 @@ public class ProcedureServiceImpl implements ProcedureService {
     public ProcedureServiceImpl(ProcedureRepository procedureRepository,
                                 HospitalRepository hospitalRepository,
                                 DoctorProcedureRepository doctorProcedureRepository,
+                                PatientProcedureRepository patientProcedureRepository,
                                 DoctorRepository doctorRepository,
                                 UserRepository userRepository,
                                 ProcedureMapper procedureMapper,
@@ -50,6 +53,7 @@ public class ProcedureServiceImpl implements ProcedureService {
         this.procedureRepository = procedureRepository;
         this.hospitalRepository = hospitalRepository;
         this.doctorProcedureRepository = doctorProcedureRepository;
+        this.patientProcedureRepository = patientProcedureRepository;
         this.doctorRepository = doctorRepository;
         this.userRepository = userRepository;
         this.procedureMapper = procedureMapper;
@@ -143,6 +147,13 @@ public class ProcedureServiceImpl implements ProcedureService {
             throw new BusinessException(ErrorMessages.duplicateProcedureTitle(request.title()));
         }
 
+        // O update também inativa, porque ProcedureRequest carrega o campo active. A regra
+        // vale antes de o mapper aplicar a mudança, e só na transição ativo -> inativo:
+        // reativar e update que não mexe em active seguem livres.
+        if (isDeactivating(procedure, request)) {
+            requireNoActivePatients(procedure.getId());
+        }
+
         procedureMapper.updateEntity(procedure, request);
         Procedure updatedProcedure = procedureRepository.save(procedure);
 
@@ -170,8 +181,34 @@ public class ProcedureServiceImpl implements ProcedureService {
             throw new BusinessException(ErrorMessages.procedureAlreadyInactive());
         }
 
+        requireNoActivePatients(procedure.getId());
+
         procedure.setActive(false);
         procedureRepository.save(procedure);
+    }
+
+    /**
+     * O procedimento só sai do catálogo quando nenhum paciente está vinculado a ele.
+     * Sem isso, a atribuição do paciente continuaria apontando para um procedimento
+     * fora do catálogo, e o check-in seguiria aceitando envio: nem
+     * {@code CheckinServiceImpl} nem as listagens de atribuição olham
+     * {@code procedure.active}.
+     */
+    private void requireNoActivePatients(UUID procedureId) {
+        long activePatients =
+                patientProcedureRepository.countByProcedureIdAndActiveTrueAndPatientActiveTrue(procedureId);
+
+        if (activePatients > 0) {
+            throw new BusinessException(ErrorMessages.procedureHasActivePatients(activePatients));
+        }
+    }
+
+    /**
+     * Só é inativação quando o request pede {@code active = false} para um procedimento
+     * hoje ativo. {@code active} nulo significa "não mexer": o mapper o ignora.
+     */
+    private boolean isDeactivating(Procedure procedure, ProcedureRequest request) {
+        return Boolean.FALSE.equals(request.active()) && Boolean.TRUE.equals(procedure.getActive());
     }
 
     @Override

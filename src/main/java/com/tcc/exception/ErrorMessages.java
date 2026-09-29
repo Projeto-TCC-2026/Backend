@@ -112,6 +112,10 @@ public final class ErrorMessages {
         return "Este procedimento já está inativo";
     }
 
+    public static String procedureHasActivePatients(long count) {
+        return "Não é possível inativar o procedimento: " + count + " paciente(s) ainda vinculado(s).";
+    }
+
     public static String doctorProfileNotFound() {
         return "Usuário autenticado não possui perfil de médico";
     }

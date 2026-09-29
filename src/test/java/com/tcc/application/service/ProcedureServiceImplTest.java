@@ -38,6 +38,7 @@ import com.tcc.domain.model.User;
 import com.tcc.domain.repository.DoctorProcedureRepository;
 import com.tcc.domain.repository.DoctorRepository;
 import com.tcc.domain.repository.HospitalRepository;
+import com.tcc.domain.repository.PatientProcedureRepository;
 import com.tcc.domain.repository.ProcedureRepository;
 import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.BusinessException;
@@ -52,6 +53,9 @@ class ProcedureServiceImplTest {
 
     @Mock
     private DoctorProcedureRepository doctorProcedureRepository;
+
+    @Mock
+    private PatientProcedureRepository patientProcedureRepository;
 
     @Mock
     private HospitalRepository hospitalRepository;
@@ -249,6 +253,77 @@ class ProcedureServiceImplTest {
 
             verify(procedureRepository, never()).save(any());
         }
+
+        @Test
+        @DisplayName("deve recusar o update que inativa quando ha paciente vinculado")
+        void shouldThrowWhenUpdateDeactivatesProcedureWithActivePatients() {
+            ProcedureRequest deactivateRequest =
+                    new ProcedureRequest("Cirurgia de joelho", "Artroplastia total", 120, false);
+            when(userRepository.findByEmailWithHospital(EMAIL)).thenReturn(Optional.of(hospitalUser));
+            when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
+            when(patientProcedureRepository.countByProcedureIdAndActiveTrueAndPatientActiveTrue(PROCEDURE_ID))
+                    .thenReturn(2L);
+
+            assertThatThrownBy(() -> procedureService.updateProcedure(EMAIL, PROCEDURE_ID, deactivateRequest))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("2");
+
+            // A validação precede o mapper: nada é aplicado ao procedimento.
+            verify(procedureMapper, never()).updateEntity(any(), any());
+            verify(procedureRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("deve permitir o update que inativa quando nao ha paciente vinculado")
+        void shouldUpdateDeactivatingWhenNoActivePatients() {
+            ProcedureRequest deactivateRequest =
+                    new ProcedureRequest("Cirurgia de joelho", "Artroplastia total", 120, false);
+            when(userRepository.findByEmailWithHospital(EMAIL)).thenReturn(Optional.of(hospitalUser));
+            when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
+            when(patientProcedureRepository.countByProcedureIdAndActiveTrueAndPatientActiveTrue(PROCEDURE_ID))
+                    .thenReturn(0L);
+            when(procedureRepository.save(procedure)).thenReturn(procedure);
+            when(procedureMapper.toResponse(procedure)).thenReturn(response);
+
+            ProcedureResponse result = procedureService.updateProcedure(EMAIL, PROCEDURE_ID, deactivateRequest);
+
+            assertThat(result).isEqualTo(response);
+            verify(procedureMapper).updateEntity(procedure, deactivateRequest);
+            verify(procedureRepository).save(procedure);
+        }
+
+        @Test
+        @DisplayName("nao deve validar pacientes quando o update nao altera active")
+        void shouldNotValidatePatientsWhenActiveUntouched() {
+            // request tem active nulo: o mapper ignora o campo.
+            when(userRepository.findByEmailWithHospital(EMAIL)).thenReturn(Optional.of(hospitalUser));
+            when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
+            when(procedureRepository.save(procedure)).thenReturn(procedure);
+            when(procedureMapper.toResponse(procedure)).thenReturn(response);
+
+            procedureService.updateProcedure(EMAIL, PROCEDURE_ID, request);
+
+            verify(patientProcedureRepository, never()).countByProcedureIdAndActiveTrueAndPatientActiveTrue(any());
+            verify(procedureRepository).save(procedure);
+        }
+
+        @Test
+        @DisplayName("nao deve validar pacientes quando o update reativa o procedimento")
+        void shouldNotValidatePatientsWhenReactivating() {
+            procedure.setActive(false);
+            ProcedureRequest reactivateRequest =
+                    new ProcedureRequest("Cirurgia de joelho", "Artroplastia total", 120, true);
+            when(userRepository.findByEmailWithHospital(EMAIL)).thenReturn(Optional.of(hospitalUser));
+            when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
+            when(procedureRepository.save(procedure)).thenReturn(procedure);
+            when(procedureMapper.toResponse(procedure)).thenReturn(response);
+
+            procedureService.updateProcedure(EMAIL, PROCEDURE_ID, reactivateRequest);
+
+            verify(patientProcedureRepository, never()).countByProcedureIdAndActiveTrueAndPatientActiveTrue(any());
+            verify(procedureMapper).updateEntity(procedure, reactivateRequest);
+            verify(procedureRepository).save(procedure);
+        }
     }
 
     @Nested
@@ -256,16 +331,50 @@ class ProcedureServiceImplTest {
     class DeactivateProcedure {
 
         @Test
-        @DisplayName("deve inativar procedimento sem remover o registro")
+        @DisplayName("deve inativar procedimento sem remover o registro quando nao ha paciente vinculado")
         void shouldDeactivateProcedure() {
             when(userRepository.findByEmailWithHospital(EMAIL)).thenReturn(Optional.of(hospitalUser));
             when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
+            when(patientProcedureRepository.countByProcedureIdAndActiveTrueAndPatientActiveTrue(PROCEDURE_ID))
+                    .thenReturn(0L);
 
             procedureService.deactivateProcedure(EMAIL, PROCEDURE_ID);
 
             assertThat(procedure.getActive()).isFalse();
             verify(procedureRepository).save(procedure);
             verify(procedureRepository, never()).delete(any());
+        }
+
+        @Test
+        @DisplayName("deve inativar quando as atribuicoes ativas sao apenas de pacientes inativos")
+        void shouldDeactivateWhenRemainingAssignmentsBelongToInactivePatients() {
+            // A contagem já exclui paciente inativo: o procedimento tem atribuição ativa,
+            // mas nenhuma de paciente ativo, então não há acompanhamento em curso.
+            when(userRepository.findByEmailWithHospital(EMAIL)).thenReturn(Optional.of(hospitalUser));
+            when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
+            when(patientProcedureRepository.countByProcedureIdAndActiveTrueAndPatientActiveTrue(PROCEDURE_ID))
+                    .thenReturn(0L);
+
+            procedureService.deactivateProcedure(EMAIL, PROCEDURE_ID);
+
+            assertThat(procedure.getActive()).isFalse();
+            verify(procedureRepository).save(procedure);
+        }
+
+        @Test
+        @DisplayName("deve recusar a inativacao quando ha paciente vinculado, sem alterar o procedimento")
+        void shouldThrowWhenProcedureHasActivePatients() {
+            when(userRepository.findByEmailWithHospital(EMAIL)).thenReturn(Optional.of(hospitalUser));
+            when(procedureRepository.findById(PROCEDURE_ID)).thenReturn(Optional.of(procedure));
+            when(patientProcedureRepository.countByProcedureIdAndActiveTrueAndPatientActiveTrue(PROCEDURE_ID))
+                    .thenReturn(3L);
+
+            assertThatThrownBy(() -> procedureService.deactivateProcedure(EMAIL, PROCEDURE_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("3");
+
+            assertThat(procedure.getActive()).isTrue();
+            verify(procedureRepository, never()).save(any());
         }
 
         @Test
@@ -279,6 +388,7 @@ class ProcedureServiceImplTest {
                     .isInstanceOf(BusinessException.class);
 
             verify(procedureRepository, never()).save(any());
+            verify(patientProcedureRepository, never()).countByProcedureIdAndActiveTrueAndPatientActiveTrue(any());
         }
     }
 

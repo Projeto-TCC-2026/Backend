@@ -37,6 +37,16 @@ public interface PatientProcedureRepository extends JpaRepository<PatientProcedu
     long countByPatientIdAndActiveTrue(UUID patientId);
 
     /**
+     * Contagem por procedimento, sem filtrar por médico nem por hospital: o
+     * procedimento só pode ser inativado quando nenhum paciente está vinculado a ele,
+     * independentemente de qual médico fez a atribuição.
+     *
+     * <p>Exige também {@code patient.active}: atribuição de paciente inativo não
+     * representa acompanhamento em curso e não deve travar o catálogo do hospital.
+     */
+    long countByProcedureIdAndActiveTrueAndPatientActiveTrue(UUID procedureId);
+
+    /**
      * Procedimentos ativos do paciente identificado pelo e-mail do usuário autenticado.
      * O paciente nunca vem por parâmetro de request: o vínculo é resolvido pelo próprio
      * {@code User} dono do token.
