@@ -91,6 +91,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/dashboard/**").hasRole("ADMIN")
                         .requestMatchers("/api/hospital/**").hasRole("HOSPITAL")
+                        // Área pública da landing page: só leitura, e só GET.
+                        // Qualquer outro método em /api/public/** cai no anyRequest
+                        // abaixo e continua exigindo autenticação.
+                        .requestMatchers(HttpMethod.GET, "/api/public/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex
