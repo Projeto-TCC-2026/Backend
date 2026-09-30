@@ -1,0 +1,76 @@
+name: Deploy backend (EC2)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # permite rodar manualmente pela aba Actions
+
+permissions:
+  id-token: write           # necessário para o OIDC
+  contents: read
+
+concurrency:
+  group: deploy-backend     # dois pushes seguidos não fazem deploy ao mesmo tempo
+  cancel-in-progress: false
+
+env:
+  AWS_ROLE_ARN: arn:aws:iam::919446725618:role/github-actions-backend-deploy
+  ARTIFACT: s3://tcc-backend-artifacts-2026/backend/app.jar
+  INSTANCE_ID: i-0a721a294edd7c00c
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Gerar chave JWT efêmera para os testes
+        run: echo "JWT_SECRET=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+
+      - name: Testes e build
+        run: |
+          chmod +x mvnw
+          ./mvnw -B clean verify
+
+      - name: Credenciais AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Enviar JAR para o S3
+        run: aws s3 cp target/tcc-0.0.1-SNAPSHOT.jar "$ARTIFACT"
+
+      - name: Deploy na EC2 via SSM
+        run: |
+          jq -Rs '{commands: [.]}' scripts/deploy-ec2.sh > params.json
+          CMD_ID=$(aws ssm send-command --region sa-east-1 \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "deploy ${GITHUB_SHA::7}" \
+            --parameters file://params.json \
+            --query Command.CommandId --output text)
+          echo "Comando SSM: $CMD_ID"
+
+          # Acompanha o comando por até 5 minutos
+          for i in $(seq 1 60); do
+            sleep 5
+            STATUS=$(aws ssm get-command-invocation --region sa-east-1 \
+              --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
+              --query Status --output text 2>/dev/null || echo Pending)
+            case "$STATUS" in Pending|InProgress|Delayed) continue ;; esac
+            break
+          done
+
+          aws ssm get-command-invocation --region sa-east-1 \
+            --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
+            --query '[StandardOutputContent,StandardErrorContent]' --output text
+
+          echo "Status final: $STATUS"
+          [ "$STATUS" = "Success" ]
