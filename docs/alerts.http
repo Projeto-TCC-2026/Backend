@@ -1,19 +1,39 @@
 ### Variáveis
 @baseUrl = http://localhost:8080/api
 @integrationKey = YOUR_INTEGRATION_KEY_HERE
+@doctorToken = YOUR_DOCTOR_JWT_HERE
 
-### Avaliação de leitura de sinal vital (integração serviço a serviço)
+### Recebimento e avaliação de leitura de sinal vital (integração serviço a serviço)
 ###
-### Chamado pela Lambda monitoramento-risk-analyzer.
+### Chamado pela Lambda monitoramento-processor.
 ### Autenticação por chave estática no header X-Integration-Key — não usa JWT,
 ### porque a Lambda não é um usuário do sistema.
+###
+### O que o endpoint faz, em ordem:
+###   1. Leitura repetida (mesmo patientId + readingType + measuredAt)? Responde 200
+###      com duplicateReading=true e não grava nada.
+###   2. Grava a leitura em health_readings — normal ou fora da faixa.
+###   3. Compara o valor com a faixa cadastrada para o tipo.
+###   4. Já existe alerta PENDING do mesmo paciente para o mesmo tipo? Não cria outro.
+###   5. Cria o alerta com health_reading_id preenchido e dispara os avisos
+###      (push ao paciente, e-mail aos médicos vinculados) depois do commit.
 ###
 ### Faixas normais cadastradas na V26 (limites INCLUSIVOS no normal):
 ###   HEART_RATE  50 a 120
 ###   SPO2        mínimo 90, sem máximo
 ###   TEMPERATURE 35.5 a 38.0
+###
+### Campo unit é opcional e vai no corpo do e-mail junto com o valor.
+###
+### FUSO DO measuredAt: sempre com fuso explícito. Os exemplos abaixo usam UTC
+### com sufixo "Z". O backend normaliza para UTC antes de gravar e antes de
+### checar leitura repetida, então "2026-08-29T14:35:00Z" e
+### "2026-08-29T11:35:00-03:00" são o MESMO instante e a MESMA leitura.
+### Horário sem fuso ("2026-08-29T14:35:00") é recusado com 400.
+### No e-mail ao médico o horário aparece convertido para America/Sao_Paulo —
+### 14:35Z é exibido como 11:35.
 
-### 1. Frequência cardíaca dentro da faixa -> 201, alertGenerated=false
+### 1. Frequência cardíaca dentro da faixa -> 201, leitura gravada, alertGenerated=false
 POST {{baseUrl}}/integration/alerts/evaluate
 Content-Type: application/json
 X-Integration-Key: {{integrationKey}}
@@ -22,10 +42,12 @@ X-Integration-Key: {{integrationKey}}
   "patientId": "550e8400-e29b-41d4-a716-446655440000",
   "readingType": "HEART_RATE",
   "value": 80,
-  "measuredAt": "2026-08-29T14:30:00"
+  "measuredAt": "2026-08-29T14:30:00Z",
+  "unit": "bpm"
 }
 
 ### 2. Frequência cardíaca abaixo do mínimo -> 201, alertGenerated=true, severity CRITICAL
+### Resposta traz healthReadingId: é a leitura que o alerta referencia.
 POST {{baseUrl}}/integration/alerts/evaluate
 Content-Type: application/json
 X-Integration-Key: {{integrationKey}}
@@ -34,10 +56,40 @@ X-Integration-Key: {{integrationKey}}
   "patientId": "550e8400-e29b-41d4-a716-446655440000",
   "readingType": "HEART_RATE",
   "value": 42,
-  "measuredAt": "2026-08-29T14:35:00"
+  "measuredAt": "2026-08-29T14:35:00Z",
+  "unit": "bpm"
 }
 
-### 3. Frequência cardíaca acima do máximo -> 201, alertGenerated=true
+### 3. Repita a requisição 2 exatamente igual -> 200, duplicateReading=true
+### Nada é gravado, nenhum alerta é criado e nenhum aviso é enviado.
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 42,
+  "measuredAt": "2026-08-29T14:35:00Z",
+  "unit": "bpm"
+}
+
+### 3b. A MESMA leitura da 2, agora expressa em -03:00 -> 200, duplicateReading=true
+### 11:35-03:00 é o mesmo instante que 14:35Z. Prova a normalização para UTC.
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 42,
+  "measuredAt": "2026-08-29T11:35:00-03:00",
+  "unit": "bpm"
+}
+
+### 4. Outra leitura alterada de HEART_RATE, com o alerta da 2 ainda PENDING
+### -> 201, leitura gravada, alertGenerated=false (deduplicação por paciente + tipo)
 POST {{baseUrl}}/integration/alerts/evaluate
 Content-Type: application/json
 X-Integration-Key: {{integrationKey}}
@@ -46,10 +98,11 @@ X-Integration-Key: {{integrationKey}}
   "patientId": "550e8400-e29b-41d4-a716-446655440000",
   "readingType": "HEART_RATE",
   "value": 155,
-  "measuredAt": "2026-08-29T14:40:00"
+  "measuredAt": "2026-08-29T14:40:00Z",
+  "unit": "bpm"
 }
 
-### 4. Valor exatamente igual ao limite -> 201, alertGenerated=false (limite é inclusivo)
+### 5. Valor exatamente igual ao limite -> 201, alertGenerated=false (limite é inclusivo)
 POST {{baseUrl}}/integration/alerts/evaluate
 Content-Type: application/json
 X-Integration-Key: {{integrationKey}}
@@ -58,10 +111,12 @@ X-Integration-Key: {{integrationKey}}
   "patientId": "550e8400-e29b-41d4-a716-446655440000",
   "readingType": "HEART_RATE",
   "value": 120,
-  "measuredAt": "2026-08-29T14:45:00"
+  "measuredAt": "2026-08-29T14:45:00Z",
+  "unit": "bpm"
 }
 
-### 5. SPO2 abaixo do mínimo -> 201, alertGenerated=true
+### 6. SPO2 abaixo do mínimo -> 201, alertGenerated=true
+### Tipo diferente de HEART_RATE, então o alerta PENDING da 2 não bloqueia este.
 POST {{baseUrl}}/integration/alerts/evaluate
 Content-Type: application/json
 X-Integration-Key: {{integrationKey}}
@@ -70,10 +125,11 @@ X-Integration-Key: {{integrationKey}}
   "patientId": "550e8400-e29b-41d4-a716-446655440000",
   "readingType": "SPO2",
   "value": 85,
-  "measuredAt": "2026-08-29T14:50:00"
+  "measuredAt": "2026-08-29T14:50:00Z",
+  "unit": "%"
 }
 
-### 6. SPO2 alto -> 201, alertGenerated=false (faixa não tem máximo)
+### 7. SPO2 alto -> 201, alertGenerated=false (faixa não tem máximo)
 POST {{baseUrl}}/integration/alerts/evaluate
 Content-Type: application/json
 X-Integration-Key: {{integrationKey}}
@@ -82,10 +138,13 @@ X-Integration-Key: {{integrationKey}}
   "patientId": "550e8400-e29b-41d4-a716-446655440000",
   "readingType": "SPO2",
   "value": 99,
-  "measuredAt": "2026-08-29T14:55:00"
+  "measuredAt": "2026-08-29T14:55:00Z",
+  "unit": "%"
 }
 
-### 7. Temperatura acima do máximo -> 201, alertGenerated=true
+### 8. Temperatura acima do máximo -> 201, alertGenerated=true
+### Medição antiga chegando atrasada: o e-mail ao médico mostra measuredAt,
+### não o horário de chegada.
 POST {{baseUrl}}/integration/alerts/evaluate
 Content-Type: application/json
 X-Integration-Key: {{integrationKey}}
@@ -94,10 +153,12 @@ X-Integration-Key: {{integrationKey}}
   "patientId": "550e8400-e29b-41d4-a716-446655440000",
   "readingType": "TEMPERATURE",
   "value": 39.2,
-  "measuredAt": "2026-08-29T15:00:00"
+  "measuredAt": "2026-08-29T15:00:00Z",
+  "unit": "°C"
 }
 
-### 8. Tipo de leitura sem faixa cadastrada -> 201, alertGenerated=false (não é erro)
+### 9. Tipo de leitura sem faixa cadastrada -> 201, alertGenerated=false (não é erro)
+### A leitura é gravada mesmo sem faixa: o histórico não depende da avaliação.
 POST {{baseUrl}}/integration/alerts/evaluate
 Content-Type: application/json
 X-Integration-Key: {{integrationKey}}
@@ -106,10 +167,11 @@ X-Integration-Key: {{integrationKey}}
   "patientId": "550e8400-e29b-41d4-a716-446655440000",
   "readingType": "GLUCOSE",
   "value": 500,
-  "measuredAt": "2026-08-29T15:05:00"
+  "measuredAt": "2026-08-29T15:05:00Z",
+  "unit": "mg/dL"
 }
 
-### 9. Sem a chave de integração -> 401
+### 10. Sem a chave de integração -> 401
 POST {{baseUrl}}/integration/alerts/evaluate
 Content-Type: application/json
 
@@ -117,10 +179,10 @@ Content-Type: application/json
   "patientId": "550e8400-e29b-41d4-a716-446655440000",
   "readingType": "HEART_RATE",
   "value": 42,
-  "measuredAt": "2026-08-29T15:10:00"
+  "measuredAt": "2026-08-29T15:10:00Z"
 }
 
-### 10. Chave de integração inválida -> 401
+### 11. Chave de integração inválida -> 401
 POST {{baseUrl}}/integration/alerts/evaluate
 Content-Type: application/json
 X-Integration-Key: chave-invalida
@@ -129,10 +191,10 @@ X-Integration-Key: chave-invalida
   "patientId": "550e8400-e29b-41d4-a716-446655440000",
   "readingType": "HEART_RATE",
   "value": 42,
-  "measuredAt": "2026-08-29T15:15:00"
+  "measuredAt": "2026-08-29T15:15:00Z"
 }
 
-### 11. Paciente inexistente -> 404
+### 12. Paciente inexistente -> 404
 POST {{baseUrl}}/integration/alerts/evaluate
 Content-Type: application/json
 X-Integration-Key: {{integrationKey}}
@@ -141,10 +203,10 @@ X-Integration-Key: {{integrationKey}}
   "patientId": "00000000-0000-0000-0000-000000000000",
   "readingType": "HEART_RATE",
   "value": 42,
-  "measuredAt": "2026-08-29T15:20:00"
+  "measuredAt": "2026-08-29T15:20:00Z"
 }
 
-### 12. Campo obrigatório ausente -> 400
+### 13. Campo obrigatório ausente (patientId) -> 400
 POST {{baseUrl}}/integration/alerts/evaluate
 Content-Type: application/json
 X-Integration-Key: {{integrationKey}}
@@ -152,5 +214,66 @@ X-Integration-Key: {{integrationKey}}
 {
   "readingType": "HEART_RATE",
   "value": 42,
+  "measuredAt": "2026-08-29T15:25:00Z"
+}
+
+### 14. measuredAt ausente -> 400 (obrigatório: é a chave de idempotência)
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 42
+}
+
+### 15. measuredAt SEM fuso -> 400
+### Sem o fuso não há instante definido: o backend recusa em vez de adivinhar.
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 42,
   "measuredAt": "2026-08-29T15:25:00"
 }
+
+### 16. JSON malformado (chave sem valor, objeto não fechado) -> 400
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value":
+
+
+### ---------------------------------------------------------------------------
+### Resolução de alerta pelo médico (JWT, role DOCTOR)
+###
+### Alerta RESOLVED deixa de contar nos indicadores de alertas pendentes e
+### deixa de bloquear a criação de um novo alerta para o mesmo paciente e tipo.
+### ---------------------------------------------------------------------------
+
+### 17. Médico vinculado ao paciente resolve o alerta -> 200, status RESOLVED
+PATCH {{baseUrl}}/doctor/alerts/11111111-1111-1111-1111-111111111111/resolve
+Authorization: Bearer {{doctorToken}}
+
+### 18. Médico não vinculado ao paciente do alerta -> 401
+PATCH {{baseUrl}}/doctor/alerts/22222222-2222-2222-2222-222222222222/resolve
+Authorization: Bearer {{doctorToken}}
+
+### 19. Repita a requisição 17: alerta já RESOLVED -> 200, mesmo alerta, sem nova gravação
+PATCH {{baseUrl}}/doctor/alerts/11111111-1111-1111-1111-111111111111/resolve
+Authorization: Bearer {{doctorToken}}
+
+### 20. Alerta inexistente -> 404
+PATCH {{baseUrl}}/doctor/alerts/00000000-0000-0000-0000-000000000000/resolve
+Authorization: Bearer {{doctorToken}}
+
+### 21. Sem token -> 401
+PATCH {{baseUrl}}/doctor/alerts/11111111-1111-1111-1111-111111111111/resolve

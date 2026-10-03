@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface HealthReadingRepository extends JpaRepository<HealthReading, UUID> {
@@ -22,4 +23,16 @@ public interface HealthReadingRepository extends JpaRepository<HealthReading, UU
     List<HealthReading> findByPatientIdAndMeasuredAtBetween(UUID patientId, LocalDateTime startDate, LocalDateTime endDate);
     
     List<HealthReading> findByPatientIdOrderByMeasuredAtDesc(UUID patientId);
+
+    /**
+     * Chave de idempotência da leitura recebida pela integração: a mesma medição
+     * reentregue pela fila não deve virar uma segunda linha. Devolve a leitura já
+     * gravada para que a resposta aponte para ela.
+     *
+     * <p>Pode devolver no máximo uma linha: a restrição UNIQUE criada na V33 é
+     * exatamente sobre estas três colunas.
+     */
+    Optional<HealthReading> findByPatientIdAndReadingTypeAndMeasuredAt(UUID patientId,
+                                                                      String readingType,
+                                                                      LocalDateTime measuredAt);
 }

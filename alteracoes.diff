@@ -1,0 +1,3176 @@
+diff --git a/docs/alerts.http b/docs/alerts.http
+index dbc9964..6825537 100644
+--- a/docs/alerts.http
++++ b/docs/alerts.http
+@@ -1,19 +1,39 @@
+ ### Variáveis
+ @baseUrl = http://localhost:8080/api
+ @integrationKey = YOUR_INTEGRATION_KEY_HERE
++@doctorToken = YOUR_DOCTOR_JWT_HERE
+ 
+-### Avaliação de leitura de sinal vital (integração serviço a serviço)
++### Recebimento e avaliação de leitura de sinal vital (integração serviço a serviço)
+ ###
+ ### Chamado pela Lambda monitoramento-risk-analyzer.
+ ### Autenticação por chave estática no header X-Integration-Key — não usa JWT,
+ ### porque a Lambda não é um usuário do sistema.
+ ###
++### O que o endpoint faz, em ordem:
++###   1. Leitura repetida (mesmo patientId + readingType + measuredAt)? Responde 200
++###      com duplicateReading=true e não grava nada.
++###   2. Grava a leitura em health_readings — normal ou fora da faixa.
++###   3. Compara o valor com a faixa cadastrada para o tipo.
++###   4. Já existe alerta PENDING do mesmo paciente para o mesmo tipo? Não cria outro.
++###   5. Cria o alerta com health_reading_id preenchido e dispara os avisos
++###      (push ao paciente, e-mail aos médicos vinculados) depois do commit.
++###
+ ### Faixas normais cadastradas na V26 (limites INCLUSIVOS no normal):
+ ###   HEART_RATE  50 a 120
+ ###   SPO2        mínimo 90, sem máximo
+ ###   TEMPERATURE 35.5 a 38.0
++###
++### Campo unit é opcional e vai no corpo do e-mail junto com o valor.
++###
++### FUSO DO measuredAt: sempre com fuso explícito. Os exemplos abaixo usam UTC
++### com sufixo "Z". O backend normaliza para UTC antes de gravar e antes de
++### checar leitura repetida, então "2026-08-29T14:35:00Z" e
++### "2026-08-29T11:35:00-03:00" são o MESMO instante e a MESMA leitura.
++### Horário sem fuso ("2026-08-29T14:35:00") é recusado com 400.
++### No e-mail ao médico o horário aparece convertido para America/Sao_Paulo —
++### 14:35Z é exibido como 11:35.
+ 
+-### 1. Frequência cardíaca dentro da faixa -> 201, alertGenerated=false
++### 1. Frequência cardíaca dentro da faixa -> 201, leitura gravada, alertGenerated=false
+ POST {{baseUrl}}/integration/alerts/evaluate
+ Content-Type: application/json
+ X-Integration-Key: {{integrationKey}}
+@@ -22,10 +42,12 @@ X-Integration-Key: {{integrationKey}}
+   "patientId": "550e8400-e29b-41d4-a716-446655440000",
+   "readingType": "HEART_RATE",
+   "value": 80,
+-  "measuredAt": "2026-08-29T14:30:00"
++  "measuredAt": "2026-08-29T14:30:00Z",
++  "unit": "bpm"
+ }
+ 
+ ### 2. Frequência cardíaca abaixo do mínimo -> 201, alertGenerated=true, severity CRITICAL
++### Resposta traz healthReadingId: é a leitura que o alerta referencia.
+ POST {{baseUrl}}/integration/alerts/evaluate
+ Content-Type: application/json
+ X-Integration-Key: {{integrationKey}}
+@@ -34,10 +56,40 @@ X-Integration-Key: {{integrationKey}}
+   "patientId": "550e8400-e29b-41d4-a716-446655440000",
+   "readingType": "HEART_RATE",
+   "value": 42,
+-  "measuredAt": "2026-08-29T14:35:00"
++  "measuredAt": "2026-08-29T14:35:00Z",
++  "unit": "bpm"
+ }
+ 
+-### 3. Frequência cardíaca acima do máximo -> 201, alertGenerated=true
++### 3. Repita a requisição 2 exatamente igual -> 200, duplicateReading=true
++### Nada é gravado, nenhum alerta é criado e nenhum aviso é enviado.
++POST {{baseUrl}}/integration/alerts/evaluate
++Content-Type: application/json
++X-Integration-Key: {{integrationKey}}
++
++{
++  "patientId": "550e8400-e29b-41d4-a716-446655440000",
++  "readingType": "HEART_RATE",
++  "value": 42,
++  "measuredAt": "2026-08-29T14:35:00Z",
++  "unit": "bpm"
++}
++
++### 3b. A MESMA leitura da 2, agora expressa em -03:00 -> 200, duplicateReading=true
++### 11:35-03:00 é o mesmo instante que 14:35Z. Prova a normalização para UTC.
++POST {{baseUrl}}/integration/alerts/evaluate
++Content-Type: application/json
++X-Integration-Key: {{integrationKey}}
++
++{
++  "patientId": "550e8400-e29b-41d4-a716-446655440000",
++  "readingType": "HEART_RATE",
++  "value": 42,
++  "measuredAt": "2026-08-29T11:35:00-03:00",
++  "unit": "bpm"
++}
++
++### 4. Outra leitura alterada de HEART_RATE, com o alerta da 2 ainda PENDING
++### -> 201, leitura gravada, alertGenerated=false (deduplicação por paciente + tipo)
+ POST {{baseUrl}}/integration/alerts/evaluate
+ Content-Type: application/json
+ X-Integration-Key: {{integrationKey}}
+@@ -46,10 +98,11 @@ X-Integration-Key: {{integrationKey}}
+   "patientId": "550e8400-e29b-41d4-a716-446655440000",
+   "readingType": "HEART_RATE",
+   "value": 155,
+-  "measuredAt": "2026-08-29T14:40:00"
++  "measuredAt": "2026-08-29T14:40:00Z",
++  "unit": "bpm"
+ }
+ 
+-### 4. Valor exatamente igual ao limite -> 201, alertGenerated=false (limite é inclusivo)
++### 5. Valor exatamente igual ao limite -> 201, alertGenerated=false (limite é inclusivo)
+ POST {{baseUrl}}/integration/alerts/evaluate
+ Content-Type: application/json
+ X-Integration-Key: {{integrationKey}}
+@@ -58,10 +111,12 @@ X-Integration-Key: {{integrationKey}}
+   "patientId": "550e8400-e29b-41d4-a716-446655440000",
+   "readingType": "HEART_RATE",
+   "value": 120,
+-  "measuredAt": "2026-08-29T14:45:00"
++  "measuredAt": "2026-08-29T14:45:00Z",
++  "unit": "bpm"
+ }
+ 
+-### 5. SPO2 abaixo do mínimo -> 201, alertGenerated=true
++### 6. SPO2 abaixo do mínimo -> 201, alertGenerated=true
++### Tipo diferente de HEART_RATE, então o alerta PENDING da 2 não bloqueia este.
+ POST {{baseUrl}}/integration/alerts/evaluate
+ Content-Type: application/json
+ X-Integration-Key: {{integrationKey}}
+@@ -70,10 +125,11 @@ X-Integration-Key: {{integrationKey}}
+   "patientId": "550e8400-e29b-41d4-a716-446655440000",
+   "readingType": "SPO2",
+   "value": 85,
+-  "measuredAt": "2026-08-29T14:50:00"
++  "measuredAt": "2026-08-29T14:50:00Z",
++  "unit": "%"
+ }
+ 
+-### 6. SPO2 alto -> 201, alertGenerated=false (faixa não tem máximo)
++### 7. SPO2 alto -> 201, alertGenerated=false (faixa não tem máximo)
+ POST {{baseUrl}}/integration/alerts/evaluate
+ Content-Type: application/json
+ X-Integration-Key: {{integrationKey}}
+@@ -82,10 +138,13 @@ X-Integration-Key: {{integrationKey}}
+   "patientId": "550e8400-e29b-41d4-a716-446655440000",
+   "readingType": "SPO2",
+   "value": 99,
+-  "measuredAt": "2026-08-29T14:55:00"
++  "measuredAt": "2026-08-29T14:55:00Z",
++  "unit": "%"
+ }
+ 
+-### 7. Temperatura acima do máximo -> 201, alertGenerated=true
++### 8. Temperatura acima do máximo -> 201, alertGenerated=true
++### Medição antiga chegando atrasada: o e-mail ao médico mostra measuredAt,
++### não o horário de chegada.
+ POST {{baseUrl}}/integration/alerts/evaluate
+ Content-Type: application/json
+ X-Integration-Key: {{integrationKey}}
+@@ -94,10 +153,12 @@ X-Integration-Key: {{integrationKey}}
+   "patientId": "550e8400-e29b-41d4-a716-446655440000",
+   "readingType": "TEMPERATURE",
+   "value": 39.2,
+-  "measuredAt": "2026-08-29T15:00:00"
++  "measuredAt": "2026-08-29T15:00:00Z",
++  "unit": "°C"
+ }
+ 
+-### 8. Tipo de leitura sem faixa cadastrada -> 201, alertGenerated=false (não é erro)
++### 9. Tipo de leitura sem faixa cadastrada -> 201, alertGenerated=false (não é erro)
++### A leitura é gravada mesmo sem faixa: o histórico não depende da avaliação.
+ POST {{baseUrl}}/integration/alerts/evaluate
+ Content-Type: application/json
+ X-Integration-Key: {{integrationKey}}
+@@ -106,10 +167,11 @@ X-Integration-Key: {{integrationKey}}
+   "patientId": "550e8400-e29b-41d4-a716-446655440000",
+   "readingType": "GLUCOSE",
+   "value": 500,
+-  "measuredAt": "2026-08-29T15:05:00"
++  "measuredAt": "2026-08-29T15:05:00Z",
++  "unit": "mg/dL"
+ }
+ 
+-### 9. Sem a chave de integração -> 401
++### 10. Sem a chave de integração -> 401
+ POST {{baseUrl}}/integration/alerts/evaluate
+ Content-Type: application/json
+ 
+@@ -117,10 +179,10 @@ Content-Type: application/json
+   "patientId": "550e8400-e29b-41d4-a716-446655440000",
+   "readingType": "HEART_RATE",
+   "value": 42,
+-  "measuredAt": "2026-08-29T15:10:00"
++  "measuredAt": "2026-08-29T15:10:00Z"
+ }
+ 
+-### 10. Chave de integração inválida -> 401
++### 11. Chave de integração inválida -> 401
+ POST {{baseUrl}}/integration/alerts/evaluate
+ Content-Type: application/json
+ X-Integration-Key: chave-invalida
+@@ -129,10 +191,10 @@ X-Integration-Key: chave-invalida
+   "patientId": "550e8400-e29b-41d4-a716-446655440000",
+   "readingType": "HEART_RATE",
+   "value": 42,
+-  "measuredAt": "2026-08-29T15:15:00"
++  "measuredAt": "2026-08-29T15:15:00Z"
+ }
+ 
+-### 11. Paciente inexistente -> 404
++### 12. Paciente inexistente -> 404
+ POST {{baseUrl}}/integration/alerts/evaluate
+ Content-Type: application/json
+ X-Integration-Key: {{integrationKey}}
+@@ -141,16 +203,77 @@ X-Integration-Key: {{integrationKey}}
+   "patientId": "00000000-0000-0000-0000-000000000000",
+   "readingType": "HEART_RATE",
+   "value": 42,
+-  "measuredAt": "2026-08-29T15:20:00"
++  "measuredAt": "2026-08-29T15:20:00Z"
++}
++
++### 13. Campo obrigatório ausente (patientId) -> 400
++POST {{baseUrl}}/integration/alerts/evaluate
++Content-Type: application/json
++X-Integration-Key: {{integrationKey}}
++
++{
++  "readingType": "HEART_RATE",
++  "value": 42,
++  "measuredAt": "2026-08-29T15:25:00Z"
+ }
+ 
+-### 12. Campo obrigatório ausente -> 400
++### 14. measuredAt ausente -> 400 (obrigatório: é a chave de idempotência)
+ POST {{baseUrl}}/integration/alerts/evaluate
+ Content-Type: application/json
+ X-Integration-Key: {{integrationKey}}
+ 
+ {
++  "patientId": "550e8400-e29b-41d4-a716-446655440000",
++  "readingType": "HEART_RATE",
++  "value": 42
++}
++
++### 15. measuredAt SEM fuso -> 400
++### Sem o fuso não há instante definido: o backend recusa em vez de adivinhar.
++POST {{baseUrl}}/integration/alerts/evaluate
++Content-Type: application/json
++X-Integration-Key: {{integrationKey}}
++
++{
++  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+   "readingType": "HEART_RATE",
+   "value": 42,
+   "measuredAt": "2026-08-29T15:25:00"
+ }
++
++### 16. JSON malformado (chave sem valor, objeto não fechado) -> 400
++POST {{baseUrl}}/integration/alerts/evaluate
++Content-Type: application/json
++X-Integration-Key: {{integrationKey}}
++
++{
++  "patientId": "550e8400-e29b-41d4-a716-446655440000",
++  "readingType": "HEART_RATE",
++  "value":
++
++
++### ---------------------------------------------------------------------------
++### Resolução de alerta pelo médico (JWT, role DOCTOR)
++###
++### Alerta RESOLVED deixa de contar nos indicadores de alertas pendentes e
++### deixa de bloquear a criação de um novo alerta para o mesmo paciente e tipo.
++### ---------------------------------------------------------------------------
++
++### 17. Médico vinculado ao paciente resolve o alerta -> 200, status RESOLVED
++PATCH {{baseUrl}}/doctor/alerts/11111111-1111-1111-1111-111111111111/resolve
++Authorization: Bearer {{doctorToken}}
++
++### 18. Médico não vinculado ao paciente do alerta -> 401
++PATCH {{baseUrl}}/doctor/alerts/22222222-2222-2222-2222-222222222222/resolve
++Authorization: Bearer {{doctorToken}}
++
++### 19. Repita a requisição 17: alerta já RESOLVED -> 200, mesmo alerta, sem nova gravação
++PATCH {{baseUrl}}/doctor/alerts/11111111-1111-1111-1111-111111111111/resolve
++Authorization: Bearer {{doctorToken}}
++
++### 20. Alerta inexistente -> 404
++PATCH {{baseUrl}}/doctor/alerts/00000000-0000-0000-0000-000000000000/resolve
++Authorization: Bearer {{doctorToken}}
++
++### 21. Sem token -> 401
++PATCH {{baseUrl}}/doctor/alerts/11111111-1111-1111-1111-111111111111/resolve
+diff --git a/pom.xml b/pom.xml
+index 1fbd40c..6f2a142 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -123,6 +123,13 @@
+             <artifactId>s3</artifactId>
+             <version>2.25.64</version>
+         </dependency>
++        <!-- SES API v2: envio do e-mail de alerta ao médico.
++             Mesma versão do cliente SQS/S3 acima, para não misturar releases do SDK. -->
++        <dependency>
++            <groupId>software.amazon.awssdk</groupId>
++            <artifactId>sesv2</artifactId>
++            <version>2.25.64</version>
++        </dependency>
+         <dependency>
+             <groupId>com.fasterxml.jackson.core</groupId>
+             <artifactId>jackson-databind</artifactId>
+diff --git a/src/main/java/com/tcc/application/dto/request/AlertEvaluationRequest.java b/src/main/java/com/tcc/application/dto/request/AlertEvaluationRequest.java
+index ce07f60..c6d1954 100644
+--- a/src/main/java/com/tcc/application/dto/request/AlertEvaluationRequest.java
++++ b/src/main/java/com/tcc/application/dto/request/AlertEvaluationRequest.java
+@@ -1,6 +1,6 @@
+ package com.tcc.application.dto.request;
+ 
+-import java.time.LocalDateTime;
++import java.time.OffsetDateTime;
+ import java.util.UUID;
+ 
+ import jakarta.validation.constraints.NotBlank;
+@@ -10,8 +10,23 @@ import jakarta.validation.constraints.Size;
+ /**
+  * Leitura de sinal vital submetida para avaliação de risco.
+  *
+- * A leitura não é persistida nesta versão: o backend apenas decide se o valor
+- * está fora da faixa normal cadastrada em reading_thresholds.
++ * <p>Toda leitura recebida é gravada em {@code health_readings}, dentro ou fora da
++ * faixa normal, antes da avaliação. O trio
++ * {@code patientId + readingType + measuredAt} é a chave de idempotência: leitura
++ * repetida não é gravada de novo e não gera alerta.
++ *
++ * <p><strong>Convenção de fuso:</strong> {@code measuredAt} chega sempre com fuso
++ * explícito e é convertido para UTC antes de qualquer uso — tanto para gravar quanto
++ * para comparar com leitura já recebida. Por isso
++ * {@code 2026-07-01T14:32:00Z} e {@code 2026-07-01T11:32:00-03:00} são o mesmo
++ * instante e, portanto, a mesma leitura.
++ *
++ * <p>Horário sem fuso, como {@code 2026-07-01T14:32:00}, é recusado com 400: sem o
++ * fuso não há como saber a que instante a medição se refere, e adivinhar produziria
++ * leitura duplicada ou horário errado no aviso ao médico.
++ *
++ * <p>{@code measuredAt} é o horário da medição, não o da chegada: a leitura pode
++ * chegar atrasada pela fila, e é o horário da medição que o médico precisa ver.
+  */
+ public record AlertEvaluationRequest(
+ 
+@@ -25,6 +40,9 @@ public record AlertEvaluationRequest(
+         @NotNull(message = "Valor da leitura é obrigatório")
+         Double value,
+ 
+-        @NotNull(message = "Data/hora da medição é obrigatória")
+-        LocalDateTime measuredAt
++        @NotNull(message = "Data/hora da medição é obrigatória, com fuso explícito")
++        OffsetDateTime measuredAt,
++
++        @Size(max = 50, message = "Unidade deve ter no máximo 50 caracteres")
++        String unit
+ ) {}
+diff --git a/src/main/java/com/tcc/application/dto/response/AlertEvaluationResponse.java b/src/main/java/com/tcc/application/dto/response/AlertEvaluationResponse.java
+index 28f81b0..38fa0b7 100644
+--- a/src/main/java/com/tcc/application/dto/response/AlertEvaluationResponse.java
++++ b/src/main/java/com/tcc/application/dto/response/AlertEvaluationResponse.java
+@@ -5,12 +5,37 @@ import java.util.UUID;
+ /**
+  * Veredito da avaliação de uma leitura de sinal vital.
+  *
+- * Quando a leitura está dentro da faixa normal, ou quando não há faixa cadastrada
+- * para o tipo de leitura, severity, alertId e reason vêm nulos.
++ * <p>{@code healthReadingId} identifica a leitura gravada. Quando a leitura já
++ * havia sido recebida antes, {@code duplicateReading} vem true e o id é o da
++ * leitura original — nada foi gravado de novo e nenhum alerta foi criado.
++ *
++ * <p>Quando a leitura está dentro da faixa normal, quando não há faixa cadastrada
++ * para o tipo, ou quando já existe alerta em aberto do mesmo paciente para o mesmo
++ * tipo, {@code alertGenerated} vem false e severity, alertId e reason vêm nulos.
++ * Nesses casos a leitura continua sendo gravada.
+  */
+ public record AlertEvaluationResponse(
+         boolean alertGenerated,
+         String severity,
+         UUID alertId,
+-        String reason
+-) {}
++        String reason,
++        UUID healthReadingId,
++        boolean duplicateReading
++) {
++
++    /** Leitura já recebida antes: nada gravado, nada criado, nada avisado. */
++    public static AlertEvaluationResponse duplicate(UUID healthReadingId) {
++        return new AlertEvaluationResponse(false, null, null, null, healthReadingId, true);
++    }
++
++    /** Leitura gravada e dentro do esperado, ou sem alerta por deduplicação. */
++    public static AlertEvaluationResponse withoutAlert(UUID healthReadingId) {
++        return new AlertEvaluationResponse(false, null, null, null, healthReadingId, false);
++    }
++
++    /** Leitura gravada e alerta criado a partir dela. */
++    public static AlertEvaluationResponse withAlert(String severity, UUID alertId,
++                                                   String reason, UUID healthReadingId) {
++        return new AlertEvaluationResponse(true, severity, alertId, reason, healthReadingId, false);
++    }
++}
+diff --git a/src/main/java/com/tcc/application/listener/AlertEmailNotificationListener.java b/src/main/java/com/tcc/application/listener/AlertEmailNotificationListener.java
+new file mode 100644
+index 0000000..1e0a2e4
+--- /dev/null
++++ b/src/main/java/com/tcc/application/listener/AlertEmailNotificationListener.java
+@@ -0,0 +1,210 @@
++package com.tcc.application.listener;
++
++import java.time.LocalDateTime;
++import java.time.ZoneId;
++import java.time.ZoneOffset;
++import java.time.format.DateTimeFormatter;
++import java.util.List;
++import java.util.UUID;
++
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++import org.springframework.stereotype.Component;
++import org.springframework.transaction.annotation.Propagation;
++import org.springframework.transaction.annotation.Transactional;
++import org.springframework.transaction.event.TransactionPhase;
++import org.springframework.transaction.event.TransactionalEventListener;
++
++import com.tcc.application.port.out.AlertEmailSender;
++import com.tcc.domain.event.AlertCreatedEvent;
++import com.tcc.domain.model.Alert;
++import com.tcc.domain.model.Doctor;
++import com.tcc.domain.model.HealthReading;
++import com.tcc.domain.model.Notification;
++import com.tcc.domain.repository.AlertRepository;
++import com.tcc.domain.repository.DoctorPatientRepository;
++import com.tcc.domain.repository.NotificationRepository;
++
++/**
++ * Avisa por e-mail os médicos com vínculo ativo com o paciente do alerta, e grava
++ * uma linha em {@code notifications} por destinatário.
++ *
++ * <p>Listener separado do {@code AlertPushNotificationListener} de propósito: os
++ * dois escutam o mesmo evento e falham de forma independente. Erro no e-mail não
++ * afeta o alerta já gravado nem o push ao paciente, e vice-versa.
++ */
++@Component
++public class AlertEmailNotificationListener {
++
++    private static final Logger log = LoggerFactory.getLogger(AlertEmailNotificationListener.class);
++
++    /**
++     * A coluna {@code measured_at} é TIMESTAMP sem fuso e guarda o horário em UTC,
++     * normalizado por {@code AlertServiceImpl} na entrada. Para o médico o horário é
++     * exibido em America/Sao_Paulo.
++     */
++    private static final ZoneOffset STORAGE_OFFSET = ZoneOffset.UTC;
++
++    private static final ZoneId DISPLAY_ZONE = ZoneId.of("America/Sao_Paulo");
++
++    private static final DateTimeFormatter MEASURED_AT_FORMAT =
++            DateTimeFormatter.ofPattern("dd/MM/yyyy 'às' HH:mm");
++
++    private static final String SUBJECT_PREFIX = "Alerta de saúde: ";
++    private static final String NOT_INFORMED = "não informado";
++
++    /** Status gravados em notifications conforme o resultado do envio. */
++    private static final String STATUS_SENT = "SENT";
++    private static final String STATUS_FAILED = "FAILED";
++
++    private final AlertRepository alertRepository;
++    private final DoctorPatientRepository doctorPatientRepository;
++    private final NotificationRepository notificationRepository;
++    private final AlertEmailSender alertEmailSender;
++
++    public AlertEmailNotificationListener(AlertRepository alertRepository,
++                                          DoctorPatientRepository doctorPatientRepository,
++                                          NotificationRepository notificationRepository,
++                                          AlertEmailSender alertEmailSender) {
++        this.alertRepository = alertRepository;
++        this.doctorPatientRepository = doctorPatientRepository;
++        this.notificationRepository = notificationRepository;
++        this.alertEmailSender = alertEmailSender;
++    }
++
++    /**
++     * Roda depois do commit do alerta, em transação própria (REQUIRES_NEW) para
++     * poder navegar os relacionamentos LAZY e gravar as notificações.
++     *
++     * <p>Todo o corpo é envolvido em try/catch: a resposta do endpoint já foi
++     * decidida e o alerta já está gravado, então exceção aqui não tem para onde ir.
++     */
++    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
++    @Transactional(propagation = Propagation.REQUIRES_NEW)
++    public void onAlertCreated(AlertCreatedEvent event) {
++        UUID alertId = event.alert().getId();
++
++        try {
++            notifyDoctors(alertId);
++        } catch (Exception e) {
++            log.error("Falha ao enviar e-mail do alerta {}. exception={}",
++                    alertId, e.getClass().getSimpleName());
++        }
++    }
++
++    private void notifyDoctors(UUID alertId) {
++        Alert alert = alertRepository.findByIdWithPatientAndReading(alertId).orElse(null);
++
++        if (alert == null) {
++            log.warn("Alerta {} nao encontrado ao preparar o e-mail.", alertId);
++            return;
++        }
++
++        UUID patientId = alert.getPatient().getId();
++        List<Doctor> doctors = doctorPatientRepository.findActiveDoctorsByPatientId(patientId);
++
++        if (doctors.isEmpty()) {
++            log.debug("Paciente {} nao tem medico com vinculo ativo. E-mail do alerta {} ignorado.",
++                    patientId, alertId);
++            return;
++        }
++
++        String subject = buildSubject(alert);
++        String body = buildBody(alert);
++
++        for (Doctor doctor : doctors) {
++            notifyDoctor(alert, doctor, subject, body);
++        }
++    }
++
++    /**
++     * Envia e registra o resultado. A gravação da notificação acontece nos dois
++     * caminhos: SENT quando o provedor aceitou, FAILED quando não — inclusive quando
++     * o médico não tem e-mail utilizável. Sem a linha FAILED não haveria rastro de
++     * que o aviso foi tentado e não chegou.
++     */
++    private void notifyDoctor(Alert alert, Doctor doctor, String subject, String body) {
++        String recipient = doctor.getUser() == null ? null : doctor.getUser().getEmail();
++
++        boolean sent = alertEmailSender.sendAlertEmail(recipient, subject, body, alert.getId());
++
++        Notification notification = new Notification(
++                alert, doctor, body, sent ? STATUS_SENT : STATUS_FAILED);
++        notificationRepository.save(notification);
++
++        if (sent) {
++            log.info("Notificacao do alerta {} registrada como {} para o medico {}.",
++                    alert.getId(), STATUS_SENT, doctor.getId());
++        } else {
++            log.warn("Notificacao do alerta {} registrada como {} para o medico {}.",
++                    alert.getId(), STATUS_FAILED, doctor.getId());
++        }
++    }
++
++    private String buildSubject(Alert alert) {
++        String severity = alert.getSeverity() == null ? "" : " [" + alert.getSeverity() + "]";
++        String subject = SUBJECT_PREFIX + alert.getPatient().getFullName() + severity;
++        return subject.length() > 255 ? subject.substring(0, 255) : subject;
++    }
++
++    /**
++     * Texto simples, em português, com o que o médico precisa para decidir: quem,
++     * o que foi medido, quanto deu, a gravidade e quando a medição aconteceu.
++     *
++     * <p>O horário da medição é o ponto central: a leitura pode chegar atrasada pela
++     * fila, então o horário de criação do alerta não serve como referência clínica.
++     */
++    private String buildBody(Alert alert) {
++        HealthReading reading = alert.getHealthReading();
++
++        return """
++                Um alerta foi gerado para o paciente sob seus cuidados.
++
++                Paciente: %s
++                Tipo da leitura: %s
++                Valor medido: %s
++                Severidade: %s
++                Horário da medição: %s (horário de Brasília)
++
++                Motivo: %s
++
++                Acesse o portal para ver o histórico completo do paciente.
++                """.formatted(
++                alert.getPatient().getFullName(),
++                reading == null ? NOT_INFORMED : reading.getReadingType(),
++                formatValue(reading),
++                alert.getSeverity() == null ? NOT_INFORMED : alert.getSeverity(),
++                formatMeasuredAt(reading),
++                alert.getDescription() == null || alert.getDescription().isBlank()
++                        ? NOT_INFORMED : alert.getDescription());
++    }
++
++    private String formatValue(HealthReading reading) {
++        if (reading == null || reading.getValue() == null) {
++            return NOT_INFORMED;
++        }
++
++        String unit = reading.getUnit();
++        return unit == null || unit.isBlank() ? reading.getValue() : reading.getValue() + " " + unit;
++    }
++
++    /**
++     * Converte o horário gravado de UTC para America/Sao_Paulo antes de formatar.
++     *
++     * <p>Os dois fusos são explícitos e nenhum deles vem da JVM: o resultado é o
++     * mesmo com o servidor em UTC ou em horário de Brasília. Usar o fuso da máquina
++     * aqui faria o mesmo alerta mostrar horários diferentes em ambientes diferentes.
++     */
++    private String formatMeasuredAt(HealthReading reading) {
++        if (reading == null || reading.getMeasuredAt() == null) {
++            return NOT_INFORMED;
++        }
++
++        LocalDateTime forDoctor = reading.getMeasuredAt()
++                .atOffset(STORAGE_OFFSET)
++                .atZoneSameInstant(DISPLAY_ZONE)
++                .toLocalDateTime();
++
++        return MEASURED_AT_FORMAT.format(forDoctor);
++    }
++}
+diff --git a/src/main/java/com/tcc/application/port/out/AlertEmailSender.java b/src/main/java/com/tcc/application/port/out/AlertEmailSender.java
+new file mode 100644
+index 0000000..66c5b45
+--- /dev/null
++++ b/src/main/java/com/tcc/application/port/out/AlertEmailSender.java
+@@ -0,0 +1,26 @@
++package com.tcc.application.port.out;
++
++import java.util.UUID;
++
++/**
++ * Envio do aviso de alerta por e-mail ao médico responsável pelo paciente.
++ *
++ * <p>Mesma forma do {@link PushNotificationPublisher}: a implementação real é
++ * trocada por uma NoOp através de propriedade, e nenhuma implementação propaga
++ * exceção. O resultado booleano é o que decide o status gravado em
++ * {@code notifications} (SENT ou FAILED).
++ */
++public interface AlertEmailSender {
++
++    /**
++     * Envia um e-mail de texto simples.
++     *
++     * @param recipientEmail destinatário; a implementação não o registra em log
++     * @param subject        assunto, em português
++     * @param body           corpo em texto simples, em português
++     * @param alertId        só para correlação em log; não vai no conteúdo
++     * @return {@code true} quando o provedor aceitou a mensagem. {@code false} em
++     *         qualquer falha. Nunca lança exceção.
++     */
++    boolean sendAlertEmail(String recipientEmail, String subject, String body, UUID alertId);
++}
+diff --git a/src/main/java/com/tcc/application/service/AlertDuplicateReadingException.java b/src/main/java/com/tcc/application/service/AlertDuplicateReadingException.java
+new file mode 100644
+index 0000000..1d8212d
+--- /dev/null
++++ b/src/main/java/com/tcc/application/service/AlertDuplicateReadingException.java
+@@ -0,0 +1,20 @@
++package com.tcc.application.service;
++
++/**
++ * Sinaliza que a leitura recebida já estava gravada.
++ *
++ * <p>Só é lançada no caso de corrida: duas requisições idênticas que passam juntas
++ * pela checagem de idempotência e são separadas pela restrição UNIQUE da V33. O
++ * caminho comum de leitura repetida nem chega aqui — ele é detectado por consulta
++ * e devolve resposta de sucesso normalmente.
++ *
++ * <p>Fica no pacote de service, e não em {@code com.tcc.exception}, porque não é um
++ * erro traduzido pelo handler global: leitura repetida é sucesso. Quem trata é o
++ * {@code AlertController}, que a converte em 2xx.
++ */
++public class AlertDuplicateReadingException extends RuntimeException {
++
++    public AlertDuplicateReadingException(Throwable cause) {
++        super("Leitura já recebida anteriormente", cause);
++    }
++}
+diff --git a/src/main/java/com/tcc/application/service/AlertService.java b/src/main/java/com/tcc/application/service/AlertService.java
+index 7b891fd..9322c89 100644
+--- a/src/main/java/com/tcc/application/service/AlertService.java
++++ b/src/main/java/com/tcc/application/service/AlertService.java
+@@ -1,5 +1,7 @@
+ package com.tcc.application.service;
+ 
++import java.util.UUID;
++
+ import com.tcc.application.dto.request.AlertEvaluationRequest;
+ import com.tcc.application.dto.response.AlertEvaluationResponse;
+ import com.tcc.application.dto.response.AlertResponse;
+@@ -9,16 +11,36 @@ import org.springframework.data.domain.Pageable;
+ public interface AlertService {
+ 
+     /**
+-     * Avalia uma leitura de sinal vital contra a faixa normal cadastrada para o tipo
+-     * e persiste um alerta quando o valor está fora dessa faixa.
++     * Grava a leitura de sinal vital recebida, avalia-a contra a faixa normal
++     * cadastrada para o tipo e persiste um alerta quando o valor está fora dessa
++     * faixa.
++     *
++     * <p>Toda leitura é gravada, normal ou não, e o alerta criado aponta para ela.
++     *
++     * <p>Idempotência: leitura com o mesmo paciente, tipo e horário de medição já
++     * gravada não é gravada de novo, não gera alerta e não dispara aviso. A resposta
++     * é de sucesso, com {@code duplicateReading=true}.
++     *
++     * <p>Deduplicação: se já existe alerta PENDING do mesmo paciente para o mesmo
++     * tipo de leitura, nenhum novo alerta é criado e nenhum aviso é disparado. A
++     * leitura continua sendo gravada.
+      *
+      * <p>Os limites são inclusivos no normal: valor igual ao mínimo ou ao máximo não
+      * gera alerta. Limite nulo significa ausência de limite daquele lado.
+      *
+-     * <p>Quando não há faixa cadastrada para o tipo de leitura, nenhum alerta é gerado
+-     * e nenhuma exceção é lançada.
++     * <p>Quando não há faixa cadastrada para o tipo de leitura, nenhum alerta é
++     * gerado e nenhuma exceção é lançada — a leitura ainda assim é gravada.
++     *
++     * @throws AlertDuplicateReadingException quando a leitura é barrada pela
++     *         restrição de unicidade do banco, em corrida com uma requisição idêntica
+      */
+     AlertEvaluationResponse evaluateReading(AlertEvaluationRequest request);
+ 
+     Page<AlertResponse> listRecentForPatient(String email, Pageable pageable);
++
++    /**
++     * Marca um alerta como RESOLVED. Restrito a alerta de paciente vinculado ao
++     * médico autenticado.
++     */
++    AlertResponse resolveAlert(String email, UUID alertId);
+ }
+diff --git a/src/main/java/com/tcc/application/service/AlertServiceImpl.java b/src/main/java/com/tcc/application/service/AlertServiceImpl.java
+index 975fcec..63a333d 100644
+--- a/src/main/java/com/tcc/application/service/AlertServiceImpl.java
++++ b/src/main/java/com/tcc/application/service/AlertServiceImpl.java
+@@ -1,12 +1,15 @@
+ package com.tcc.application.service;
+ 
+ import java.time.LocalDateTime;
++import java.time.OffsetDateTime;
++import java.time.ZoneOffset;
+ import java.util.Optional;
+ import java.util.UUID;
+ 
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ import org.springframework.context.ApplicationEventPublisher;
++import org.springframework.dao.DataIntegrityViolationException;
+ import org.springframework.data.domain.Page;
+ import org.springframework.data.domain.Pageable;
+ import org.springframework.stereotype.Service;
+@@ -19,9 +22,15 @@ import com.tcc.application.dto.response.AlertResponse;
+ import com.tcc.application.mapper.AlertMapper;
+ import com.tcc.domain.event.AlertCreatedEvent;
+ import com.tcc.domain.model.Alert;
++import com.tcc.domain.model.Doctor;
++import com.tcc.domain.model.HealthReading;
+ import com.tcc.domain.model.Patient;
+ import com.tcc.domain.model.ReadingThreshold;
++import com.tcc.domain.model.User;
+ import com.tcc.domain.repository.AlertRepository;
++import com.tcc.domain.repository.DoctorPatientRepository;
++import com.tcc.domain.repository.DoctorRepository;
++import com.tcc.domain.repository.HealthReadingRepository;
+ import com.tcc.domain.repository.PatientRepository;
+ import com.tcc.domain.repository.ReadingThresholdRepository;
+ import com.tcc.domain.repository.UserRepository;
+@@ -41,52 +50,92 @@ public class AlertServiceImpl implements AlertService {
+      */
+     private static final String STATUS_PENDING = "PENDING";
+ 
++    /** Status final do alerta depois que o médico o trata. */
++    private static final String STATUS_RESOLVED = "RESOLVED";
++
+     private final PatientRepository patientRepository;
+     private final ReadingThresholdRepository readingThresholdRepository;
+     private final AlertRepository alertRepository;
++    private final HealthReadingRepository healthReadingRepository;
+     private final AlertMapper alertMapper;
+     private final UserRepository userRepository;
++    private final DoctorRepository doctorRepository;
++    private final DoctorPatientRepository doctorPatientRepository;
+     private final ApplicationEventPublisher eventPublisher;
+ 
+     public AlertServiceImpl(PatientRepository patientRepository,
+                             ReadingThresholdRepository readingThresholdRepository,
+                             AlertRepository alertRepository,
++                            HealthReadingRepository healthReadingRepository,
+                             AlertMapper alertMapper,
+                             UserRepository userRepository,
++                            DoctorRepository doctorRepository,
++                            DoctorPatientRepository doctorPatientRepository,
+                             ApplicationEventPublisher eventPublisher) {
+         this.patientRepository = patientRepository;
+         this.readingThresholdRepository = readingThresholdRepository;
+         this.alertRepository = alertRepository;
++        this.healthReadingRepository = healthReadingRepository;
+         this.alertMapper = alertMapper;
+         this.userRepository = userRepository;
++        this.doctorRepository = doctorRepository;
++        this.doctorPatientRepository = doctorPatientRepository;
+         this.eventPublisher = eventPublisher;
+     }
+ 
++    /**
++     * Grava a leitura e, quando ela está fora da faixa normal, cria o alerta.
++     *
++     * <p>Ordem fixa: idempotência, paciente, gravação da leitura, avaliação,
++     * deduplicação, alerta. A leitura é gravada antes de qualquer decisão sobre
++     * alerta, porque o histórico de medições não depende de haver faixa cadastrada
++     * nem de o valor ser anormal.
++     */
+     @Override
+     @Transactional
+     public AlertEvaluationResponse evaluateReading(AlertEvaluationRequest request) {
++        LocalDateTime measuredAtUtc = toUtc(request.measuredAt());
++
++        Optional<HealthReading> alreadyReceived = healthReadingRepository
++                .findByPatientIdAndReadingTypeAndMeasuredAt(
++                        request.patientId(), request.readingType(), measuredAtUtc);
++
++        if (alreadyReceived.isPresent()) {
++            log.info("Leitura repetida do paciente {} para o tipo {}. Nada gravado, nada avisado.",
++                    request.patientId(), request.readingType());
++            return AlertEvaluationResponse.duplicate(alreadyReceived.get().getId());
++        }
++
+         Patient patient = patientRepository.findById(request.patientId())
+                 .orElseThrow(() -> new ResourceNotFoundException(
+                         ErrorMessages.patientNotFoundById(request.patientId())));
+ 
++        HealthReading reading = saveReading(patient, request, measuredAtUtc);
++
+         Optional<ReadingThreshold> threshold =
+                 readingThresholdRepository.findByReadingType(request.readingType());
+ 
+         if (threshold.isEmpty()) {
+             log.warn("Nenhuma faixa cadastrada para o tipo de leitura {}. Avaliacao ignorada para o paciente {}.",
+                     request.readingType(), patient.getId());
+-            return new AlertEvaluationResponse(false, null, null, null);
++            return AlertEvaluationResponse.withoutAlert(reading.getId());
+         }
+ 
+         ReadingThreshold range = threshold.get();
+         String reason = buildReason(request.value(), range);
+ 
+         if (reason == null) {
+-            return new AlertEvaluationResponse(false, null, null, null);
++            return AlertEvaluationResponse.withoutAlert(reading.getId());
++        }
++
++        if (alertRepository.existsByPatientIdAndStatusAndHealthReading_ReadingType(
++                patient.getId(), STATUS_PENDING, range.getReadingType())) {
++            log.info("Alerta ja em aberto para o paciente {} no tipo {}. Nenhum novo alerta criado.",
++                    patient.getId(), range.getReadingType());
++            return AlertEvaluationResponse.withoutAlert(reading.getId());
+         }
+ 
+-        Alert alert = buildAlert(patient, range, reason);
+-        Alert savedAlert = alertRepository.save(alert);
++        Alert savedAlert = alertRepository.save(buildAlert(patient, reading, range, reason));
+ 
+         // Consumido em AFTER_COMMIT: se esta transação sofrer rollback, nenhuma
+         // notificação é enviada para um alerta que não existe.
+@@ -95,7 +144,8 @@ public class AlertServiceImpl implements AlertService {
+         log.info("Alerta {} gerado para o paciente {} a partir do tipo de leitura {}.",
+                 savedAlert.getId(), patient.getId(), range.getReadingType());
+ 
+-        return new AlertEvaluationResponse(true, range.getSeverity(), savedAlert.getId(), reason);
++        return AlertEvaluationResponse.withAlert(
++                range.getSeverity(), savedAlert.getId(), reason, reading.getId());
+     }
+ 
+     @Override
+@@ -114,6 +164,83 @@ public class AlertServiceImpl implements AlertService {
+                 .map(alertMapper::toResponse);
+     }
+ 
++    /**
++     * Marca o alerta como RESOLVED.
++     *
++     * <p>O escopo é aplicado na consulta de vínculo, não só pela role: o médico
++     * alcança apenas alerta de paciente vinculado a ele.
++     */
++    @Override
++    @Transactional
++    public AlertResponse resolveAlert(String email, UUID alertId) {
++        Doctor doctor = resolveDoctor(email);
++
++        Alert alert = alertRepository.findById(alertId)
++                .orElseThrow(() -> new ResourceNotFoundException(alertNotFoundById(alertId)));
++
++        if (!doctorPatientRepository.existsByDoctorIdAndPatientId(
++                doctor.getId(), alert.getPatient().getId())) {
++            throw new UnauthorizedException(ErrorMessages.patientNotLinkedToDoctor());
++        }
++
++        // Alerta já resolvido: operação idempotente. Devolve o estado atual sem
++        // gravar de novo, para não sobrescrever o registro de quem resolveu antes.
++        if (STATUS_RESOLVED.equals(alert.getStatus())) {
++            log.info("Alerta {} ja estava {}. Nada alterado.", alertId, STATUS_RESOLVED);
++            return alertMapper.toResponse(alert);
++        }
++
++        alert.setStatus(STATUS_RESOLVED);
++        Alert saved = alertRepository.save(alert);
++
++        log.info("Alerta {} marcado como {} pelo medico {}.", alertId, STATUS_RESOLVED, doctor.getId());
++
++        return alertMapper.toResponse(saved);
++    }
++
++    /**
++     * Converte o horário informado para UTC, que é como a coluna
++     * {@code measured_at} guarda o valor.
++     *
++     * <p>É isso que faz {@code 14:32Z} e {@code 11:32-03:00} virarem a mesma
++     * leitura: os dois descrevem o mesmo instante, e depois da normalização
++     * produzem o mesmo {@code LocalDateTime}. A conversão não consulta o fuso da
++     * JVM — o deslocamento vem do próprio valor recebido.
++     */
++    private LocalDateTime toUtc(OffsetDateTime measuredAt) {
++        return measuredAt.withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
++    }
++
++    /**
++     * Persiste a leitura recebida, com {@code measuredAt} já normalizado em UTC. O
++     * dispositivo fica nulo: o contrato da integração não informa dispositivo, e a
++     * coluna passou a aceitar nulo na V34.
++     *
++     * <p>A verificação de idempotência acontece antes desta chamada, mas duas
++     * requisições idênticas em paralelo passam as duas por lá. A restrição UNIQUE da
++     * V33 barra a segunda, e o flush explícito faz a violação aparecer aqui, onde
++     * ainda é possível traduzi-la em {@link AlertDuplicateReadingException} — leitura
++     * repetida é sucesso para quem chama, não erro.
++     */
++    private HealthReading saveReading(Patient patient, AlertEvaluationRequest request,
++                                     LocalDateTime measuredAtUtc) {
++        HealthReading reading = new HealthReading();
++        reading.setPatient(patient);
++        reading.setPatientDevice(null);
++        reading.setReadingType(request.readingType());
++        reading.setValue(String.valueOf(request.value()));
++        reading.setUnit(request.unit());
++        reading.setMeasuredAt(measuredAtUtc);
++
++        try {
++            return healthReadingRepository.saveAndFlush(reading);
++        } catch (DataIntegrityViolationException e) {
++            log.info("Leitura concorrente do paciente {} no tipo {} barrada pela restricao de unicidade.",
++                    patient.getId(), request.readingType());
++            throw new AlertDuplicateReadingException(e);
++        }
++    }
++
+     /**
+      * Compara o valor com a faixa normal e descreve o desvio encontrado.
+      * Retorna null quando o valor está dentro da faixa.
+@@ -136,19 +263,20 @@ public class AlertServiceImpl implements AlertService {
+ 
+     /**
+      * Monta o alerta reaproveitando o AlertMapper já existente, para não duplicar a
+-     * atribuição de campos da entidade. O healthReadingId fica nulo: esta versão não
+-     * persiste a leitura, apenas o alerta derivado dela.
++     * atribuição de campos da entidade. A leitura que originou o alerta vai no
++     * relacionamento, então health_reading_id fica preenchido.
+      */
+-    private Alert buildAlert(Patient patient, ReadingThreshold range, String reason) {
++    private Alert buildAlert(Patient patient, HealthReading reading,
++                             ReadingThreshold range, String reason) {
+         AlertRequest alertRequest = new AlertRequest(
+                 patient.getId(),
+-                null,
++                reading.getId(),
+                 range.getSeverity(),
+                 buildTitle(range),
+                 reason,
+                 STATUS_PENDING
+         );
+-        return alertMapper.toEntity(alertRequest, patient, null);
++        return alertMapper.toEntity(alertRequest, patient, reading);
+     }
+ 
+     private String buildTitle(ReadingThreshold range) {
+@@ -157,4 +285,17 @@ public class AlertServiceImpl implements AlertService {
+                 + (label != null ? " (" + label + ")" : "");
+         return title.length() > 255 ? title.substring(0, 255) : title;
+     }
++
++    /** Mesmo caminho usado pelos outros services: usuário ativo, depois médico. */
++    private Doctor resolveDoctor(String email) {
++        User user = userRepository.findByEmailAndActiveTrue(email)
++                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundByEmail(email)));
++
++        return doctorRepository.findByUserId(user.getId())
++                .orElseThrow(() -> new UnauthorizedException(ErrorMessages.doctorProfileNotFound()));
++    }
++
++    private static String alertNotFoundById(UUID id) {
++        return "Alerta não encontrado com ID: " + id;
++    }
+ }
+diff --git a/src/main/java/com/tcc/domain/model/HealthReading.java b/src/main/java/com/tcc/domain/model/HealthReading.java
+index ac2161e..9f30372 100644
+--- a/src/main/java/com/tcc/domain/model/HealthReading.java
++++ b/src/main/java/com/tcc/domain/model/HealthReading.java
+@@ -18,8 +18,13 @@ public class HealthReading {
+     @JoinColumn(name = "patient_id", nullable = false)
+     private Patient patient;
+ 
++    /**
++     * Dispositivo de origem da medição. Opcional desde a V34: a leitura que chega
++     * pela integração de risco não informa dispositivo — o contrato dela tem
++     * apenas paciente, tipo, valor e horário da medição.
++     */
+     @ManyToOne(fetch = FetchType.LAZY)
+-    @JoinColumn(name = "patient_device_id", nullable = false)
++    @JoinColumn(name = "patient_device_id")
+     private PatientDevice patientDevice;
+ 
+     @ManyToOne(fetch = FetchType.LAZY)
+diff --git a/src/main/java/com/tcc/domain/repository/AlertRepository.java b/src/main/java/com/tcc/domain/repository/AlertRepository.java
+index 1dcbcbc..835d7c7 100644
+--- a/src/main/java/com/tcc/domain/repository/AlertRepository.java
++++ b/src/main/java/com/tcc/domain/repository/AlertRepository.java
+@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
+ 
+ import java.util.List;
+ import java.time.LocalDateTime;
++import java.util.Optional;
+ import java.util.UUID;
+ 
+ public interface AlertRepository extends JpaRepository<Alert, UUID> {
+@@ -23,6 +24,27 @@ public interface AlertRepository extends JpaRepository<Alert, UUID> {
+ 
+     List<Alert> findByPatientIdAndStatus(UUID patientId, String status);
+ 
++    /**
++     * Deduplicação de alerta: já existe alerta em aberto do paciente para este tipo
++     * de leitura? O tipo vem da leitura associada ao alerta, então alerta sem
++     * leitura (criado antes desta versão) nunca casa aqui.
++     */
++    boolean existsByPatientIdAndStatusAndHealthReading_ReadingType(UUID patientId,
++                                                                  String status,
++                                                                  String readingType);
++
++    /**
++     * Carrega o alerta junto com o paciente, para o listener de e-mail poder ler o
++     * nome do paciente e a leitura fora de transação da requisição original.
++     */
++    @Query("""
++            SELECT a FROM Alert a
++            JOIN FETCH a.patient
++            LEFT JOIN FETCH a.healthReading
++            WHERE a.id = :alertId
++            """)
++    Optional<Alert> findByIdWithPatientAndReading(@Param("alertId") UUID alertId);
++
+     List<Alert> findByPatientIdOrderByCreatedAtDesc(UUID patientId);
+ 
+     Page<Alert> findByPatientIdAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(
+diff --git a/src/main/java/com/tcc/domain/repository/DoctorPatientRepository.java b/src/main/java/com/tcc/domain/repository/DoctorPatientRepository.java
+index 23ceb85..556026c 100644
+--- a/src/main/java/com/tcc/domain/repository/DoctorPatientRepository.java
++++ b/src/main/java/com/tcc/domain/repository/DoctorPatientRepository.java
+@@ -1,14 +1,38 @@
+ package com.tcc.domain.repository;
+ 
++import com.tcc.domain.model.Doctor;
+ import com.tcc.domain.model.DoctorPatient;
+ import org.springframework.data.jpa.repository.JpaRepository;
++import org.springframework.data.jpa.repository.Query;
++import org.springframework.data.repository.query.Param;
+ 
+ import java.util.List;
+ import java.util.Optional;
+ import java.util.UUID;
+ 
+ public interface DoctorPatientRepository extends JpaRepository<DoctorPatient, UUID> {
+-    
++
++    /**
++     * Médicos com vínculo ativo com o paciente, já com o usuário carregado para
++     * leitura do e-mail. "Vínculo ativo" aqui exige médico ativo, hospital ativo e
++     * usuário ativo: a regra do projeto é que médico de hospital inativo não opera,
++     * então ele também não deve receber aviso de alerta.
++     *
++     * <p>doctor_patients não tem coluna própria de atividade — o vínculo existe ou
++     * não existe. A atividade vem das três entidades acima.
++     */
++    @Query("""
++            SELECT DISTINCT d FROM DoctorPatient dp
++            JOIN dp.doctor d
++            JOIN FETCH d.user u
++            JOIN d.hospital h
++            WHERE dp.patient.id = :patientId
++              AND d.active = true
++              AND h.active = true
++              AND u.active = true
++            """)
++    List<Doctor> findActiveDoctorsByPatientId(@Param("patientId") UUID patientId);
++
+     List<DoctorPatient> findByDoctorId(UUID doctorId);
+     
+     List<DoctorPatient> findByPatientId(UUID patientId);
+diff --git a/src/main/java/com/tcc/domain/repository/HealthReadingRepository.java b/src/main/java/com/tcc/domain/repository/HealthReadingRepository.java
+index b0af06e..f3dfad6 100644
+--- a/src/main/java/com/tcc/domain/repository/HealthReadingRepository.java
++++ b/src/main/java/com/tcc/domain/repository/HealthReadingRepository.java
+@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
+ 
+ import java.time.LocalDateTime;
+ import java.util.List;
++import java.util.Optional;
+ import java.util.UUID;
+ 
+ public interface HealthReadingRepository extends JpaRepository<HealthReading, UUID> {
+@@ -22,4 +23,16 @@ public interface HealthReadingRepository extends JpaRepository<HealthReading, UU
+     List<HealthReading> findByPatientIdAndMeasuredAtBetween(UUID patientId, LocalDateTime startDate, LocalDateTime endDate);
+     
+     List<HealthReading> findByPatientIdOrderByMeasuredAtDesc(UUID patientId);
++
++    /**
++     * Chave de idempotência da leitura recebida pela integração: a mesma medição
++     * reentregue pela fila não deve virar uma segunda linha. Devolve a leitura já
++     * gravada para que a resposta aponte para ela.
++     *
++     * <p>Pode devolver no máximo uma linha: a restrição UNIQUE criada na V33 é
++     * exatamente sobre estas três colunas.
++     */
++    Optional<HealthReading> findByPatientIdAndReadingTypeAndMeasuredAt(UUID patientId,
++                                                                      String readingType,
++                                                                      LocalDateTime measuredAt);
+ }
+diff --git a/src/main/java/com/tcc/exception/GlobalExceptionHandler.java b/src/main/java/com/tcc/exception/GlobalExceptionHandler.java
+index 05dfd2b..4d50621 100644
+--- a/src/main/java/com/tcc/exception/GlobalExceptionHandler.java
++++ b/src/main/java/com/tcc/exception/GlobalExceptionHandler.java
+@@ -1,20 +1,21 @@
+ package com.tcc.exception;
+ 
++import java.time.LocalDateTime;
++import java.util.LinkedHashMap;
++import java.util.Map;
++import java.util.stream.Collectors;
++
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ import org.springframework.http.HttpStatus;
+ import org.springframework.http.ResponseEntity;
++import org.springframework.http.converter.HttpMessageNotReadableException;
+ import org.springframework.web.bind.MethodArgumentNotValidException;
+ import org.springframework.web.bind.MissingServletRequestParameterException;
+ import org.springframework.web.bind.annotation.ExceptionHandler;
+ import org.springframework.web.bind.annotation.RestControllerAdvice;
+ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+ 
+-import java.time.LocalDateTime;
+-import java.util.LinkedHashMap;
+-import java.util.Map;
+-import java.util.stream.Collectors;
+-
+ @RestControllerAdvice
+ public class GlobalExceptionHandler {
+ 
+@@ -53,6 +54,24 @@ public class GlobalExceptionHandler {
+         return buildResponse(HttpStatus.BAD_REQUEST, "Parâmetro de requisição inválido ou ausente");
+     }
+ 
++    /**
++     * Corpo que o Jackson não consegue ler: JSON malformado, tipo incompatível em
++     * um campo, ou data/hora em formato inesperado — como {@code measuredAt} sem
++     * fuso no endpoint de integração.
++     *
++     * <p>Sem este handler o caso cairia no {@code handleGeneric} e viraria 500, o
++     * que faria uma fila com retentativa reenviar para sempre um payload que nunca
++     * vai ser aceito. A mensagem é genérica de propósito: o texto da exceção do
++     * Jackson cita o conteúdo do campo, e o corpo pode trazer dado de saúde.
++     */
++    @ExceptionHandler(HttpMessageNotReadableException.class)
++    public ResponseEntity<Map<String, Object>> handleUnreadableBody(HttpMessageNotReadableException ex) {
++        return buildResponse(HttpStatus.BAD_REQUEST,
++                "Corpo da requisição inválido ou mal formatado. "
++                        + "Verifique o JSON enviado e o formato dos campos de data/hora, "
++                        + "que devem incluir o fuso (exemplo: 2026-07-01T14:32:00Z)");
++    }
++
+     @ExceptionHandler(Exception.class)
+     public ResponseEntity<Map<String, Object>> handleGeneric(Exception ex) {
+         log.error("Erro interno inesperado", ex);
+diff --git a/src/main/java/com/tcc/infrastructure/config/AwsSqsConfig.java b/src/main/java/com/tcc/infrastructure/config/AwsSqsConfig.java
+index 8e7ee68..4ba806e 100644
+--- a/src/main/java/com/tcc/infrastructure/config/AwsSqsConfig.java
++++ b/src/main/java/com/tcc/infrastructure/config/AwsSqsConfig.java
+@@ -4,7 +4,10 @@ import org.springframework.beans.factory.annotation.Value;
+ import org.springframework.context.annotation.Bean;
+ import org.springframework.context.annotation.Configuration;
+ 
++import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
++
+ import software.amazon.awssdk.regions.Region;
++import software.amazon.awssdk.services.sesv2.SesV2Client;
+ import software.amazon.awssdk.services.sqs.SqsClient;
+ 
+ @Configuration
+@@ -17,4 +20,21 @@ public class AwsSqsConfig {
+                 .region(Region.of(awsRegion))
+                 .build();
+     }
+-}
+\ No newline at end of file
++
++    /**
++     * Cliente do SES usado pelo aviso de alerta ao médico.
++     *
++     * <p>Diferente do {@code SqsClient} acima, este bean é condicional: ele só
++     * existe quando {@code app.alert-email.enabled=true}. Com o e-mail desligado
++     * (o padrão) entra o {@code NoOpAlertEmailSender}, que não tem cliente AWS, e
++     * nada precisa ser criado.
++     */
++    @Bean
++    @ConditionalOnProperty(name = "app.alert-email.enabled", havingValue = "true")
++    public SesV2Client sesV2Client(
++            @Value("${app.alert-email.aws-region:us-east-1}") String awsRegion) {
++        return SesV2Client.builder()
++                .region(Region.of(awsRegion))
++                .build();
++    }
++}
+diff --git a/src/main/java/com/tcc/infrastructure/messaging/email/NoOpAlertEmailSender.java b/src/main/java/com/tcc/infrastructure/messaging/email/NoOpAlertEmailSender.java
+new file mode 100644
+index 0000000..375b490
+--- /dev/null
++++ b/src/main/java/com/tcc/infrastructure/messaging/email/NoOpAlertEmailSender.java
+@@ -0,0 +1,33 @@
++package com.tcc.infrastructure.messaging.email;
++
++import java.util.UUID;
++
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
++import org.springframework.stereotype.Service;
++
++import com.tcc.application.port.out.AlertEmailSender;
++
++/**
++ * Implementação ativa quando {@code app.alert-email.enabled=false} (o padrão).
++ * Mesmo arranjo do {@code NoOpPushNotificationPublisher}: o ambiente de
++ * desenvolvimento sobe sem depender da AWS.
++ */
++@Service
++@ConditionalOnProperty(name = "app.alert-email.enabled", havingValue = "false", matchIfMissing = true)
++public class NoOpAlertEmailSender implements AlertEmailSender {
++
++    private static final Logger log = LoggerFactory.getLogger(NoOpAlertEmailSender.class);
++
++    /**
++     * Devolve false: nada foi entregue, então a notificação correspondente é
++     * gravada como FAILED. Responder true aqui faria o banco afirmar que um
++     * médico foi avisado quando nenhum e-mail saiu.
++     */
++    @Override
++    public boolean sendAlertEmail(String recipientEmail, String subject, String body, UUID alertId) {
++        log.warn("E-mail de alerta desabilitado. Aviso do alerta {} nao foi enviado.", alertId);
++        return false;
++    }
++}
+diff --git a/src/main/java/com/tcc/infrastructure/messaging/email/SesAlertEmailSender.java b/src/main/java/com/tcc/infrastructure/messaging/email/SesAlertEmailSender.java
+new file mode 100644
+index 0000000..ddeb8b4
+--- /dev/null
++++ b/src/main/java/com/tcc/infrastructure/messaging/email/SesAlertEmailSender.java
+@@ -0,0 +1,87 @@
++package com.tcc.infrastructure.messaging.email;
++
++import java.nio.charset.StandardCharsets;
++import java.util.UUID;
++
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++import org.springframework.beans.factory.annotation.Value;
++import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
++import org.springframework.stereotype.Service;
++
++import com.tcc.application.port.out.AlertEmailSender;
++
++import software.amazon.awssdk.services.sesv2.SesV2Client;
++import software.amazon.awssdk.services.sesv2.model.Body;
++import software.amazon.awssdk.services.sesv2.model.Content;
++import software.amazon.awssdk.services.sesv2.model.Destination;
++import software.amazon.awssdk.services.sesv2.model.EmailContent;
++import software.amazon.awssdk.services.sesv2.model.Message;
++import software.amazon.awssdk.services.sesv2.model.SendEmailRequest;
++
++/**
++ * Envio pelo Amazon SES (API v2), seguindo o mesmo formato dos clientes SQS e S3
++ * já usados no projeto: cliente do AWS SDK v2 injetado por construtor, região e
++ * demais parâmetros vindos de propriedade.
++ */
++@Service
++@ConditionalOnProperty(name = "app.alert-email.enabled", havingValue = "true")
++public class SesAlertEmailSender implements AlertEmailSender {
++
++    private static final Logger log = LoggerFactory.getLogger(SesAlertEmailSender.class);
++
++    /** O conteúdo tem acento: sem charset explícito o texto chega corrompido. */
++    private static final String CHARSET = StandardCharsets.UTF_8.name();
++
++    private final SesV2Client sesV2Client;
++    private final String senderAddress;
++
++    public SesAlertEmailSender(SesV2Client sesV2Client,
++                               @Value("${app.alert-email.sender}") String senderAddress) {
++        this.sesV2Client = sesV2Client;
++        this.senderAddress = senderAddress;
++    }
++
++    /**
++     * Nenhuma exceção escapa: quem chama é um listener que roda depois do commit do
++     * alerta, e o retorno booleano é o que decide o status da notificação. Falha de
++     * SES vira FAILED em {@code notifications}, não erro na requisição original.
++     */
++    @Override
++    public boolean sendAlertEmail(String recipientEmail, String subject, String body, UUID alertId) {
++        if (recipientEmail == null || recipientEmail.isBlank()) {
++            log.warn("Destinatario ausente no aviso do alerta {}. Envio ignorado.", alertId);
++            return false;
++        }
++
++        if (senderAddress == null || senderAddress.isBlank()) {
++            log.error("Remetente de e-mail nao configurado. Aviso do alerta {} nao enviado.", alertId);
++            return false;
++        }
++
++        try {
++            SendEmailRequest request = SendEmailRequest.builder()
++                    .fromEmailAddress(senderAddress)
++                    .destination(Destination.builder().toAddresses(recipientEmail).build())
++                    .content(EmailContent.builder()
++                            .simple(Message.builder()
++                                    .subject(Content.builder().charset(CHARSET).data(subject).build())
++                                    .body(Body.builder()
++                                            .text(Content.builder().charset(CHARSET).data(body).build())
++                                            .build())
++                                    .build())
++                            .build())
++                    .build();
++
++            sesV2Client.sendEmail(request);
++
++            log.info("Aviso do alerta {} enviado por e-mail.", alertId);
++            return true;
++
++        } catch (Exception e) {
++            log.error("Falha ao enviar e-mail do alerta {}. exception={}",
++                    alertId, e.getClass().getSimpleName());
++            return false;
++        }
++    }
++}
+diff --git a/src/main/java/com/tcc/presentation/controller/AlertController.java b/src/main/java/com/tcc/presentation/controller/AlertController.java
+index bd14862..25e5b11 100644
+--- a/src/main/java/com/tcc/presentation/controller/AlertController.java
++++ b/src/main/java/com/tcc/presentation/controller/AlertController.java
+@@ -1,5 +1,7 @@
+ package com.tcc.presentation.controller;
+ 
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
+ import org.springframework.http.HttpStatus;
+ import org.springframework.http.ResponseEntity;
+ import org.springframework.security.access.prepost.PreAuthorize;
+@@ -11,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
+ import com.tcc.application.dto.request.AlertEvaluationRequest;
+ import com.tcc.application.dto.response.AlertEvaluationResponse;
+ import com.tcc.application.dto.response.ApiResponse;
++import com.tcc.application.service.AlertDuplicateReadingException;
+ import com.tcc.application.service.AlertService;
+ 
+ import io.swagger.v3.oas.annotations.Operation;
+@@ -22,10 +25,13 @@ import jakarta.validation.Valid;
+ @RestController
+ @RequestMapping("/api/integration/alerts")
+ @Tag(name = "Integração de Alertas",
+-     description = "Avaliação de leituras de sinais vitais — acesso exclusivo de serviço, por chave de integração")
++     description = "Recebimento e avaliação de leituras de sinais vitais — acesso exclusivo de serviço, "
++                 + "por chave de integração")
+ @SecurityRequirement(name = "Integration Key")
+ public class AlertController {
+ 
++    private static final Logger log = LoggerFactory.getLogger(AlertController.class);
++
+     private final AlertService alertService;
+ 
+     public AlertController(AlertService alertService) {
+@@ -35,19 +41,29 @@ public class AlertController {
+     @PostMapping("/evaluate")
+     @PreAuthorize("hasAuthority('ROLE_INTEGRATION')")
+     @Operation(
+-        summary = "Avaliar leitura de sinal vital",
+-        description = "Compara o valor da leitura com a faixa normal cadastrada para o tipo e, quando o valor " +
+-                      "está fora dessa faixa, cria um alerta com status PENDING. Os limites são inclusivos no " +
+-                      "normal: valor igual ao mínimo ou ao máximo não gera alerta, e limite nulo significa " +
+-                      "ausência de limite daquele lado. Quando não há faixa cadastrada para o tipo de leitura, " +
+-                      "a resposta é de sucesso com alertGenerated=false e nenhum alerta é criado. A leitura em " +
+-                      "si não é persistida nesta versão. Endpoint chamado por serviço, autenticado por chave de " +
+-                      "integração no header X-Integration-Key."
++        summary = "Receber e avaliar leitura de sinal vital",
++        description = "Grava a leitura recebida em health_readings — dentro ou fora da faixa normal — e depois "
++                    + "compara o valor com a faixa cadastrada para o tipo. Quando o valor está fora dessa faixa, "
++                    + "cria um alerta com status PENDING apontando para a leitura gravada, e dispara os avisos "
++                    + "(push ao paciente e e-mail aos médicos vinculados) depois do commit. Os limites são "
++                    + "inclusivos no normal: valor igual ao mínimo ou ao máximo não gera alerta, e limite nulo "
++                    + "significa ausência de limite daquele lado. Quando não há faixa cadastrada para o tipo, a "
++                    + "leitura é gravada e a resposta vem com alertGenerated=false. "
++                    + "Idempotência: leitura com o mesmo patientId, readingType e measuredAt já recebida não é "
++                    + "gravada de novo, não gera alerta e não avisa ninguém — a resposta é 200 com "
++                    + "duplicateReading=true e o id da leitura original. "
++                    + "Deduplicação: se já existe alerta PENDING do mesmo paciente para o mesmo tipo de leitura, "
++                    + "nenhum novo alerta é criado e nenhum aviso é disparado, mas a leitura é gravada. "
++                    + "Endpoint chamado por serviço, autenticado por chave de integração no header "
++                    + "X-Integration-Key."
+     )
+     @ApiResponses(value = {
++        @io.swagger.v3.oas.annotations.responses.ApiResponse(
++                responseCode = "200",
++                description = "Leitura já recebida anteriormente. Nada foi gravado e nenhum aviso foi enviado"),
+         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                 responseCode = "201",
+-                description = "Leitura avaliada. alertGenerated indica se um alerta foi criado"),
++                description = "Leitura gravada e avaliada. alertGenerated indica se um alerta foi criado"),
+         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                 responseCode = "400",
+                 description = "Dados inválidos na requisição"),
+@@ -59,14 +75,47 @@ public class AlertController {
+                 description = "Acesso negado"),
+         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                 responseCode = "404",
+-                description = "Paciente não encontrado")
++                description = "Paciente não encontrado"),
++        @io.swagger.v3.oas.annotations.responses.ApiResponse(
++                responseCode = "500",
++                description = "Erro inesperado no processamento da leitura")
+     })
+     public ResponseEntity<ApiResponse<AlertEvaluationResponse>> evaluateReading(
+             @Valid @RequestBody AlertEvaluationRequest request) {
+ 
+-        AlertEvaluationResponse evaluation = alertService.evaluateReading(request);
+-        ApiResponse<AlertEvaluationResponse> response = ApiResponse.success(evaluation);
++        AlertEvaluationResponse evaluation = evaluate(request);
++
++        // Leitura repetida é sucesso, não erro: quem chama é uma fila com
++        // retentativa, e um 4xx/5xx aqui faria a mensagem ser reentregue para
++        // sempre. 200 em vez de 201 porque nada foi criado nesta chamada.
++        HttpStatus status = evaluation.duplicateReading() ? HttpStatus.OK : HttpStatus.CREATED;
++
++        return ResponseEntity.status(status).body(ApiResponse.success(evaluation));
++    }
+ 
+-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
++    /**
++     * Traduz a corrida de leitura duplicada em resposta de sucesso.
++     *
++     * <p>Duas requisições idênticas em paralelo passam as duas pela checagem de
++     * idempotência do service; a restrição de unicidade do banco separa as duas e a
++     * perdedora chega aqui. O resultado observável para quem chama é o mesmo de uma
++     * leitura repetida detectada por consulta: 200, nada gravado, ninguém avisado.
++     *
++     * <p>O id da leitura vencedora não é devolvido neste caminho: a transação que o
++     * conheceria sofreu rollback. O campo vem nulo, e {@code duplicateReading}
++     * continua sendo o sinal confiável.
++     *
++     * <p>Tratado localmente, no controller, em vez de no handler global: para
++     * qualquer outro chamador uma violação de integridade é erro, e só este endpoint
++     * tem o contexto para considerá-la sucesso.
++     */
++    private AlertEvaluationResponse evaluate(AlertEvaluationRequest request) {
++        try {
++            return alertService.evaluateReading(request);
++        } catch (AlertDuplicateReadingException e) {
++            log.info("Leitura concorrente repetida do paciente {}. Respondendo sucesso.",
++                    request.patientId());
++            return AlertEvaluationResponse.duplicate(null);
++        }
+     }
+ }
+diff --git a/src/main/java/com/tcc/presentation/controller/AlertResolutionController.java b/src/main/java/com/tcc/presentation/controller/AlertResolutionController.java
+new file mode 100644
+index 0000000..b3d0ceb
+--- /dev/null
++++ b/src/main/java/com/tcc/presentation/controller/AlertResolutionController.java
+@@ -0,0 +1,74 @@
++package com.tcc.presentation.controller;
++
++import java.util.UUID;
++
++import org.springframework.http.ResponseEntity;
++import org.springframework.security.access.prepost.PreAuthorize;
++import org.springframework.security.core.Authentication;
++import org.springframework.security.core.userdetails.UserDetails;
++import org.springframework.web.bind.annotation.PatchMapping;
++import org.springframework.web.bind.annotation.PathVariable;
++import org.springframework.web.bind.annotation.RequestMapping;
++import org.springframework.web.bind.annotation.RestController;
++
++import com.tcc.application.dto.response.AlertResponse;
++import com.tcc.application.dto.response.ApiResponse;
++import com.tcc.application.service.AlertService;
++
++import io.swagger.v3.oas.annotations.Operation;
++import io.swagger.v3.oas.annotations.responses.ApiResponses;
++import io.swagger.v3.oas.annotations.security.SecurityRequirement;
++import io.swagger.v3.oas.annotations.tags.Tag;
++
++/**
++ * Resolução de alerta pelo médico.
++ *
++ * <p>Fica sob {@code /api/doctor/**}, que o SecurityConfig já restringe à role
++ * DOCTOR, e o escopo por paciente é aplicado na consulta de vínculo dentro do
++ * service — role sozinha não basta.
++ */
++@RestController
++@RequestMapping("/api/doctor/alerts")
++@Tag(name = "Alertas do Médico", description = "Tratamento de alertas dos pacientes vinculados ao médico")
++@SecurityRequirement(name = "Bearer Authentication")
++@PreAuthorize("hasRole('DOCTOR')")
++public class AlertResolutionController {
++
++    private final AlertService alertService;
++
++    public AlertResolutionController(AlertService alertService) {
++        this.alertService = alertService;
++    }
++
++    @PatchMapping("/{alertId}/resolve")
++    @PreAuthorize("hasRole('DOCTOR')")
++    @Operation(
++        summary = "Marcar alerta como resolvido",
++        description = "Altera o status do alerta para RESOLVED. Só alcança alerta de paciente vinculado ao "
++                    + "médico autenticado: o vínculo é verificado na consulta, não apenas pela role. "
++                    + "Alerta RESOLVED deixa de contar nos indicadores de alertas pendentes e deixa de bloquear "
++                    + "a criação de um novo alerta para o mesmo paciente e tipo de leitura."
++    )
++    @ApiResponses(value = {
++        @io.swagger.v3.oas.annotations.responses.ApiResponse(
++                responseCode = "200",
++                description = "Alerta marcado como RESOLVED"),
++        @io.swagger.v3.oas.annotations.responses.ApiResponse(
++                responseCode = "401",
++                description = "Token ausente, inválido ou expirado, ou paciente não vinculado ao médico"),
++        @io.swagger.v3.oas.annotations.responses.ApiResponse(
++                responseCode = "403",
++                description = "Acesso negado"),
++        @io.swagger.v3.oas.annotations.responses.ApiResponse(
++                responseCode = "404",
++                description = "Alerta não encontrado")
++    })
++    public ResponseEntity<ApiResponse<AlertResponse>> resolveAlert(
++            Authentication authentication,
++            @PathVariable UUID alertId) {
++
++        String email = ((UserDetails) authentication.getPrincipal()).getUsername();
++
++        return ResponseEntity.ok(ApiResponse.success(alertService.resolveAlert(email, alertId)));
++    }
++}
+diff --git a/src/main/resources/application.properties b/src/main/resources/application.properties
+index 2c9d2bd..14dd490 100644
+--- a/src/main/resources/application.properties
++++ b/src/main/resources/application.properties
+@@ -74,3 +74,12 @@ app.push.enabled=${APP_PUSH_ENABLED:false}
+ app.push.expo-endpoint=${APP_PUSH_EXPO_ENDPOINT:https://exp.host/--/api/v2/push/send}
+ app.push.connect-timeout-ms=3000
+ app.push.read-timeout-ms=5000
++
++# E-mail de alerta ao médico, via Amazon SES.
++# Mesmo arranjo do push: desabilitado por padrão, com NoOpAlertEmailSender no
++# lugar, para o ambiente de desenvolvimento subir sem depender da AWS. Com
++# app.alert-email.enabled=false o bean SesV2Client também não é criado.
++# O remetente precisa ser uma identidade verificada no SES.
++app.alert-email.enabled=${APP_ALERT_EMAIL_ENABLED:false}
++app.alert-email.sender=${APP_ALERT_EMAIL_SENDER:}
++app.alert-email.aws-region=${AWS_REGION:us-east-1}
+diff --git a/src/main/resources/db/migration/V33__add_unique_reading_per_patient_type_measured_at.sql b/src/main/resources/db/migration/V33__add_unique_reading_per_patient_type_measured_at.sql
+new file mode 100644
+index 0000000..aa69048
+--- /dev/null
++++ b/src/main/resources/db/migration/V33__add_unique_reading_per_patient_type_measured_at.sql
+@@ -0,0 +1,18 @@
++-- V33: Idempotência da leitura de saúde vinda da integração.
++-- A fila que alimenta POST /api/integration/alerts/evaluate pode reentregar a
++-- mesma mensagem. A unicidade abaixo é a garantia final: mesmo que duas
++-- requisições idênticas cheguem em paralelo e as duas passem pela checagem da
++-- aplicação, o banco recusa a segunda inserção.
++--
++-- A chave é (patient_id, reading_type, measured_at): é o que identifica uma
++-- medição do ponto de vista de quem envia. patient_device_id fica fora de
++-- propósito — o mesmo sinal reentregue não pode virar duas leituras só porque
++-- o dispositivo resolvido mudou.
++--
++-- Nenhuma linha é escrita em health_readings hoje (a V12 criou a tabela e não
++-- existe código que insira nela), então não há duplicata pré-existente para
++-- limpar antes de aplicar a restrição.
++
++ALTER TABLE health_readings
++    ADD CONSTRAINT uq_health_readings_patient_type_measured_at
++    UNIQUE (patient_id, reading_type, measured_at);
+diff --git a/src/main/resources/db/migration/V34__allow_reading_without_device_and_index_alerts.sql b/src/main/resources/db/migration/V34__allow_reading_without_device_and_index_alerts.sql
+new file mode 100644
+index 0000000..fcd0818
+--- /dev/null
++++ b/src/main/resources/db/migration/V34__allow_reading_without_device_and_index_alerts.sql
+@@ -0,0 +1,23 @@
++-- V34: Ajustes para a leitura que chega pela integração.
++--
++-- 1) patient_device_id deixa de ser obrigatório.
++--    A V12 criou a coluna como NOT NULL porque a leitura era pensada como
++--    importação a partir de um dispositivo cadastrado em patient_devices. A
++--    leitura que chega em POST /api/integration/alerts/evaluate não carrega
++--    dispositivo: o contrato tem apenas patientId, readingType, value e
++--    measuredAt. Sem este ALTER a leitura simplesmente não pode ser gravada.
++--    Inventar um dispositivo sintético para satisfazer a FK seria pior: criaria
++--    linha falsa em patient_devices e mentiria sobre a origem da medição.
++--
++--    DROP NOT NULL é a sintaxe padrão aceita pelo PostgreSQL e pelo H2 (perfil
++--    dev). MODIFY e "ALTER COLUMN <col> NULL" não são portáveis entre os dois.
++--
++-- 2) Índice para a deduplicação de alertas.
++--    A cada leitura fora da faixa o backend consulta se já existe alerta PENDING
++--    do mesmo paciente para o mesmo tipo de leitura. O filtro sempre começa por
++--    patient_id + status.
++
++ALTER TABLE health_readings
++    ALTER COLUMN patient_device_id DROP NOT NULL;
++
++CREATE INDEX idx_alerts_patient_id_status ON alerts (patient_id, status);
+diff --git a/src/test/java/com/tcc/application/dto/request/AlertEvaluationRequestValidationTest.java b/src/test/java/com/tcc/application/dto/request/AlertEvaluationRequestValidationTest.java
+new file mode 100644
+index 0000000..3add04c
+--- /dev/null
++++ b/src/test/java/com/tcc/application/dto/request/AlertEvaluationRequestValidationTest.java
+@@ -0,0 +1,230 @@
++package com.tcc.application.dto.request;
++
++import java.io.IOException;
++import java.nio.charset.StandardCharsets;
++import java.time.Instant;
++import java.time.LocalDateTime;
++import java.time.OffsetDateTime;
++import java.time.ZoneOffset;
++import java.util.Set;
++import java.util.UUID;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.assertj.core.api.Assertions.assertThatThrownBy;
++import org.junit.jupiter.api.AfterAll;
++import org.junit.jupiter.api.BeforeAll;
++import org.junit.jupiter.api.DisplayName;
++import org.junit.jupiter.api.Test;
++import org.springframework.http.converter.HttpMessageNotReadableException;
++import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
++import org.springframework.mock.http.MockHttpInputMessage;
++
++import jakarta.validation.ConstraintViolation;
++import jakarta.validation.Validation;
++import jakarta.validation.Validator;
++import jakarta.validation.ValidatorFactory;
++
++/**
++ * Dado inválido tem de virar 4xx no endpoint de integração. O controller usa
++ * {@code @Valid}, e o {@code GlobalExceptionHandler} já traduz
++ * {@code MethodArgumentNotValidException} em 400 — então provar o 4xx aqui é
++ * provar que cada campo obrigatório realmente tem restrição que falha.
++ */
++@DisplayName("validação de AlertEvaluationRequest")
++class AlertEvaluationRequestValidationTest {
++
++    private static ValidatorFactory factory;
++    private static Validator validator;
++
++    @BeforeAll
++    static void setUpValidator() {
++        factory = Validation.buildDefaultValidatorFactory();
++        validator = factory.getValidator();
++    }
++
++    @AfterAll
++    static void closeValidator() {
++        factory.close();
++    }
++
++    private Set<ConstraintViolation<AlertEvaluationRequest>> validate(AlertEvaluationRequest request) {
++        return validator.validate(request);
++    }
++
++    @Test
++    @DisplayName("requisição completa deve passar")
++    void shouldAcceptCompleteRequest() {
++        AlertEvaluationRequest request = new AlertEvaluationRequest(
++                UUID.randomUUID(), "HEART_RATE", 155.0, OffsetDateTime.now(), "bpm");
++
++        assertThat(validate(request)).isEmpty();
++    }
++
++    @Test
++    @DisplayName("unidade é opcional")
++    void shouldAcceptNullUnit() {
++        AlertEvaluationRequest request = new AlertEvaluationRequest(
++                UUID.randomUUID(), "HEART_RATE", 155.0, OffsetDateTime.now(), null);
++
++        assertThat(validate(request)).isEmpty();
++    }
++
++    @Test
++    @DisplayName("paciente ausente deve violar a validação")
++    void shouldRejectMissingPatient() {
++        AlertEvaluationRequest request = new AlertEvaluationRequest(
++                null, "HEART_RATE", 155.0, OffsetDateTime.now(), "bpm");
++
++        assertThat(validate(request)).extracting(v -> v.getPropertyPath().toString())
++                .containsExactly("patientId");
++    }
++
++    @Test
++    @DisplayName("tipo de leitura em branco deve violar a validação")
++    void shouldRejectBlankReadingType() {
++        AlertEvaluationRequest request = new AlertEvaluationRequest(
++                UUID.randomUUID(), "   ", 155.0, OffsetDateTime.now(), "bpm");
++
++        assertThat(validate(request)).extracting(v -> v.getPropertyPath().toString())
++                .containsExactly("readingType");
++    }
++
++    @Test
++    @DisplayName("valor ausente deve violar a validação")
++    void shouldRejectMissingValue() {
++        AlertEvaluationRequest request = new AlertEvaluationRequest(
++                UUID.randomUUID(), "HEART_RATE", null, OffsetDateTime.now(), "bpm");
++
++        assertThat(validate(request)).extracting(v -> v.getPropertyPath().toString())
++                .containsExactly("value");
++    }
++
++    @Test
++    @DisplayName("horário da medição ausente deve violar a validação")
++    void shouldRejectMissingMeasuredAt() {
++        AlertEvaluationRequest request = new AlertEvaluationRequest(
++                UUID.randomUUID(), "HEART_RATE", 155.0, null, "bpm");
++
++        assertThat(validate(request)).extracting(v -> v.getPropertyPath().toString())
++                .containsExactly("measuredAt");
++    }
++}
++
++/**
++ * Desserialização do {@code measuredAt}.
++ *
++ * <p>Usa o {@code JacksonJsonHttpMessageConverter}, que é o conversor que o Spring
++ * MVC realmente emprega neste projeto (Spring Boot 4 / Jackson 3). Assim o teste
++ * exercita a borda HTTP de verdade, inclusive a exceção que o Spring lança — e não
++ * uma simulação dela.
++ *
++ * <p>O que estes testes travam:
++ * <ul>
++ *   <li>{@code Z} e {@code -03:00} do mesmo instante produzem o mesmo instante;</li>
++ *   <li>horário sem fuso é recusado com {@code HttpMessageNotReadableException},
++ *       que o {@code GlobalExceptionHandler} traduz em 400;</li>
++ *   <li>JSON malformado cai na mesma exceção, também 400.</li>
++ * </ul>
++ *
++ * <p>Nenhum caso depende do fuso da máquina: todos os valores carregam o
++ * deslocamento, e as comparações são por instante.
++ */
++@DisplayName("desserialização do measuredAt de AlertEvaluationRequest")
++class AlertEvaluationRequestDeserializationTest {
++
++    private final JacksonJsonHttpMessageConverter converter = new JacksonJsonHttpMessageConverter();
++
++    private String bodyWithMeasuredAt(String measuredAt) {
++        return """
++                {
++                  "patientId": "550e8400-e29b-41d4-a716-446655440000",
++                  "readingType": "HEART_RATE",
++                  "value": 155,
++                  "measuredAt": "%s",
++                  "unit": "bpm"
++                }
++                """.formatted(measuredAt);
++    }
++
++    /**
++     * Lê o corpo pelo mesmo caminho do endpoint. A exceção de corpo ilegível é
++     * lançada pelo próprio conversor do Spring, não construída pelo teste.
++     */
++    private AlertEvaluationRequest read(String body) {
++        try {
++            return (AlertEvaluationRequest) converter.read(
++                    AlertEvaluationRequest.class,
++                    new MockHttpInputMessage(body.getBytes(StandardCharsets.UTF_8)));
++        } catch (IOException e) {
++            throw new IllegalStateException("Falha de I/O inesperada no teste", e);
++        }
++    }
++
++    @Test
++    @DisplayName("aceita horário em UTC com Z")
++    void shouldAcceptUtcWithZ() {
++        AlertEvaluationRequest request = read(bodyWithMeasuredAt("2026-07-01T14:32:00Z"));
++
++        assertThat(request.measuredAt().toInstant())
++                .isEqualTo(Instant.parse("2026-07-01T14:32:00Z"));
++    }
++
++    @Test
++    @DisplayName("aceita horário com deslocamento -03:00")
++    void shouldAcceptExplicitNegativeOffset() {
++        AlertEvaluationRequest request = read(bodyWithMeasuredAt("2026-07-01T11:32:00-03:00"));
++
++        assertThat(request.measuredAt().toInstant())
++                .isEqualTo(Instant.parse("2026-07-01T14:32:00Z"));
++    }
++
++    /**
++     * Os dois textos descrevem o mesmo instante, então precisam convergir para o
++     * mesmo {@code LocalDateTime} em UTC — que é exatamente o valor usado como chave
++     * de idempotência e gravado em {@code measured_at}.
++     *
++     * <p>A comparação é feita depois da conversão para UTC, não sobre o
++     * {@code OffsetDateTime} cru: o Jackson ajusta o deslocamento para o fuso de
++     * contexto da JVM, então o offset que sobra no objeto varia por ambiente. O
++     * instante, não.
++     */
++    @Test
++    @DisplayName("Z e -03:00 do mesmo instante devem convergir para o mesmo horário em UTC")
++    void shouldTreatBothOffsetsAsTheSameInstant() {
++        AlertEvaluationRequest withZ = read(bodyWithMeasuredAt("2026-07-01T14:32:00Z"));
++        AlertEvaluationRequest withOffset = read(bodyWithMeasuredAt("2026-07-01T11:32:00-03:00"));
++
++        assertThat(withZ.measuredAt().toInstant())
++                .isEqualTo(withOffset.measuredAt().toInstant());
++
++        LocalDateTime fromZ = withZ.measuredAt()
++                .withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
++        LocalDateTime fromOffset = withOffset.measuredAt()
++                .withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
++
++        assertThat(fromZ)
++                .isEqualTo(fromOffset)
++                .isEqualTo(LocalDateTime.of(2026, 7, 1, 14, 32));
++    }
++
++    @Test
++    @DisplayName("horário sem fuso deve ser recusado")
++    void shouldRejectMeasuredAtWithoutOffset() {
++        assertThatThrownBy(() -> read(bodyWithMeasuredAt("2026-07-01T14:32:00")))
++                .isInstanceOf(HttpMessageNotReadableException.class);
++    }
++
++    @Test
++    @DisplayName("JSON malformado deve ser recusado")
++    void shouldRejectMalformedJson() {
++        String malformed = """
++                {
++                  "patientId": "550e8400-e29b-41d4-a716-446655440000",
++                  "readingType": "HEART_RATE",
++                  "value": 155,
++                """;
++
++        assertThatThrownBy(() -> read(malformed))
++                .isInstanceOf(HttpMessageNotReadableException.class);
++    }
++}
+diff --git a/src/test/java/com/tcc/application/listener/AlertEmailNotificationListenerTest.java b/src/test/java/com/tcc/application/listener/AlertEmailNotificationListenerTest.java
+new file mode 100644
+index 0000000..855eedc
+--- /dev/null
++++ b/src/test/java/com/tcc/application/listener/AlertEmailNotificationListenerTest.java
+@@ -0,0 +1,356 @@
++package com.tcc.application.listener;
++
++import java.time.LocalDateTime;
++import java.util.List;
++import java.util.Optional;
++import java.util.TimeZone;
++import java.util.UUID;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.assertj.core.api.Assertions.assertThatCode;
++import org.junit.jupiter.api.BeforeEach;
++import org.junit.jupiter.api.DisplayName;
++import org.junit.jupiter.api.Nested;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.api.extension.ExtendWith;
++import org.mockito.ArgumentCaptor;
++import static org.mockito.ArgumentMatchers.any;
++import static org.mockito.ArgumentMatchers.anyString;
++import static org.mockito.ArgumentMatchers.eq;
++import org.mockito.InjectMocks;
++import org.mockito.Mock;
++import static org.mockito.Mockito.never;
++import static org.mockito.Mockito.times;
++import static org.mockito.Mockito.verify;
++import static org.mockito.Mockito.verifyNoInteractions;
++import static org.mockito.Mockito.when;
++import org.mockito.junit.jupiter.MockitoExtension;
++
++import com.tcc.application.port.out.AlertEmailSender;
++import com.tcc.domain.event.AlertCreatedEvent;
++import com.tcc.domain.model.Alert;
++import com.tcc.domain.model.Doctor;
++import com.tcc.domain.model.HealthReading;
++import com.tcc.domain.model.Hospital;
++import com.tcc.domain.model.Notification;
++import com.tcc.domain.model.Patient;
++import com.tcc.domain.model.Role;
++import com.tcc.domain.model.User;
++import com.tcc.domain.repository.AlertRepository;
++import com.tcc.domain.repository.DoctorPatientRepository;
++import com.tcc.domain.repository.NotificationRepository;
++
++@ExtendWith(MockitoExtension.class)
++class AlertEmailNotificationListenerTest {
++
++    @Mock
++    private AlertRepository alertRepository;
++
++    @Mock
++    private DoctorPatientRepository doctorPatientRepository;
++
++    @Mock
++    private NotificationRepository notificationRepository;
++
++    @Mock
++    private AlertEmailSender alertEmailSender;
++
++    @InjectMocks
++    private AlertEmailNotificationListener listener;
++
++    private static final UUID ALERT_ID = UUID.randomUUID();
++    private static final UUID PATIENT_ID = UUID.randomUUID();
++    private static final String DOCTOR_A_EMAIL = "doctor.a@tcc.com";
++    private static final String DOCTOR_B_EMAIL = "doctor.b@tcc.com";
++    /**
++     * Horário gravado, em UTC — é a convenção da coluna {@code measured_at}.
++     * 14:32 UTC equivale a 11:32 em America/Sao_Paulo (UTC-3), e é esse o horário
++     * que o e-mail precisa mostrar, em qualquer fuso de servidor.
++     */
++    private static final LocalDateTime MEASURED_AT_UTC = LocalDateTime.of(2026, 9, 29, 14, 32);
++
++    private static final String EXPECTED_IN_EMAIL = "29/09/2026 às 11:32";
++
++    private Patient patient;
++    private HealthReading reading;
++    private Alert alert;
++
++    @BeforeEach
++    void setUp() {
++        patient = new Patient();
++        patient.setId(PATIENT_ID);
++        patient.setFullName("Maria da Silva");
++
++        reading = new HealthReading();
++        reading.setId(UUID.randomUUID());
++        reading.setPatient(patient);
++        reading.setReadingType("HEART_RATE");
++        reading.setValue("155.0");
++        reading.setUnit("bpm");
++        reading.setMeasuredAt(MEASURED_AT_UTC);
++
++        alert = new Alert();
++        alert.setId(ALERT_ID);
++        alert.setPatient(patient);
++        alert.setHealthReading(reading);
++        alert.setSeverity("CRITICAL");
++        alert.setDescription("Valor acima do máximo normal de 120.0 para HEART_RATE");
++        alert.setStatus("PENDING");
++    }
++
++    private AlertCreatedEvent eventOf() {
++        return new AlertCreatedEvent(alert);
++    }
++
++    private Doctor doctorOf(String email) {
++        User user = new User(email, "hash", Role.DOCTOR);
++        user.setId(UUID.randomUUID());
++
++        Doctor doctor = new Doctor();
++        doctor.setId(UUID.randomUUID());
++        doctor.setUser(user);
++        doctor.setHospital(new Hospital());
++        doctor.setFullName("Dr. Teste");
++        return doctor;
++    }
++
++    private void stubAlertFound() {
++        when(alertRepository.findByIdWithPatientAndReading(ALERT_ID)).thenReturn(Optional.of(alert));
++    }
++
++    @Nested
++    @DisplayName("envio aos médicos vinculados")
++    class Sending {
++
++        @Test
++        @DisplayName("deve enviar para cada medico vinculado e gravar notification SENT")
++        void shouldSendToEveryLinkedDoctorAndRecordSent() {
++            Doctor doctorA = doctorOf(DOCTOR_A_EMAIL);
++            Doctor doctorB = doctorOf(DOCTOR_B_EMAIL);
++
++            stubAlertFound();
++            when(doctorPatientRepository.findActiveDoctorsByPatientId(PATIENT_ID))
++                    .thenReturn(List.of(doctorA, doctorB));
++            when(alertEmailSender.sendAlertEmail(anyString(), anyString(), anyString(), eq(ALERT_ID)))
++                    .thenReturn(true);
++
++            listener.onAlertCreated(eventOf());
++
++            ArgumentCaptor<String> recipientCaptor = ArgumentCaptor.forClass(String.class);
++            verify(alertEmailSender, times(2))
++                    .sendAlertEmail(recipientCaptor.capture(), anyString(), anyString(), eq(ALERT_ID));
++            assertThat(recipientCaptor.getAllValues())
++                    .containsExactly(DOCTOR_A_EMAIL, DOCTOR_B_EMAIL);
++
++            ArgumentCaptor<Notification> notificationCaptor =
++                    ArgumentCaptor.forClass(Notification.class);
++            verify(notificationRepository, times(2)).save(notificationCaptor.capture());
++
++            assertThat(notificationCaptor.getAllValues())
++                    .allSatisfy(notification -> {
++                        assertThat(notification.getStatus()).isEqualTo("SENT");
++                        assertThat(notification.getAlert()).isEqualTo(alert);
++                        assertThat(notification.getMessage()).isNotBlank();
++                    });
++            assertThat(notificationCaptor.getAllValues())
++                    .extracting(Notification::getDoctor)
++                    .containsExactly(doctorA, doctorB);
++        }
++
++        @Test
++        @DisplayName("corpo deve ter paciente, tipo, valor, severidade e horario da medicao")
++        void shouldIncludeMeasurementDetailsInBody() {
++            stubAlertFound();
++            when(doctorPatientRepository.findActiveDoctorsByPatientId(PATIENT_ID))
++                    .thenReturn(List.of(doctorOf(DOCTOR_A_EMAIL)));
++            when(alertEmailSender.sendAlertEmail(anyString(), anyString(), anyString(), eq(ALERT_ID)))
++                    .thenReturn(true);
++
++            listener.onAlertCreated(eventOf());
++
++            ArgumentCaptor<String> subjectCaptor = ArgumentCaptor.forClass(String.class);
++            ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
++            verify(alertEmailSender).sendAlertEmail(
++                    anyString(), subjectCaptor.capture(), bodyCaptor.capture(), eq(ALERT_ID));
++
++            assertThat(subjectCaptor.getValue()).contains("Maria da Silva").contains("CRITICAL");
++
++            String body = bodyCaptor.getValue();
++            assertThat(body)
++                    .contains("Maria da Silva")
++                    .contains("HEART_RATE")
++                    .contains("155.0 bpm")
++                    .contains("CRITICAL")
++                    // 14:32 UTC gravado -> 11:32 exibido. Não depende do fuso da
++                    // máquina: os dois fusos da conversão são explícitos no código.
++                    .contains(EXPECTED_IN_EMAIL)
++                    .doesNotContain("14:32")
++                    .contains("Brasília");
++        }
++
++        /**
++         * Trava a independência de fuso: o teste força o fuso default da JVM para
++         * dois extremos e exige o mesmo horário no e-mail nos dois casos. Se alguém
++         * reintroduzir {@code ZoneId.systemDefault()} na conversão, este teste falha.
++         *
++         * <p>O fuso default é restaurado no fim, inclusive em caso de falha, para não
++         * contaminar os outros testes da suíte.
++         */
++        @Test
++        @DisplayName("horario do e-mail nao deve depender do fuso da maquina")
++        void shouldFormatMeasuredAtIndependentlyOfJvmZone() {
++            TimeZone original = TimeZone.getDefault();
++
++            try {
++                for (String zone : List.of("UTC", "America/Sao_Paulo", "Asia/Tokyo")) {
++                    TimeZone.setDefault(TimeZone.getTimeZone(zone));
++
++                    assertThat(bodySentWithFreshMocks())
++                            .as("corpo do e-mail com a JVM em %s", zone)
++                            .contains(EXPECTED_IN_EMAIL);
++                }
++            } finally {
++                TimeZone.setDefault(original);
++            }
++        }
++
++        /**
++         * Executa o listener com mocks próprios, para que a contagem de invocações de
++         * um ciclo não interfira no seguinte dentro do laço acima.
++         */
++        private String bodySentWithFreshMocks() {
++            AlertRepository alertRepo = org.mockito.Mockito.mock(AlertRepository.class);
++            DoctorPatientRepository doctorPatientRepo =
++                    org.mockito.Mockito.mock(DoctorPatientRepository.class);
++            NotificationRepository notificationRepo =
++                    org.mockito.Mockito.mock(NotificationRepository.class);
++            AlertEmailSender sender = org.mockito.Mockito.mock(AlertEmailSender.class);
++
++            when(alertRepo.findByIdWithPatientAndReading(ALERT_ID)).thenReturn(Optional.of(alert));
++            when(doctorPatientRepo.findActiveDoctorsByPatientId(PATIENT_ID))
++                    .thenReturn(List.of(doctorOf(DOCTOR_A_EMAIL)));
++            when(sender.sendAlertEmail(anyString(), anyString(), anyString(), eq(ALERT_ID)))
++                    .thenReturn(true);
++
++            new AlertEmailNotificationListener(
++                    alertRepo, doctorPatientRepo, notificationRepo, sender)
++                    .onAlertCreated(eventOf());
++
++            ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
++            verify(sender).sendAlertEmail(
++                    anyString(), anyString(), bodyCaptor.capture(), eq(ALERT_ID));
++
++            return bodyCaptor.getValue();
++        }
++
++        @Test
++        @DisplayName("nao deve enviar nada quando o paciente nao tem medico com vinculo ativo")
++        void shouldNotSendWhenNoLinkedDoctor() {
++            stubAlertFound();
++            when(doctorPatientRepository.findActiveDoctorsByPatientId(PATIENT_ID))
++                    .thenReturn(List.of());
++
++            listener.onAlertCreated(eventOf());
++
++            verifyNoInteractions(alertEmailSender, notificationRepository);
++        }
++
++        @Test
++        @DisplayName("nao deve enviar nada quando o alerta nao e mais encontrado")
++        void shouldNotSendWhenAlertNoLongerExists() {
++            when(alertRepository.findByIdWithPatientAndReading(ALERT_ID)).thenReturn(Optional.empty());
++
++            listener.onAlertCreated(eventOf());
++
++            verifyNoInteractions(alertEmailSender, notificationRepository);
++            verify(doctorPatientRepository, never()).findActiveDoctorsByPatientId(any());
++        }
++    }
++
++    @Nested
++    @DisplayName("falha no envio")
++    class SendFailure {
++
++        @Test
++        @DisplayName("falha no SES deve gravar notification FAILED sem lancar excecao")
++        void shouldRecordFailedWhenSenderReturnsFalse() {
++            stubAlertFound();
++            when(doctorPatientRepository.findActiveDoctorsByPatientId(PATIENT_ID))
++                    .thenReturn(List.of(doctorOf(DOCTOR_A_EMAIL)));
++            when(alertEmailSender.sendAlertEmail(anyString(), anyString(), anyString(), eq(ALERT_ID)))
++                    .thenReturn(false);
++
++            assertThatCode(() -> listener.onAlertCreated(eventOf())).doesNotThrowAnyException();
++
++            ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
++            verify(notificationRepository).save(captor.capture());
++            assertThat(captor.getValue().getStatus()).isEqualTo("FAILED");
++        }
++
++        @Test
++        @DisplayName("excecao lancada pelo sender nao deve propagar")
++        void shouldSwallowSenderException() {
++            stubAlertFound();
++            when(doctorPatientRepository.findActiveDoctorsByPatientId(PATIENT_ID))
++                    .thenReturn(List.of(doctorOf(DOCTOR_A_EMAIL)));
++            when(alertEmailSender.sendAlertEmail(anyString(), anyString(), anyString(), eq(ALERT_ID)))
++                    .thenThrow(new RuntimeException("SES fora do ar"));
++
++            assertThatCode(() -> listener.onAlertCreated(eventOf())).doesNotThrowAnyException();
++        }
++
++        @Test
++        @DisplayName("excecao na consulta ao repositorio nao deve propagar")
++        void shouldSwallowRepositoryException() {
++            when(alertRepository.findByIdWithPatientAndReading(ALERT_ID))
++                    .thenThrow(new RuntimeException("banco indisponivel"));
++
++            assertThatCode(() -> listener.onAlertCreated(eventOf())).doesNotThrowAnyException();
++
++            verifyNoInteractions(alertEmailSender, notificationRepository);
++        }
++    }
++
++    @Nested
++    @DisplayName("dados ausentes no alerta")
++    class MissingData {
++
++        @Test
++        @DisplayName("alerta sem leitura associada deve gerar corpo sem campo vazio")
++        void shouldHandleAlertWithoutReading() {
++            alert.setHealthReading(null);
++            stubAlertFound();
++            when(doctorPatientRepository.findActiveDoctorsByPatientId(PATIENT_ID))
++                    .thenReturn(List.of(doctorOf(DOCTOR_A_EMAIL)));
++            when(alertEmailSender.sendAlertEmail(anyString(), anyString(), anyString(), eq(ALERT_ID)))
++                    .thenReturn(true);
++
++            listener.onAlertCreated(eventOf());
++
++            ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
++            verify(alertEmailSender).sendAlertEmail(
++                    anyString(), anyString(), bodyCaptor.capture(), eq(ALERT_ID));
++
++            assertThat(bodyCaptor.getValue()).contains("não informado");
++        }
++
++        @Test
++        @DisplayName("medico sem usuario deve gerar notification FAILED")
++        void shouldRecordFailedWhenDoctorHasNoUser() {
++            Doctor doctorWithoutUser = doctorOf(DOCTOR_A_EMAIL);
++            doctorWithoutUser.setUser(null);
++
++            stubAlertFound();
++            when(doctorPatientRepository.findActiveDoctorsByPatientId(PATIENT_ID))
++                    .thenReturn(List.of(doctorWithoutUser));
++            when(alertEmailSender.sendAlertEmail(eq(null), anyString(), anyString(), eq(ALERT_ID)))
++                    .thenReturn(false);
++
++            listener.onAlertCreated(eventOf());
++
++            ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
++            verify(notificationRepository).save(captor.capture());
++            assertThat(captor.getValue().getStatus()).isEqualTo("FAILED");
++        }
++    }
++}
+diff --git a/src/test/java/com/tcc/application/service/AlertServiceImplTest.java b/src/test/java/com/tcc/application/service/AlertServiceImplTest.java
+index 8cd7444..61a0b1e 100644
+--- a/src/test/java/com/tcc/application/service/AlertServiceImplTest.java
++++ b/src/test/java/com/tcc/application/service/AlertServiceImplTest.java
+@@ -1,6 +1,8 @@
+ package com.tcc.application.service;
+ 
+ import java.time.LocalDateTime;
++import java.time.OffsetDateTime;
++import java.time.ZoneOffset;
+ import java.util.Optional;
+ import java.util.UUID;
+ 
+@@ -16,10 +18,13 @@ import static org.mockito.ArgumentMatchers.any;
+ import org.mockito.InjectMocks;
+ import org.mockito.Mock;
+ import static org.mockito.Mockito.never;
++import static org.mockito.Mockito.times;
+ import static org.mockito.Mockito.verify;
++import static org.mockito.Mockito.verifyNoInteractions;
+ import static org.mockito.Mockito.when;
+ import org.mockito.junit.jupiter.MockitoExtension;
+ import org.springframework.context.ApplicationEventPublisher;
++import org.springframework.dao.DataIntegrityViolationException;
+ import org.springframework.data.domain.PageImpl;
+ import org.springframework.data.domain.PageRequest;
+ 
+@@ -27,15 +32,24 @@ import com.tcc.application.dto.request.AlertEvaluationRequest;
+ import com.tcc.application.dto.response.AlertEvaluationResponse;
+ import com.tcc.application.dto.response.AlertResponse;
+ import com.tcc.application.mapper.AlertMapper;
++import com.tcc.domain.event.AlertCreatedEvent;
+ import com.tcc.domain.model.Alert;
++import com.tcc.domain.model.Doctor;
++import com.tcc.domain.model.HealthReading;
++import com.tcc.domain.model.Hospital;
+ import com.tcc.domain.model.Patient;
+ import com.tcc.domain.model.ReadingThreshold;
++import com.tcc.domain.model.Role;
+ import com.tcc.domain.model.User;
+ import com.tcc.domain.repository.AlertRepository;
++import com.tcc.domain.repository.DoctorPatientRepository;
++import com.tcc.domain.repository.DoctorRepository;
++import com.tcc.domain.repository.HealthReadingRepository;
+ import com.tcc.domain.repository.PatientRepository;
+ import com.tcc.domain.repository.ReadingThresholdRepository;
+ import com.tcc.domain.repository.UserRepository;
+ import com.tcc.exception.ResourceNotFoundException;
++import com.tcc.exception.UnauthorizedException;
+ 
+ @ExtendWith(MockitoExtension.class)
+ class AlertServiceImplTest {
+@@ -49,12 +63,21 @@ class AlertServiceImplTest {
+     @Mock
+     private AlertRepository alertRepository;
+ 
++    @Mock
++    private HealthReadingRepository healthReadingRepository;
++
+     @Mock
+     private AlertMapper alertMapper;
+ 
+     @Mock
+     private UserRepository userRepository;
+ 
++    @Mock
++    private DoctorRepository doctorRepository;
++
++    @Mock
++    private DoctorPatientRepository doctorPatientRepository;
++
+     @Mock
+     private ApplicationEventPublisher eventPublisher;
+ 
+@@ -64,20 +87,39 @@ class AlertServiceImplTest {
+     private static final UUID PATIENT_ID = UUID.randomUUID();
+     private static final UUID NONEXISTENT_PATIENT_ID = UUID.randomUUID();
+     private static final UUID ALERT_ID = UUID.randomUUID();
++    private static final UUID READING_ID = UUID.randomUUID();
++    private static final UUID DOCTOR_ID = UUID.randomUUID();
+ 
+     private static final String HEART_RATE = "HEART_RATE";
+     private static final String SPO2 = "SPO2";
+ 
++    /** Horário informado pela integração, em UTC. */
++    private static final OffsetDateTime MEASURED_AT_UTC =
++            OffsetDateTime.of(2026, 9, 29, 14, 30, 0, 0, ZoneOffset.UTC);
++
++    /** O mesmo instante expresso em -03:00: 11:30 em Brasília é 14:30 em UTC. */
++    private static final OffsetDateTime MEASURED_AT_SAME_INSTANT_OFFSET =
++            OffsetDateTime.of(2026, 9, 29, 11, 30, 0, 0, ZoneOffset.ofHours(-3));
++
++    /** O que precisa chegar ao repositório e à entidade, depois da normalização. */
++    private static final LocalDateTime MEASURED_AT_STORED = LocalDateTime.of(2026, 9, 29, 14, 30);
++
+     private Patient patient;
+ 
+     @BeforeEach
+     void setUp() {
+         patient = new Patient();
+         patient.setId(PATIENT_ID);
++        patient.setFullName("Paciente de Teste");
+     }
+ 
+     private AlertEvaluationRequest requestOf(String readingType, Double value) {
+-        return new AlertEvaluationRequest(PATIENT_ID, readingType, value, LocalDateTime.now());
++        return requestOf(readingType, value, MEASURED_AT_UTC);
++    }
++
++    private AlertEvaluationRequest requestOf(String readingType, Double value,
++                                             OffsetDateTime measuredAt) {
++        return new AlertEvaluationRequest(PATIENT_ID, readingType, value, measuredAt, "bpm");
+     }
+ 
+     private ReadingThreshold thresholdOf(String readingType, Double min, Double max) {
+@@ -86,12 +128,30 @@ class AlertServiceImplTest {
+         return threshold;
+     }
+ 
++    /**
++     * Leitura ainda não recebida: o caminho normal de gravação.
++     *
++     * <p>O stub casa com o horário já normalizado em UTC. Se o service deixar de
++     * converter, a consulta chega com outro valor, o stub não casa e o teste falha.
++     */
++    private void stubReadingNotYetReceived(String readingType) {
++        when(healthReadingRepository.findByPatientIdAndReadingTypeAndMeasuredAt(
++                PATIENT_ID, readingType, MEASURED_AT_STORED)).thenReturn(Optional.empty());
++        when(healthReadingRepository.saveAndFlush(any(HealthReading.class)))
++                .thenAnswer(invocation -> {
++                    HealthReading reading = invocation.getArgument(0);
++                    reading.setId(READING_ID);
++                    return reading;
++                });
++    }
++
+     /** Simula a persistência atribuindo um id ao alerta salvo. */
+     private void stubAlertPersistence() {
+         when(alertMapper.toEntity(any(), any(), any())).thenAnswer(invocation -> {
+             var alertRequest = (com.tcc.application.dto.request.AlertRequest) invocation.getArgument(0);
+             Alert alert = new Alert();
+             alert.setPatient(patient);
++            alert.setHealthReading(invocation.getArgument(2));
+             alert.setSeverity(alertRequest.severity());
+             alert.setTitle(alertRequest.title());
+             alert.setDescription(alertRequest.description());
+@@ -105,30 +165,68 @@ class AlertServiceImplTest {
+         });
+     }
+ 
++    private void stubNoPendingAlert(String readingType) {
++        when(alertRepository.existsByPatientIdAndStatusAndHealthReading_ReadingType(
++                PATIENT_ID, "PENDING", readingType)).thenReturn(false);
++    }
++
+     @Nested
+-    @DisplayName("valor dentro da faixa normal")
+-    class WithinNormalRange {
++    @DisplayName("gravação da leitura")
++    class ReadingPersistence {
+ 
+         @Test
+-        @DisplayName("nao deve gerar alerta quando valor esta dentro da faixa")
+-        void shouldNotGenerateAlertWhenValueIsWithinRange() {
++        @DisplayName("leitura normal deve ser gravada sem gerar alerta")
++        void shouldPersistNormalReadingWithoutAlert() {
+             when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
++            stubReadingNotYetReceived(HEART_RATE);
+             when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                     .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+ 
+             AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 80.0));
+ 
++            ArgumentCaptor<HealthReading> captor = ArgumentCaptor.forClass(HealthReading.class);
++            verify(healthReadingRepository).saveAndFlush(captor.capture());
++
++            HealthReading saved = captor.getValue();
++            assertThat(saved.getPatient()).isEqualTo(patient);
++            assertThat(saved.getReadingType()).isEqualTo(HEART_RATE);
++            assertThat(saved.getValue()).isEqualTo("80.0");
++            assertThat(saved.getUnit()).isEqualTo("bpm");
++            assertThat(saved.getMeasuredAt()).isEqualTo(MEASURED_AT_STORED);
++            assertThat(saved.getPatientDevice()).isNull();
++
++            assertThat(result.alertGenerated()).isFalse();
++            assertThat(result.duplicateReading()).isFalse();
++            assertThat(result.healthReadingId()).isEqualTo(READING_ID);
++            verify(alertRepository, never()).save(any());
++            verifyNoInteractions(eventPublisher);
++        }
++
++        @Test
++        @DisplayName("leitura sem faixa cadastrada deve ser gravada mesmo assim")
++        void shouldPersistReadingWithoutConfiguredThreshold() {
++            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
++            stubReadingNotYetReceived("GLUCOSE");
++            when(readingThresholdRepository.findByReadingType("GLUCOSE")).thenReturn(Optional.empty());
++
++            AlertEvaluationResponse result = alertService.evaluateReading(requestOf("GLUCOSE", 500.0));
++
++            verify(healthReadingRepository).saveAndFlush(any(HealthReading.class));
+             assertThat(result.alertGenerated()).isFalse();
+-            assertThat(result.severity()).isNull();
+-            assertThat(result.alertId()).isNull();
+-            assertThat(result.reason()).isNull();
++            assertThat(result.healthReadingId()).isEqualTo(READING_ID);
+             verify(alertRepository, never()).save(any());
+         }
++    }
++
++    @Nested
++    @DisplayName("valor dentro da faixa normal")
++    class WithinNormalRange {
+ 
+         @Test
+         @DisplayName("nao deve gerar alerta quando valor e exatamente igual ao minimo")
+         void shouldNotGenerateAlertWhenValueEqualsMinimum() {
+             when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
++            stubReadingNotYetReceived(HEART_RATE);
+             when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                     .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+ 
+@@ -142,6 +240,7 @@ class AlertServiceImplTest {
+         @DisplayName("nao deve gerar alerta quando valor e exatamente igual ao maximo")
+         void shouldNotGenerateAlertWhenValueEqualsMaximum() {
+             when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
++            stubReadingNotYetReceived(HEART_RATE);
+             when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                     .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+ 
+@@ -155,6 +254,7 @@ class AlertServiceImplTest {
+         @DisplayName("nao deve gerar alerta quando faixa nao tem maximo e o valor e alto")
+         void shouldNotGenerateAlertWhenMaximumIsNullAndValueIsHigh() {
+             when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
++            stubReadingNotYetReceived(SPO2);
+             when(readingThresholdRepository.findByReadingType(SPO2))
+                     .thenReturn(Optional.of(thresholdOf(SPO2, 90.0, null)));
+ 
+@@ -167,7 +267,7 @@ class AlertServiceImplTest {
+         @Test
+         @DisplayName("deve listar somente alertas do paciente autenticado dos últimos sete dias")
+         void shouldListRecentAlertsForAuthenticatedPatient() {
+-            User user = new User("patient@tcc.com", "hash", com.tcc.domain.model.Role.PATIENT);
++            User user = new User("patient@tcc.com", "hash", Role.PATIENT);
+             user.setId(UUID.randomUUID());
+             Alert alert = new Alert();
+             alert.setPatient(patient);
+@@ -186,10 +286,6 @@ class AlertServiceImplTest {
+             var result = alertService.listRecentForPatient(user.getEmail(), pageable);
+ 
+             assertThat(result.getContent()).containsExactly(response);
+-            verify(alertRepository).findByPatientIdAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(
+-                    org.mockito.ArgumentMatchers.eq(PATIENT_ID),
+-                    any(LocalDateTime.class),
+-                    org.mockito.ArgumentMatchers.eq(pageable));
+         }
+     }
+ 
+@@ -198,44 +294,64 @@ class AlertServiceImplTest {
+     class OutsideNormalRange {
+ 
+         @Test
+-        @DisplayName("deve gerar alerta CRITICAL quando valor esta abaixo do minimo")
+-        void shouldGenerateCriticalAlertWhenValueIsBelowMinimum() {
++        @DisplayName("deve gravar a leitura, criar alerta ligado a ela e publicar o evento")
++        void shouldPersistReadingCreateLinkedAlertAndPublishEvent() {
+             when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
++            stubReadingNotYetReceived(HEART_RATE);
+             when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                     .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
++            stubNoPendingAlert(HEART_RATE);
+             stubAlertPersistence();
+ 
+-            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 45.0));
++            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 130.0));
++
++            ArgumentCaptor<Alert> alertCaptor = ArgumentCaptor.forClass(Alert.class);
++            verify(alertRepository).save(alertCaptor.capture());
++
++            Alert saved = alertCaptor.getValue();
++            assertThat(saved.getStatus()).isEqualTo("PENDING");
++            assertThat(saved.getSeverity()).isEqualTo("CRITICAL");
++            assertThat(saved.getPatient()).isEqualTo(patient);
++            assertThat(saved.getHealthReading()).isNotNull();
++            assertThat(saved.getHealthReading().getId()).isEqualTo(READING_ID);
++            assertThat(saved.getTitle()).isNotBlank();
++
++            ArgumentCaptor<AlertCreatedEvent> eventCaptor =
++                    ArgumentCaptor.forClass(AlertCreatedEvent.class);
++            verify(eventPublisher).publishEvent(eventCaptor.capture());
++            assertThat(eventCaptor.getValue().alert().getId()).isEqualTo(ALERT_ID);
+ 
+             assertThat(result.alertGenerated()).isTrue();
+             assertThat(result.severity()).isEqualTo("CRITICAL");
+             assertThat(result.alertId()).isEqualTo(ALERT_ID);
+-            assertThat(result.reason()).contains("abaixo");
+-            verify(alertRepository).save(any(Alert.class));
++            assertThat(result.healthReadingId()).isEqualTo(READING_ID);
++            assertThat(result.reason()).contains("acima");
+         }
+ 
+         @Test
+-        @DisplayName("deve gerar alerta CRITICAL quando valor esta acima do maximo")
+-        void shouldGenerateCriticalAlertWhenValueIsAboveMaximum() {
++        @DisplayName("deve gerar alerta quando valor esta abaixo do minimo")
++        void shouldGenerateAlertWhenValueIsBelowMinimum() {
+             when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
++            stubReadingNotYetReceived(HEART_RATE);
+             when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                     .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
++            stubNoPendingAlert(HEART_RATE);
+             stubAlertPersistence();
+ 
+-            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 130.0));
++            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 45.0));
+ 
+             assertThat(result.alertGenerated()).isTrue();
+-            assertThat(result.severity()).isEqualTo("CRITICAL");
+-            assertThat(result.reason()).contains("acima");
+-            verify(alertRepository).save(any(Alert.class));
++            assertThat(result.reason()).contains("abaixo");
+         }
+ 
+         @Test
+         @DisplayName("deve gerar alerta quando faixa sem maximo recebe valor abaixo do minimo")
+         void shouldGenerateAlertWhenValueIsBelowMinimumOnOpenEndedRange() {
+             when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
++            stubReadingNotYetReceived(SPO2);
+             when(readingThresholdRepository.findByReadingType(SPO2))
+                     .thenReturn(Optional.of(thresholdOf(SPO2, 90.0, null)));
++            stubNoPendingAlert(SPO2);
+             stubAlertPersistence();
+ 
+             AlertEvaluationResponse result = alertService.evaluateReading(requestOf(SPO2, 85.0));
+@@ -243,60 +359,236 @@ class AlertServiceImplTest {
+             assertThat(result.alertGenerated()).isTrue();
+             assertThat(result.severity()).isEqualTo("CRITICAL");
+         }
++    }
++
++    @Nested
++    @DisplayName("idempotência da leitura")
++    class Idempotency {
++
++        @Test
++        @DisplayName("leitura repetida nao deve ser gravada, nao cria alerta e responde sucesso")
++        void shouldIgnoreAlreadyReceivedReading() {
++            HealthReading existing = new HealthReading();
++            existing.setId(READING_ID);
++            when(healthReadingRepository.findByPatientIdAndReadingTypeAndMeasuredAt(
++                    PATIENT_ID, HEART_RATE, MEASURED_AT_STORED)).thenReturn(Optional.of(existing));
++
++            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 200.0));
++
++            assertThat(result.duplicateReading()).isTrue();
++            assertThat(result.alertGenerated()).isFalse();
++            assertThat(result.healthReadingId()).isEqualTo(READING_ID);
++
++            verify(healthReadingRepository, never()).saveAndFlush(any());
++            verify(alertRepository, never()).save(any());
++            verifyNoInteractions(eventPublisher, patientRepository, readingThresholdRepository);
++        }
+ 
+         @Test
+-        @DisplayName("alerta criado deve ter status exatamente PENDING")
+-        void shouldCreateAlertWithStatusExactlyPending() {
++        @DisplayName("mesmo instante com fuso diferente (-03:00) deve ser tratado como repetido")
++        void shouldTreatSameInstantInAnotherOffsetAsDuplicate() {
++            HealthReading existing = new HealthReading();
++            existing.setId(READING_ID);
++
++            // Gravado a partir de 14:30Z; agora chega 11:30-03:00, o mesmo instante.
++            when(healthReadingRepository.findByPatientIdAndReadingTypeAndMeasuredAt(
++                    PATIENT_ID, HEART_RATE, MEASURED_AT_STORED)).thenReturn(Optional.of(existing));
++
++            AlertEvaluationResponse result = alertService.evaluateReading(
++                    requestOf(HEART_RATE, 200.0, MEASURED_AT_SAME_INSTANT_OFFSET));
++
++            assertThat(result.duplicateReading()).isTrue();
++            assertThat(result.healthReadingId()).isEqualTo(READING_ID);
++
++            // Prova a normalização: a consulta usou o horário em UTC, não 11:30.
++            verify(healthReadingRepository).findByPatientIdAndReadingTypeAndMeasuredAt(
++                    PATIENT_ID, HEART_RATE, MEASURED_AT_STORED);
++            verify(healthReadingRepository, never()).saveAndFlush(any());
++            verify(alertRepository, never()).save(any());
++        }
++
++        @Test
++        @DisplayName("os dois fusos do mesmo instante devem gravar o mesmo measuredAt")
++        void shouldNormalizeBothOffsetsToTheSameStoredValue() {
+             when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
++            stubReadingNotYetReceived(HEART_RATE);
+             when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                     .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+-            stubAlertPersistence();
+ 
+-            alertService.evaluateReading(requestOf(HEART_RATE, 200.0));
++            alertService.evaluateReading(requestOf(HEART_RATE, 80.0, MEASURED_AT_UTC));
++            alertService.evaluateReading(
++                    requestOf(HEART_RATE, 80.0, MEASURED_AT_SAME_INSTANT_OFFSET));
+ 
+-            ArgumentCaptor<Alert> captor = ArgumentCaptor.forClass(Alert.class);
+-            verify(alertRepository).save(captor.capture());
++            ArgumentCaptor<HealthReading> captor = ArgumentCaptor.forClass(HealthReading.class);
++            verify(healthReadingRepository, times(2)).saveAndFlush(captor.capture());
+ 
+-            Alert saved = captor.getValue();
+-            assertThat(saved.getStatus()).isEqualTo("PENDING");
+-            assertThat(saved.getSeverity()).isEqualTo("CRITICAL");
+-            assertThat(saved.getPatient()).isEqualTo(patient);
+-            assertThat(saved.getHealthReading()).isNull();
+-            assertThat(saved.getTitle()).isNotBlank();
++            assertThat(captor.getAllValues())
++                    .extracting(HealthReading::getMeasuredAt)
++                    .containsExactly(MEASURED_AT_STORED, MEASURED_AT_STORED);
++        }
++
++        @Test
++        @DisplayName("violacao de unicidade em corrida deve virar AlertDuplicateReadingException")
++        void shouldTranslateUniqueViolationIntoDuplicateException() {
++            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
++            when(healthReadingRepository.findByPatientIdAndReadingTypeAndMeasuredAt(
++                    PATIENT_ID, HEART_RATE, MEASURED_AT_STORED)).thenReturn(Optional.empty());
++            when(healthReadingRepository.saveAndFlush(any(HealthReading.class)))
++                    .thenThrow(new DataIntegrityViolationException("uq_health_readings..."));
++
++            AlertEvaluationRequest request = requestOf(HEART_RATE, 200.0);
++
++            assertThatThrownBy(() -> alertService.evaluateReading(request))
++                    .isInstanceOf(AlertDuplicateReadingException.class);
++
++            verify(alertRepository, never()).save(any());
++            verifyNoInteractions(eventPublisher);
+         }
+     }
+ 
+     @Nested
+-    @DisplayName("casos sem faixa ou sem paciente")
+-    class MissingData {
++    @DisplayName("deduplicação de alerta")
++    class AlertDeduplication {
+ 
+         @Test
+-        @DisplayName("nao deve gerar alerta nem lancar excecao quando tipo de leitura nao tem faixa")
+-        void shouldNotGenerateAlertWhenThresholdIsNotConfigured() {
++        @DisplayName("com alerta PENDING do mesmo tipo deve gravar a leitura e nao criar alerta")
++        void shouldPersistReadingButSkipAlertWhenPendingAlreadyExists() {
+             when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
+-            when(readingThresholdRepository.findByReadingType("GLUCOSE"))
+-                    .thenReturn(Optional.empty());
++            stubReadingNotYetReceived(HEART_RATE);
++            when(readingThresholdRepository.findByReadingType(HEART_RATE))
++                    .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
++            when(alertRepository.existsByPatientIdAndStatusAndHealthReading_ReadingType(
++                    PATIENT_ID, "PENDING", HEART_RATE)).thenReturn(true);
+ 
+-            AlertEvaluationResponse result = alertService.evaluateReading(requestOf("GLUCOSE", 500.0));
++            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 190.0));
+ 
++            verify(healthReadingRepository).saveAndFlush(any(HealthReading.class));
+             assertThat(result.alertGenerated()).isFalse();
+-            assertThat(result.severity()).isNull();
+-            assertThat(result.alertId()).isNull();
++            assertThat(result.duplicateReading()).isFalse();
++            assertThat(result.healthReadingId()).isEqualTo(READING_ID);
++
+             verify(alertRepository, never()).save(any());
++            verifyNoInteractions(eventPublisher);
+         }
++    }
++
++    @Nested
++    @DisplayName("paciente inexistente")
++    class MissingPatient {
+ 
+         @Test
+         @DisplayName("deve lancar excecao quando paciente nao encontrado")
+         void shouldThrowWhenPatientNotFound() {
++            when(healthReadingRepository.findByPatientIdAndReadingTypeAndMeasuredAt(
++                    NONEXISTENT_PATIENT_ID, HEART_RATE, MEASURED_AT_STORED))
++                    .thenReturn(Optional.empty());
+             when(patientRepository.findById(NONEXISTENT_PATIENT_ID)).thenReturn(Optional.empty());
+ 
+             AlertEvaluationRequest request = new AlertEvaluationRequest(
+-                    NONEXISTENT_PATIENT_ID, HEART_RATE, 80.0, LocalDateTime.now());
++                    NONEXISTENT_PATIENT_ID, HEART_RATE, 80.0, MEASURED_AT_UTC, null);
+ 
+             assertThatThrownBy(() -> alertService.evaluateReading(request))
+                     .isInstanceOf(ResourceNotFoundException.class)
+                     .hasMessageContaining("Paciente");
+ 
++            verify(healthReadingRepository, never()).saveAndFlush(any());
++            verify(alertRepository, never()).save(any());
++        }
++    }
++
++    @Nested
++    @DisplayName("resolução de alerta pelo médico")
++    class Resolution {
++
++        private static final String DOCTOR_EMAIL = "doctor@tcc.com";
++
++        private Alert pendingAlert() {
++            Alert alert = new Alert();
++            alert.setId(ALERT_ID);
++            alert.setPatient(patient);
++            alert.setStatus("PENDING");
++            return alert;
++        }
++
++        private void stubAuthenticatedDoctor() {
++            User user = new User(DOCTOR_EMAIL, "hash", Role.DOCTOR);
++            user.setId(UUID.randomUUID());
++
++            Doctor doctor = new Doctor();
++            doctor.setId(DOCTOR_ID);
++            doctor.setUser(user);
++            doctor.setHospital(new Hospital());
++
++            when(userRepository.findByEmailAndActiveTrue(DOCTOR_EMAIL)).thenReturn(Optional.of(user));
++            when(doctorRepository.findByUserId(user.getId())).thenReturn(Optional.of(doctor));
++        }
++
++        @Test
++        @DisplayName("medico vinculado deve conseguir marcar o alerta como RESOLVED")
++        void shouldResolveAlertForLinkedDoctor() {
++            Alert alert = pendingAlert();
++            stubAuthenticatedDoctor();
++            when(alertRepository.findById(ALERT_ID)).thenReturn(Optional.of(alert));
++            when(doctorPatientRepository.existsByDoctorIdAndPatientId(DOCTOR_ID, PATIENT_ID))
++                    .thenReturn(true);
++            when(alertRepository.save(alert)).thenReturn(alert);
++            when(alertMapper.toResponse(alert)).thenReturn(new AlertResponse(
++                    ALERT_ID, null, READING_ID, "CRITICAL", "Alerta", "Motivo",
++                    "RESOLVED", LocalDateTime.now()));
++
++            AlertResponse result = alertService.resolveAlert(DOCTOR_EMAIL, ALERT_ID);
++
++            assertThat(alert.getStatus()).isEqualTo("RESOLVED");
++            assertThat(result.status()).isEqualTo("RESOLVED");
++            verify(alertRepository).save(alert);
++        }
++
++        @Test
++        @DisplayName("alerta ja RESOLVED nao deve ser gravado de novo e devolve o estado atual")
++        void shouldNotSaveAgainWhenAlertIsAlreadyResolved() {
++            Alert alert = pendingAlert();
++            alert.setStatus("RESOLVED");
++
++            stubAuthenticatedDoctor();
++            when(alertRepository.findById(ALERT_ID)).thenReturn(Optional.of(alert));
++            when(doctorPatientRepository.existsByDoctorIdAndPatientId(DOCTOR_ID, PATIENT_ID))
++                    .thenReturn(true);
++            when(alertMapper.toResponse(alert)).thenReturn(new AlertResponse(
++                    ALERT_ID, null, READING_ID, "CRITICAL", "Alerta", "Motivo",
++                    "RESOLVED", LocalDateTime.now()));
++
++            AlertResponse result = alertService.resolveAlert(DOCTOR_EMAIL, ALERT_ID);
++
++            assertThat(result.status()).isEqualTo("RESOLVED");
++            verify(alertRepository, never()).save(any());
++        }
++
++        @Test
++        @DisplayName("medico nao vinculado nao deve conseguir resolver e o status nao muda")
++        void shouldRejectResolutionForUnlinkedDoctor() {
++            Alert alert = pendingAlert();
++            stubAuthenticatedDoctor();
++            when(alertRepository.findById(ALERT_ID)).thenReturn(Optional.of(alert));
++            when(doctorPatientRepository.existsByDoctorIdAndPatientId(DOCTOR_ID, PATIENT_ID))
++                    .thenReturn(false);
++
++            assertThatThrownBy(() -> alertService.resolveAlert(DOCTOR_EMAIL, ALERT_ID))
++                    .isInstanceOf(UnauthorizedException.class);
++
++            assertThat(alert.getStatus()).isEqualTo("PENDING");
++            verify(alertRepository, never()).save(any());
++        }
++
++        @Test
++        @DisplayName("deve lancar excecao quando o alerta nao existe")
++        void shouldThrowWhenAlertNotFound() {
++            stubAuthenticatedDoctor();
++            when(alertRepository.findById(ALERT_ID)).thenReturn(Optional.empty());
++
++            assertThatThrownBy(() -> alertService.resolveAlert(DOCTOR_EMAIL, ALERT_ID))
++                    .isInstanceOf(ResourceNotFoundException.class)
++                    .hasMessageContaining("Alerta");
++
+             verify(alertRepository, never()).save(any());
+         }
+     }
+diff --git a/src/test/java/com/tcc/exception/GlobalExceptionHandlerUnreadableBodyTest.java b/src/test/java/com/tcc/exception/GlobalExceptionHandlerUnreadableBodyTest.java
+new file mode 100644
+index 0000000..16c5752
+--- /dev/null
++++ b/src/test/java/com/tcc/exception/GlobalExceptionHandlerUnreadableBodyTest.java
+@@ -0,0 +1,72 @@
++package com.tcc.exception;
++
++import java.util.Map;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import org.junit.jupiter.api.DisplayName;
++import org.junit.jupiter.api.Test;
++import org.springframework.http.HttpStatus;
++import org.springframework.http.ResponseEntity;
++import org.springframework.http.converter.HttpMessageNotReadableException;
++
++/**
++ * Corpo ilegível tem de virar 400, não 500.
++ *
++ * <p>Antes deste handler o caso caía no {@code handleGeneric} e virava 500, o que
++ * faria a fila de integração reenviar indefinidamente um payload que nunca seria
++ * aceito — por exemplo {@code measuredAt} sem fuso.
++ */
++@DisplayName("GlobalExceptionHandler: corpo ilegível")
++class GlobalExceptionHandlerUnreadableBodyTest {
++
++    private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
++
++    private HttpMessageNotReadableException exceptionOf(String message) {
++        return new HttpMessageNotReadableException(message, new RuntimeException(message), null);
++    }
++
++    @Test
++    @DisplayName("deve responder 400 no formato padrão do projeto")
++    void shouldReturnBadRequestInProjectFormat() {
++        ResponseEntity<Map<String, Object>> response =
++                handler.handleUnreadableBody(exceptionOf("JSON parse error"));
++
++        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
++
++        Map<String, Object> body = response.getBody();
++        assertThat(body).isNotNull();
++        assertThat(body.get("status")).isEqualTo(400);
++        assertThat(body.get("error")).isEqualTo(HttpStatus.BAD_REQUEST.getReasonPhrase());
++        assertThat(body).containsKeys("timestamp", "status", "error", "message");
++    }
++
++    @Test
++    @DisplayName("mensagem deve estar em português e orientar sobre o fuso")
++    void shouldReturnPortugueseMessageMentioningTimezone() {
++        ResponseEntity<Map<String, Object>> response =
++                handler.handleUnreadableBody(exceptionOf("JSON parse error"));
++
++        String message = String.valueOf(response.getBody().get("message"));
++
++        assertThat(message)
++                .contains("Corpo da requisição inválido")
++                .contains("fuso")
++                .contains("2026-07-01T14:32:00Z");
++    }
++
++    /**
++     * O texto da exceção do Jackson cita o conteúdo do campo que falhou, e o corpo
++     * da requisição carrega dado de saúde. A resposta não pode repassar isso.
++     */
++    @Test
++    @DisplayName("não deve repassar o detalhe da exceção do Jackson na resposta")
++    void shouldNotLeakJacksonDetailIntoResponse() {
++        String sensitive = "Cannot deserialize value \"PACIENTE-SIGILOSO-123\"";
++
++        ResponseEntity<Map<String, Object>> response =
++                handler.handleUnreadableBody(exceptionOf(sensitive));
++
++        assertThat(String.valueOf(response.getBody().get("message")))
++                .doesNotContain("PACIENTE-SIGILOSO-123");
++    }
++}
+diff --git a/src/test/java/com/tcc/infrastructure/messaging/email/SesAlertEmailSenderTest.java b/src/test/java/com/tcc/infrastructure/messaging/email/SesAlertEmailSenderTest.java
+new file mode 100644
+index 0000000..3b74d2e
+--- /dev/null
++++ b/src/test/java/com/tcc/infrastructure/messaging/email/SesAlertEmailSenderTest.java
+@@ -0,0 +1,101 @@
++package com.tcc.infrastructure.messaging.email;
++
++import java.util.UUID;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.assertj.core.api.Assertions.assertThatCode;
++import org.junit.jupiter.api.DisplayName;
++import org.junit.jupiter.api.Nested;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.api.extension.ExtendWith;
++import org.mockito.ArgumentCaptor;
++import static org.mockito.ArgumentMatchers.any;
++import org.mockito.Mock;
++import static org.mockito.Mockito.never;
++import static org.mockito.Mockito.verify;
++import static org.mockito.Mockito.when;
++import org.mockito.junit.jupiter.MockitoExtension;
++
++import software.amazon.awssdk.services.sesv2.SesV2Client;
++import software.amazon.awssdk.services.sesv2.model.SendEmailRequest;
++import software.amazon.awssdk.services.sesv2.model.SendEmailResponse;
++
++@ExtendWith(MockitoExtension.class)
++class SesAlertEmailSenderTest {
++
++    @Mock
++    private SesV2Client sesV2Client;
++
++    private static final UUID ALERT_ID = UUID.randomUUID();
++    private static final String SENDER = "alertas@tcc.local";
++    private static final String RECIPIENT = "doctor@tcc.local";
++    private static final String SUBJECT = "Alerta de saúde: Maria da Silva [CRITICAL]";
++    private static final String BODY = "Horário da medição: 29/09/2026 às 14:30";
++
++    private SesAlertEmailSender senderWith(String senderAddress) {
++        return new SesAlertEmailSender(sesV2Client, senderAddress);
++    }
++
++    @Nested
++    @DisplayName("envio bem-sucedido")
++    class Success {
++
++        @Test
++        @DisplayName("deve montar a requisicao com remetente, destinatario, assunto e corpo em texto")
++        void shouldBuildRequestWithAllFields() {
++            when(sesV2Client.sendEmail(any(SendEmailRequest.class)))
++                    .thenReturn(SendEmailResponse.builder().messageId("id-123").build());
++
++            boolean result = senderWith(SENDER).sendAlertEmail(RECIPIENT, SUBJECT, BODY, ALERT_ID);
++
++            assertThat(result).isTrue();
++
++            ArgumentCaptor<SendEmailRequest> captor = ArgumentCaptor.forClass(SendEmailRequest.class);
++            verify(sesV2Client).sendEmail(captor.capture());
++
++            SendEmailRequest request = captor.getValue();
++            assertThat(request.fromEmailAddress()).isEqualTo(SENDER);
++            assertThat(request.destination().toAddresses()).containsExactly(RECIPIENT);
++            assertThat(request.content().simple().subject().data()).isEqualTo(SUBJECT);
++            assertThat(request.content().simple().body().text().data()).isEqualTo(BODY);
++            assertThat(request.content().simple().body().html()).isNull();
++            assertThat(request.content().simple().body().text().charset()).isEqualTo("UTF-8");
++        }
++    }
++
++    @Nested
++    @DisplayName("falha e configuração ausente")
++    class Failure {
++
++        @Test
++        @DisplayName("falha do provedor deve devolver false sem lancar excecao")
++        void shouldReturnFalseWhenProviderFails() {
++            when(sesV2Client.sendEmail(any(SendEmailRequest.class)))
++                    .thenThrow(new RuntimeException("SES fora do ar"));
++
++            SesAlertEmailSender sender = senderWith(SENDER);
++
++            assertThatCode(() -> sender.sendAlertEmail(RECIPIENT, SUBJECT, BODY, ALERT_ID))
++                    .doesNotThrowAnyException();
++            assertThat(sender.sendAlertEmail(RECIPIENT, SUBJECT, BODY, ALERT_ID)).isFalse();
++        }
++
++        @Test
++        @DisplayName("destinatario em branco deve devolver false sem chamar o provedor")
++        void shouldReturnFalseForBlankRecipient() {
++            boolean result = senderWith(SENDER).sendAlertEmail("  ", SUBJECT, BODY, ALERT_ID);
++
++            assertThat(result).isFalse();
++            verify(sesV2Client, never()).sendEmail(any(SendEmailRequest.class));
++        }
++
++        @Test
++        @DisplayName("remetente nao configurado deve devolver false sem chamar o provedor")
++        void shouldReturnFalseWhenSenderIsNotConfigured() {
++            boolean result = senderWith("").sendAlertEmail(RECIPIENT, SUBJECT, BODY, ALERT_ID);
++
++            assertThat(result).isFalse();
++            verify(sesV2Client, never()).sendEmail(any(SendEmailRequest.class));
++        }
++    }
++}
+diff --git a/src/test/java/com/tcc/presentation/controller/AlertControllerTest.java b/src/test/java/com/tcc/presentation/controller/AlertControllerTest.java
+new file mode 100644
+index 0000000..23b3962
+--- /dev/null
++++ b/src/test/java/com/tcc/presentation/controller/AlertControllerTest.java
+@@ -0,0 +1,150 @@
++package com.tcc.presentation.controller;
++
++import java.time.OffsetDateTime;
++import java.time.ZoneOffset;
++import java.util.UUID;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.assertj.core.api.Assertions.assertThatThrownBy;
++import org.junit.jupiter.api.DisplayName;
++import org.junit.jupiter.api.Nested;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.api.extension.ExtendWith;
++import static org.mockito.ArgumentMatchers.any;
++import org.mockito.InjectMocks;
++import org.mockito.Mock;
++import static org.mockito.Mockito.when;
++import org.mockito.junit.jupiter.MockitoExtension;
++import org.springframework.http.HttpStatus;
++import org.springframework.http.ResponseEntity;
++
++import com.tcc.application.dto.request.AlertEvaluationRequest;
++import com.tcc.application.dto.response.AlertEvaluationResponse;
++import com.tcc.application.dto.response.ApiResponse;
++import com.tcc.application.service.AlertDuplicateReadingException;
++import com.tcc.application.service.AlertService;
++import com.tcc.exception.ResourceNotFoundException;
++
++/**
++ * Códigos HTTP do endpoint de integração.
++ *
++ * <p>Quem chama é uma fila com retentativa, então o status decide se a mensagem
++ * volta. Leitura repetida tem de ser 2xx; dado inválido e paciente inexistente,
++ * 4xx (os dois vêm do GlobalExceptionHandler, provado pelo tipo da exceção que
++ * sobe daqui); erro inesperado, 5xx.
++ */
++@ExtendWith(MockitoExtension.class)
++class AlertControllerTest {
++
++    @Mock
++    private AlertService alertService;
++
++    @InjectMocks
++    private AlertController alertController;
++
++    private static final UUID PATIENT_ID = UUID.randomUUID();
++    private static final UUID READING_ID = UUID.randomUUID();
++    private static final UUID ALERT_ID = UUID.randomUUID();
++
++    private AlertEvaluationRequest request() {
++        return new AlertEvaluationRequest(
++                PATIENT_ID, "HEART_RATE", 155.0, OffsetDateTime.of(2026, 9, 29, 14, 30, 0, 0, ZoneOffset.UTC), "bpm");
++    }
++
++    @Nested
++    @DisplayName("leitura nova")
++    class NewReading {
++
++        @Test
++        @DisplayName("leitura gravada com alerta deve responder 201")
++        void shouldReturnCreatedWhenAlertIsGenerated() {
++            when(alertService.evaluateReading(any())).thenReturn(
++                    AlertEvaluationResponse.withAlert("CRITICAL", ALERT_ID, "Valor acima", READING_ID));
++
++            ResponseEntity<ApiResponse<AlertEvaluationResponse>> response =
++                    alertController.evaluateReading(request());
++
++            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
++            assertThat(response.getBody()).isNotNull();
++            assertThat(response.getBody().getData().alertGenerated()).isTrue();
++            assertThat(response.getBody().getData().healthReadingId()).isEqualTo(READING_ID);
++        }
++
++        @Test
++        @DisplayName("leitura gravada sem alerta deve responder 201")
++        void shouldReturnCreatedWhenNoAlertIsGenerated() {
++            when(alertService.evaluateReading(any()))
++                    .thenReturn(AlertEvaluationResponse.withoutAlert(READING_ID));
++
++            ResponseEntity<ApiResponse<AlertEvaluationResponse>> response =
++                    alertController.evaluateReading(request());
++
++            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
++            assertThat(response.getBody().getData().alertGenerated()).isFalse();
++            assertThat(response.getBody().getData().duplicateReading()).isFalse();
++        }
++    }
++
++    @Nested
++    @DisplayName("leitura repetida")
++    class DuplicateReading {
++
++        @Test
++        @DisplayName("repetida detectada por consulta deve responder 200")
++        void shouldReturnOkForDuplicateDetectedByQuery() {
++            when(alertService.evaluateReading(any()))
++                    .thenReturn(AlertEvaluationResponse.duplicate(READING_ID));
++
++            ResponseEntity<ApiResponse<AlertEvaluationResponse>> response =
++                    alertController.evaluateReading(request());
++
++            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
++            assertThat(response.getBody().isSuccess()).isTrue();
++            assertThat(response.getBody().getData().duplicateReading()).isTrue();
++            assertThat(response.getBody().getData().alertGenerated()).isFalse();
++        }
++
++        @Test
++        @DisplayName("repetida barrada pela unicidade do banco tambem deve responder 200")
++        void shouldReturnOkWhenUniqueConstraintRejectsTheReading() {
++            when(alertService.evaluateReading(any()))
++                    .thenThrow(new AlertDuplicateReadingException(new RuntimeException("uq...")));
++
++            ResponseEntity<ApiResponse<AlertEvaluationResponse>> response =
++                    alertController.evaluateReading(request());
++
++            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
++            assertThat(response.getBody().isSuccess()).isTrue();
++            assertThat(response.getBody().getData().duplicateReading()).isTrue();
++        }
++    }
++
++    @Nested
++    @DisplayName("erros")
++    class Errors {
++
++        @Test
++        @DisplayName("paciente inexistente deve subir ResourceNotFoundException, que o handler traduz em 404")
++        void shouldPropagateNotFound() {
++            when(alertService.evaluateReading(any()))
++                    .thenThrow(new ResourceNotFoundException("Paciente não encontrado com ID: " + PATIENT_ID));
++
++            AlertEvaluationRequest request = request();
++
++            assertThatThrownBy(() -> alertController.evaluateReading(request))
++                    .isInstanceOf(ResourceNotFoundException.class);
++        }
++
++        @Test
++        @DisplayName("erro inesperado deve subir, para o handler traduzir em 500")
++        void shouldPropagateUnexpectedError() {
++            when(alertService.evaluateReading(any()))
++                    .thenThrow(new IllegalStateException("falha inesperada"));
++
++            AlertEvaluationRequest request = request();
++
++            assertThatThrownBy(() -> alertController.evaluateReading(request))
++                    .isInstanceOf(IllegalStateException.class);
++        }
++    }
++}

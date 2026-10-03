@@ -1,5 +1,7 @@
 package com.tcc.presentation.controller;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -11,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.tcc.application.dto.request.AlertEvaluationRequest;
 import com.tcc.application.dto.response.AlertEvaluationResponse;
 import com.tcc.application.dto.response.ApiResponse;
+import com.tcc.application.service.AlertDuplicateReadingException;
 import com.tcc.application.service.AlertService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -22,9 +25,12 @@ import jakarta.validation.Valid;
 @RestController
 @RequestMapping("/api/integration/alerts")
 @Tag(name = "Integração de Alertas",
-     description = "Avaliação de leituras de sinais vitais — acesso exclusivo de serviço, por chave de integração")
+     description = "Recebimento e avaliação de leituras de sinais vitais — acesso exclusivo de serviço, "
+                 + "por chave de integração")
 @SecurityRequirement(name = "Integration Key")
 public class AlertController {
+
+    private static final Logger log = LoggerFactory.getLogger(AlertController.class);
 
     private final AlertService alertService;
 
@@ -35,19 +41,29 @@ public class AlertController {
     @PostMapping("/evaluate")
     @PreAuthorize("hasAuthority('ROLE_INTEGRATION')")
     @Operation(
-        summary = "Avaliar leitura de sinal vital",
-        description = "Compara o valor da leitura com a faixa normal cadastrada para o tipo e, quando o valor " +
-                      "está fora dessa faixa, cria um alerta com status PENDING. Os limites são inclusivos no " +
-                      "normal: valor igual ao mínimo ou ao máximo não gera alerta, e limite nulo significa " +
-                      "ausência de limite daquele lado. Quando não há faixa cadastrada para o tipo de leitura, " +
-                      "a resposta é de sucesso com alertGenerated=false e nenhum alerta é criado. A leitura em " +
-                      "si não é persistida nesta versão. Endpoint chamado por serviço, autenticado por chave de " +
-                      "integração no header X-Integration-Key."
+        summary = "Receber e avaliar leitura de sinal vital",
+        description = "Grava a leitura recebida em health_readings — dentro ou fora da faixa normal — e depois "
+                    + "compara o valor com a faixa cadastrada para o tipo. Quando o valor está fora dessa faixa, "
+                    + "cria um alerta com status PENDING apontando para a leitura gravada, e dispara os avisos "
+                    + "(push ao paciente e e-mail aos médicos vinculados) depois do commit. Os limites são "
+                    + "inclusivos no normal: valor igual ao mínimo ou ao máximo não gera alerta, e limite nulo "
+                    + "significa ausência de limite daquele lado. Quando não há faixa cadastrada para o tipo, a "
+                    + "leitura é gravada e a resposta vem com alertGenerated=false. "
+                    + "Idempotência: leitura com o mesmo patientId, readingType e measuredAt já recebida não é "
+                    + "gravada de novo, não gera alerta e não avisa ninguém — a resposta é 200 com "
+                    + "duplicateReading=true e o id da leitura original. "
+                    + "Deduplicação: se já existe alerta PENDING do mesmo paciente para o mesmo tipo de leitura, "
+                    + "nenhum novo alerta é criado e nenhum aviso é disparado, mas a leitura é gravada. "
+                    + "Endpoint chamado por serviço, autenticado por chave de integração no header "
+                    + "X-Integration-Key."
     )
     @ApiResponses(value = {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "Leitura já recebida anteriormente. Nada foi gravado e nenhum aviso foi enviado"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
-                description = "Leitura avaliada. alertGenerated indica se um alerta foi criado"),
+                description = "Leitura gravada e avaliada. alertGenerated indica se um alerta foi criado"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Dados inválidos na requisição"),
@@ -59,14 +75,47 @@ public class AlertController {
                 description = "Acesso negado"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
-                description = "Paciente não encontrado")
+                description = "Paciente não encontrado"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "500",
+                description = "Erro inesperado no processamento da leitura")
     })
     public ResponseEntity<ApiResponse<AlertEvaluationResponse>> evaluateReading(
             @Valid @RequestBody AlertEvaluationRequest request) {
 
-        AlertEvaluationResponse evaluation = alertService.evaluateReading(request);
-        ApiResponse<AlertEvaluationResponse> response = ApiResponse.success(evaluation);
+        AlertEvaluationResponse evaluation = evaluate(request);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        // Leitura repetida é sucesso, não erro: quem chama é uma fila com
+        // retentativa, e um 4xx/5xx aqui faria a mensagem ser reentregue para
+        // sempre. 200 em vez de 201 porque nada foi criado nesta chamada.
+        HttpStatus status = evaluation.duplicateReading() ? HttpStatus.OK : HttpStatus.CREATED;
+
+        return ResponseEntity.status(status).body(ApiResponse.success(evaluation));
+    }
+
+    /**
+     * Traduz a corrida de leitura duplicada em resposta de sucesso.
+     *
+     * <p>Duas requisições idênticas em paralelo passam as duas pela checagem de
+     * idempotência do service; a restrição de unicidade do banco separa as duas e a
+     * perdedora chega aqui. O resultado observável para quem chama é o mesmo de uma
+     * leitura repetida detectada por consulta: 200, nada gravado, ninguém avisado.
+     *
+     * <p>O id da leitura vencedora não é devolvido neste caminho: a transação que o
+     * conheceria sofreu rollback. O campo vem nulo, e {@code duplicateReading}
+     * continua sendo o sinal confiável.
+     *
+     * <p>Tratado localmente, no controller, em vez de no handler global: para
+     * qualquer outro chamador uma violação de integridade é erro, e só este endpoint
+     * tem o contexto para considerá-la sucesso.
+     */
+    private AlertEvaluationResponse evaluate(AlertEvaluationRequest request) {
+        try {
+            return alertService.evaluateReading(request);
+        } catch (AlertDuplicateReadingException e) {
+            log.info("Leitura concorrente repetida do paciente {}. Respondendo sucesso.",
+                    request.patientId());
+            return AlertEvaluationResponse.duplicate(null);
+        }
     }
 }

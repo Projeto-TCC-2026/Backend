@@ -18,8 +18,13 @@ public class HealthReading {
     @JoinColumn(name = "patient_id", nullable = false)
     private Patient patient;
 
+    /**
+     * Dispositivo de origem da medição. Opcional desde a V34: a leitura que chega
+     * pela integração de risco não informa dispositivo — o contrato dela tem
+     * apenas paciente, tipo, valor e horário da medição.
+     */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "patient_device_id", nullable = false)
+    @JoinColumn(name = "patient_device_id")
     private PatientDevice patientDevice;
 
     @ManyToOne(fetch = FetchType.LAZY)

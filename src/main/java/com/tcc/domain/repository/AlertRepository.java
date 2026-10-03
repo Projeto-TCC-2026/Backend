@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface AlertRepository extends JpaRepository<Alert, UUID> {
@@ -22,6 +23,27 @@ public interface AlertRepository extends JpaRepository<Alert, UUID> {
     List<Alert> findByStatus(String status);
 
     List<Alert> findByPatientIdAndStatus(UUID patientId, String status);
+
+    /**
+     * Deduplicação de alerta: já existe alerta em aberto do paciente para este tipo
+     * de leitura? O tipo vem da leitura associada ao alerta, então alerta sem
+     * leitura (criado antes desta versão) nunca casa aqui.
+     */
+    boolean existsByPatientIdAndStatusAndHealthReading_ReadingType(UUID patientId,
+                                                                  String status,
+                                                                  String readingType);
+
+    /**
+     * Carrega o alerta junto com o paciente, para o listener de e-mail poder ler o
+     * nome do paciente e a leitura fora de transação da requisição original.
+     */
+    @Query("""
+            SELECT a FROM Alert a
+            JOIN FETCH a.patient
+            LEFT JOIN FETCH a.healthReading
+            WHERE a.id = :alertId
+            """)
+    Optional<Alert> findByIdWithPatientAndReading(@Param("alertId") UUID alertId);
 
     List<Alert> findByPatientIdOrderByCreatedAtDesc(UUID patientId);
 
