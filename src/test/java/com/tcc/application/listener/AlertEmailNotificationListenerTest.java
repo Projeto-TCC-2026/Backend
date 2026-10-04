@@ -27,6 +27,7 @@ import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.tcc.application.port.out.AlertEmailSender;
+import com.tcc.domain.event.AlertConfirmationReason;
 import com.tcc.domain.event.AlertConfirmedEvent;
 import com.tcc.domain.model.Alert;
 import com.tcc.domain.model.Doctor;
@@ -108,8 +109,14 @@ class AlertEmailNotificationListenerTest {
         return reading;
     }
 
+    /** Fluxo comum: duas leituras seguidas. É o motivo que já existia. */
     private AlertConfirmedEvent eventOf() {
-        return new AlertConfirmedEvent(alert, firstReading, confirmingReading);
+        return AlertConfirmedEvent.byTwoReadings(alert, firstReading, confirmingReading);
+    }
+
+    /** Leitura grave: só a leitura grave participou, com o motivo informado. */
+    private AlertConfirmedEvent severeEventOf(AlertConfirmationReason reason) {
+        return AlertConfirmedEvent.bySevereReading(alert, firstReading, reason);
     }
 
     private Doctor doctorOf(String email) {
@@ -304,6 +311,89 @@ class AlertEmailNotificationListenerTest {
 
             verifyNoInteractions(alertEmailSender, notificationRepository);
             verify(doctorPatientRepository, never()).findActiveDoctorsByPatientId(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("motivo da confirmação no corpo do e-mail")
+    class ConfirmationReason {
+
+        private String bodyOf(AlertConfirmedEvent event) {
+            stubAlertFound();
+            when(doctorPatientRepository.findActiveDoctorsByPatientId(PATIENT_ID))
+                    .thenReturn(List.of(doctorOf(DOCTOR_A_EMAIL)));
+            when(alertEmailSender.sendAlertEmail(anyString(), anyString(), anyString(), eq(ALERT_ID)))
+                    .thenReturn(true);
+
+            listener.onAlertConfirmed(event);
+
+            ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+            verify(alertEmailSender).sendAlertEmail(
+                    anyString(), anyString(), bodyCaptor.capture(), eq(ALERT_ID));
+
+            return bodyCaptor.getValue();
+        }
+
+        @Test
+        @DisplayName("DUAS_LEITURAS deve manter o corpo com as duas leituras, como antes")
+        void shouldKeepTwoReadingsBodyUnchanged() {
+            String body = bodyOf(eventOf());
+
+            assertThat(body)
+                    .contains("confirmado por duas leituras")
+                    .contains("1ª leitura: 150.0 bpm")
+                    .contains("2ª leitura: 155.0 bpm")
+                    .contains(FIRST_EXPECTED_IN_EMAIL)
+                    .contains(SECOND_EXPECTED_IN_EMAIL)
+                    // Os textos dos motivos de leitura grave não entram aqui.
+                    .doesNotContain("não está bem")
+                    .doesNotContain("não respondeu");
+        }
+
+        @Test
+        @DisplayName("PACIENTE_NAO_ESTA_BEM deve mostrar a leitura grave e o motivo em portugues")
+        void shouldDescribePatientNotOk() {
+            String body = bodyOf(severeEventOf(AlertConfirmationReason.PACIENTE_NAO_ESTA_BEM));
+
+            assertThat(body)
+                    .contains("A paciente respondeu que não está bem.")
+                    .contains("valor grave")
+                    .contains("Maria da Silva")
+                    .contains("HEART_RATE")
+                    // Valor e horário da medição grave, que é a única leitura do caso.
+                    .contains("Leitura: 150.0 bpm")
+                    .contains(FIRST_EXPECTED_IN_EMAIL)
+                    // Nenhuma segunda leitura participou: não há "2ª leitura".
+                    .doesNotContain("2ª leitura")
+                    .doesNotContain("A paciente não respondeu");
+        }
+
+        @Test
+        @DisplayName("SEM_RESPOSTA deve mostrar a leitura grave e o motivo em portugues")
+        void shouldDescribeNoAnswer() {
+            String body = bodyOf(severeEventOf(AlertConfirmationReason.SEM_RESPOSTA));
+
+            assertThat(body)
+                    .contains("A paciente não respondeu em 10 minutos.")
+                    .contains("valor grave")
+                    .contains("Leitura: 150.0 bpm")
+                    .contains(FIRST_EXPECTED_IN_EMAIL)
+                    .doesNotContain("2ª leitura")
+                    .doesNotContain("respondeu que não está bem");
+        }
+
+        /**
+         * Os dois motivos de leitura grave chegam com {@code confirmingReading} nulo,
+         * por construção do evento. O corpo não pode sair com campo vazio nem quebrar.
+         */
+        @Test
+        @DisplayName("leitura grave sem segunda leitura nao deve quebrar o corpo")
+        void shouldHandleNullConfirmingReading() {
+            AlertConfirmedEvent event =
+                    severeEventOf(AlertConfirmationReason.SEM_RESPOSTA);
+
+            assertThat(event.confirmingReading()).isNull();
+            assertThat(bodyOf(event)).isNotBlank().doesNotContain("null");
         }
     }
 

@@ -8,6 +8,8 @@ import java.util.UUID;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -57,6 +59,23 @@ public class Alert {
      */
     @Column(name = "confirmed_at")
     private LocalDateTime confirmedAt;
+
+    /**
+     * Até quando a resposta da paciente é aceita em alerta AWAITING_PATIENT.
+     * Preenchido na criação com "agora + 10 minutos". Nulo em alerta do fluxo
+     * comum, que não pergunta nada à paciente.
+     */
+    @Column(name = "patient_response_deadline")
+    private LocalDateTime patientResponseDeadline;
+
+    /** Resposta da paciente, nula enquanto ela não responde. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "patient_response", length = 20)
+    private PatientAlertAnswer patientResponse;
+
+    /** Momento em que a resposta da paciente foi gravada. */
+    @Column(name = "patient_responded_at")
+    private LocalDateTime patientRespondedAt;
 
     @OneToMany(mappedBy = "alert", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Notification> notifications = new ArrayList<>();
@@ -148,6 +167,30 @@ public class Alert {
 
     public void setConfirmedAt(LocalDateTime confirmedAt) {
         this.confirmedAt = confirmedAt;
+    }
+
+    public LocalDateTime getPatientResponseDeadline() {
+        return patientResponseDeadline;
+    }
+
+    public void setPatientResponseDeadline(LocalDateTime patientResponseDeadline) {
+        this.patientResponseDeadline = patientResponseDeadline;
+    }
+
+    public PatientAlertAnswer getPatientResponse() {
+        return patientResponse;
+    }
+
+    public void setPatientResponse(PatientAlertAnswer patientResponse) {
+        this.patientResponse = patientResponse;
+    }
+
+    public LocalDateTime getPatientRespondedAt() {
+        return patientRespondedAt;
+    }
+
+    public void setPatientRespondedAt(LocalDateTime patientRespondedAt) {
+        this.patientRespondedAt = patientRespondedAt;
     }
 
     public List<Notification> getNotifications() {

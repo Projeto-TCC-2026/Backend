@@ -16,6 +16,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 import com.tcc.application.port.out.AlertEmailSender;
+import com.tcc.domain.event.AlertConfirmationReason;
 import com.tcc.domain.event.AlertConfirmedEvent;
 import com.tcc.domain.model.Alert;
 import com.tcc.domain.model.Doctor;
@@ -57,6 +58,15 @@ public class AlertEmailNotificationListener {
     private static final String SUBJECT_PREFIX = "Alerta de saúde: ";
     private static final String NOT_INFORMED = "não informado";
 
+    /**
+     * Motivo da confirmação, em português, como o médico lê no e-mail. É a frase que
+     * distingue a evidência que chegou até ele.
+     */
+    private static final String REASON_PATIENT_NOT_OK = "A paciente respondeu que não está bem.";
+    private static final String REASON_NO_ANSWER = "A paciente não respondeu em 10 minutos.";
+    private static final String REASON_TWO_READINGS = "Duas leituras seguidas confirmaram o desvio.";
+    private static final String REASON_UNKNOWN = "Motivo da confirmação não informado.";
+
     /** Status gravados em notifications conforme o resultado do envio. */
     private static final String STATUS_SENT = "SENT";
     private static final String STATUS_FAILED = "FAILED";
@@ -89,7 +99,7 @@ public class AlertEmailNotificationListener {
         UUID alertId = event.alert().getId();
 
         try {
-            notifyDoctors(alertId, event.firstReading(), event.confirmingReading());
+            notifyDoctors(alertId, event.firstReading(), event.confirmingReading(), event.reason());
         } catch (Exception e) {
             log.error("Falha ao enviar e-mail do alerta {}. exception={}",
                     alertId, e.getClass().getSimpleName());
@@ -97,7 +107,8 @@ public class AlertEmailNotificationListener {
     }
 
     private void notifyDoctors(UUID alertId, HealthReading firstReading,
-                               HealthReading confirmingReading) {
+                               HealthReading confirmingReading,
+                               AlertConfirmationReason reason) {
         Alert alert = alertRepository.findByIdWithPatientAndReading(alertId).orElse(null);
 
         if (alert == null) {
@@ -115,7 +126,7 @@ public class AlertEmailNotificationListener {
         }
 
         String subject = buildSubject(alert);
-        String body = buildBody(alert, firstReading, confirmingReading);
+        String body = buildBody(alert, firstReading, confirmingReading, reason);
 
         for (Doctor doctor : doctors) {
             notifyDoctor(alert, doctor, subject, body);
@@ -165,7 +176,15 @@ public class AlertEmailNotificationListener {
      * fila, então o horário de criação do alerta não serve como referência clínica.
      */
     private String buildBody(Alert alert, HealthReading firstReading,
-                             HealthReading confirmingReading) {
+                             HealthReading confirmingReading,
+                             AlertConfirmationReason reason) {
+        return reason == AlertConfirmationReason.DUAS_LEITURAS
+                ? buildTwoReadingsBody(alert, firstReading, confirmingReading)
+                : buildSevereReadingBody(alert, firstReading, reason);
+    }
+
+    private String buildTwoReadingsBody(Alert alert, HealthReading firstReading,
+                                        HealthReading confirmingReading) {
         return """
                 Um alerta foi confirmado por duas leituras seguidas para o paciente sob seus cuidados.
 
@@ -190,6 +209,58 @@ public class AlertEmailNotificationListener {
                 formatMeasuredAt(confirmingReading),
                 alert.getDescription() == null || alert.getDescription().isBlank()
                         ? NOT_INFORMED : alert.getDescription());
+    }
+
+    /**
+     * Corpo dos dois motivos de leitura grave. Mostra uma leitura só, a grave, porque
+     * foi ela sozinha que levou o aviso ao médico — não houve segunda medição.
+     *
+     * <p>O motivo aparece por extenso e em destaque: a diferença entre "ela disse que
+     * não está bem" e "ela não respondeu" muda a urgência, e o médico precisa ver
+     * qual das duas chegou até ele.
+     */
+    private String buildSevereReadingBody(Alert alert, HealthReading severeReading,
+                                          AlertConfirmationReason reason) {
+        return """
+                Uma medição com valor grave foi registrada para o paciente sob seus cuidados.
+
+                Paciente: %s
+                Tipo da leitura: %s
+                Severidade: %s
+
+                Leitura: %s em %s
+                (horário de Brasília)
+
+                %s
+
+                Motivo da leitura: %s
+
+                Acesse o portal para ver o histórico completo do paciente.
+                """.formatted(
+                alert.getPatient().getFullName(),
+                readingType(alert, severeReading, null),
+                alert.getSeverity() == null ? NOT_INFORMED : alert.getSeverity(),
+                formatValue(severeReading),
+                formatMeasuredAt(severeReading),
+                describeReason(reason),
+                alert.getDescription() == null || alert.getDescription().isBlank()
+                        ? NOT_INFORMED : alert.getDescription());
+    }
+
+    /**
+     * Motivo em português. {@code DUAS_LEITURAS} não aparece aqui porque tem corpo
+     * próprio; se chegar, cai no texto neutro em vez de quebrar o e-mail.
+     */
+    private String describeReason(AlertConfirmationReason reason) {
+        if (reason == null) {
+            return REASON_UNKNOWN;
+        }
+
+        return switch (reason) {
+            case PACIENTE_NAO_ESTA_BEM -> REASON_PATIENT_NOT_OK;
+            case SEM_RESPOSTA -> REASON_NO_ANSWER;
+            case DUAS_LEITURAS -> REASON_TWO_READINGS;
+        };
     }
 
     /**

@@ -2,6 +2,7 @@ package com.tcc.application.listener;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import org.mockito.InjectMocks;
@@ -140,6 +142,11 @@ class AlertPushNotificationListenerTest {
             assertThat(bodyCaptor.getValue())
                     .isEqualTo("Sua medição de frequência cardíaca saiu do normal. "
                             + "Se não estiver bem, use a opção 'Não estou bem' no app.");
+
+            // Alerta UNCONFIRMED continua no push comum: sem categoria e sem o type
+            // SEVERE_CHECK, que fariam o app mostrar os botões de resposta.
+            verify(pushNotificationPublisher, never()).publishAlertCreated(
+                    anyList(), anyString(), anyString(), any(UUID.class), anyMap(), anyString());
         }
 
         /**
@@ -224,6 +231,108 @@ class AlertPushNotificationListenerTest {
                     .isNotBlank()
                     .contains("sinal vital")
                     .contains("Não estou bem");
+        }
+    }
+
+    @Nested
+    @DisplayName("push da pergunta ao paciente (AWAITING_PATIENT)")
+    class SevereCheck {
+
+        @BeforeEach
+        void awaitingPatient() {
+            alert.setStatus(AlertStatus.AWAITING_PATIENT);
+            alert.setPatientResponseDeadline(LocalDateTime.of(2026, 9, 29, 14, 42));
+        }
+
+        /** Captura a chamada da sobrecarga com data extra e categoria. */
+        private void sendAndStub() {
+            when(alertRepository.findById(ALERT_ID)).thenReturn(Optional.of(alert));
+            when(deviceTokenRepository.findByUserId(user.getId()))
+                    .thenReturn(List.of(deviceTokenOf(TOKEN_A)));
+            when(pushNotificationPublisher.publishAlertCreated(
+                    anyList(), anyString(), anyString(), eq(ALERT_ID), anyMap(), anyString()))
+                    .thenReturn(List.of());
+
+            listener.onAlertCreated(eventOf(alert));
+        }
+
+        @Test
+        @DisplayName("texto deve perguntar se esta bem, sem o valor medido")
+        void shouldAskIfPatientIsWellWithoutTheMeasuredValue() {
+            sendAndStub();
+
+            ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+            verify(pushNotificationPublisher).publishAlertCreated(
+                    anyList(), anyString(), bodyCaptor.capture(), eq(ALERT_ID), anyMap(), anyString());
+
+            assertThat(bodyCaptor.getValue())
+                    .isEqualTo("Sua medição de frequência cardíaca está muito fora do normal. "
+                            + "Você está bem?")
+                    // Nenhum número: nem o valor medido, nem o limite da faixa.
+                    .doesNotContain("155")
+                    .doesNotContain("120")
+                    .doesNotContain("131");
+        }
+
+        @Test
+        @DisplayName("data payload deve levar type SEVERE_CHECK e a categoria severe-check")
+        void shouldSendSevereCheckTypeAndCategory() {
+            sendAndStub();
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Map<String, String>> dataCaptor = ArgumentCaptor.forClass(Map.class);
+            ArgumentCaptor<String> categoryCaptor = ArgumentCaptor.forClass(String.class);
+            verify(pushNotificationPublisher).publishAlertCreated(
+                    anyList(), anyString(), anyString(), eq(ALERT_ID),
+                    dataCaptor.capture(), categoryCaptor.capture());
+
+            assertThat(dataCaptor.getValue()).containsEntry("type", "SEVERE_CHECK");
+            assertThat(categoryCaptor.getValue()).isEqualTo("severe-check");
+        }
+
+        /**
+         * O alertId não entra pelo mapa de extras: ele é acrescentado pelo publisher,
+         * e chega ao app pelo mesmo caminho do push comum.
+         */
+        @Test
+        @DisplayName("alertId deve ser passado ao publisher, que o poe no data")
+        void shouldPassAlertIdToThePublisher() {
+            sendAndStub();
+
+            verify(pushNotificationPublisher).publishAlertCreated(
+                    anyList(), anyString(), anyString(), eq(ALERT_ID), anyMap(), anyString());
+        }
+
+        @Test
+        @DisplayName("nao deve usar o texto do push comum")
+        void shouldNotUseTheCommonPushText() {
+            sendAndStub();
+
+            ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+            verify(pushNotificationPublisher).publishAlertCreated(
+                    anyList(), anyString(), bodyCaptor.capture(), eq(ALERT_ID), anyMap(), anyString());
+
+            assertThat(bodyCaptor.getValue()).doesNotContain("Não estou bem");
+        }
+
+        @Test
+        @DisplayName("deve remover token nao registrado tambem no push da pergunta")
+        void shouldRemoveUnregisteredTokenInSevereCheckToo() {
+            DeviceToken tokenA = deviceTokenOf(TOKEN_A);
+
+            when(alertRepository.findById(ALERT_ID)).thenReturn(Optional.of(alert));
+            when(deviceTokenRepository.findByUserId(user.getId())).thenReturn(List.of(tokenA));
+            when(pushNotificationPublisher.publishAlertCreated(
+                    anyList(), anyString(), anyString(), eq(ALERT_ID), anyMap(), anyString()))
+                    .thenReturn(List.of(TOKEN_A));
+
+            listener.onAlertCreated(eventOf(alert));
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<DeviceToken>> captor = ArgumentCaptor.forClass(List.class);
+            verify(deviceTokenRepository).deleteAll(captor.capture());
+
+            assertThat(captor.getValue()).containsExactly(tokenA);
         }
     }
 

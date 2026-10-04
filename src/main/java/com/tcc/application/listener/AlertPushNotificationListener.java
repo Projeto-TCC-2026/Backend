@@ -15,6 +15,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import com.tcc.application.port.out.PushNotificationPublisher;
 import com.tcc.domain.event.AlertCreatedEvent;
 import com.tcc.domain.model.Alert;
+import com.tcc.domain.model.AlertStatus;
 import com.tcc.domain.model.DeviceToken;
 import com.tcc.domain.repository.AlertRepository;
 import com.tcc.domain.repository.DeviceTokenRepository;
@@ -45,6 +46,37 @@ public class AlertPushNotificationListener {
     private static final String BODY_TEMPLATE =
             "Sua medição de %s saiu do normal. Se não estiver bem, "
                     + "use a opção 'Não estou bem' no app.";
+
+    /**
+     * Texto do push de alerta AWAITING_PATIENT, disparado por uma leitura GRAVE.
+     *
+     * <p>Aqui o app não espera que a paciente procure a opção no menu: a notificação
+     * faz a pergunta direto, porque a resposta dela é o que decide se o médico é
+     * avisado nos próximos 10 minutos.
+     *
+     * <p>Sem o valor medido no texto, pelo mesmo motivo do push comum: número de
+     * sinal vital na tela de bloqueio é informação clínica crua, e aqui o número é
+     * justamente o mais assustador. A pergunta basta.
+     */
+    private static final String SEVERE_BODY_TEMPLATE =
+            "Sua medição de %s está muito fora do normal. Você está bem?";
+
+    /** Título do push da pergunta, sem o vocabulário de severidade do push comum. */
+    private static final String SEVERE_TITLE = "Precisamos saber como você está";
+
+    /** Chave e valor que fazem o app mostrar os botões de resposta. */
+    private static final String DATA_KEY_TYPE = "type";
+    private static final String DATA_TYPE_SEVERE_CHECK = "SEVERE_CHECK";
+
+    /**
+     * Categoria de notificação da pergunta. O Expo documenta {@code categoryId} como
+     * campo de texto da mensagem, válido em Android e iOS, e é ele que permite ao
+     * sistema oferecer as ações da categoria direto na notificação. O app precisa ter
+     * registrado uma categoria com este identificador; se não tiver, a notificação
+     * chega sem as ações e o {@code data} ainda leva o type, então o fluxo continua
+     * funcionando pela tela do alerta.
+     */
+    private static final String SEVERE_CHECK_CATEGORY_ID = "severe-check";
 
     private final AlertRepository alertRepository;
     private final DeviceTokenRepository deviceTokenRepository;
@@ -102,10 +134,39 @@ public class AlertPushNotificationListener {
 
         List<String> tokens = deviceTokens.stream().map(DeviceToken::getToken).toList();
 
-        List<String> unregistered = pushNotificationPublisher.publishAlertCreated(
-                tokens, buildTitle(alert), buildBody(alert), alertId);
+        List<String> unregistered = isAwaitingPatient(alert)
+                ? publishSevereCheck(tokens, alert, alertId)
+                : pushNotificationPublisher.publishAlertCreated(
+                        tokens, buildTitle(alert), buildBody(alert), alertId);
 
         removeUnregistered(deviceTokens, unregistered, userId);
+    }
+
+    /**
+     * Alerta criado por leitura grave, que pergunta à paciente se ela está bem.
+     *
+     * <p>O status é a única diferença entre os dois pushes, e ele chega aqui pelo
+     * alerta recarregado do banco — não pelo evento, cujo alerta vem desanexado.
+     */
+    private boolean isAwaitingPatient(Alert alert) {
+        return AlertStatus.AWAITING_PATIENT.equals(alert.getStatus());
+    }
+
+    /**
+     * Push da pergunta. Além do texto próprio, leva dois acréscimos que o push comum
+     * não tem: {@code type = SEVERE_CHECK} no {@code data}, para o app mostrar os
+     * botões de resposta, e a categoria de notificação, para o sistema oferecer as
+     * ações direto na notificação. O {@code alertId} continua no {@code data}, posto
+     * lá pelo publisher, e é com ele que o app sabe qual alerta responder.
+     */
+    private List<String> publishSevereCheck(List<String> tokens, Alert alert, UUID alertId) {
+        return pushNotificationPublisher.publishAlertCreated(
+                tokens,
+                SEVERE_TITLE,
+                SEVERE_BODY_TEMPLATE.formatted(readingLabel(alert)),
+                alertId,
+                Map.of(DATA_KEY_TYPE, DATA_TYPE_SEVERE_CHECK),
+                SEVERE_CHECK_CATEGORY_ID);
     }
 
     /**

@@ -51,6 +51,22 @@ public class ReadingThreshold {
     @Column(name = "plausible_max")
     private Double plausibleMax;
 
+    /**
+     * Limite inferior do que é GRAVE. Valor igual ou abaixo dele é grave o
+     * bastante para perguntar à paciente na hora, em vez de esperar a segunda
+     * leitura do fluxo comum. Nulo desliga o lado inferior.
+     */
+    @Column(name = "severe_min")
+    private Double severeMin;
+
+    /**
+     * Limite superior do que é GRAVE. Valor igual ou acima dele é grave. Nulo
+     * desliga o lado superior — é o caso de SPO2 e TEMPERATURE, em que o valor
+     * alto não justifica interromper a paciente.
+     */
+    @Column(name = "severe_max")
+    private Double severeMax;
+
     @Column(nullable = false, length = 50)
     private String severity;
 
@@ -140,6 +156,43 @@ public class ReadingThreshold {
             return true;
         }
         return plausibleMax != null && value > plausibleMax;
+    }
+
+    public Double getSevereMin() {
+        return severeMin;
+    }
+
+    public void setSevereMin(Double severeMin) {
+        this.severeMin = severeMin;
+    }
+
+    public Double getSevereMax() {
+        return severeMax;
+    }
+
+    public void setSevereMax(Double severeMax) {
+        this.severeMax = severeMax;
+    }
+
+    /**
+     * Verdadeiro quando o valor está na faixa GRAVE. Sem faixa grave cadastrada
+     * nada é grave: o tipo segue apenas o fluxo comum de confirmação por duas
+     * leituras.
+     *
+     * <p>Atenção à direção dos limites, que é o oposto das outras duas faixas: na
+     * normal e na plausível o limite pertence ao que é aceitável, aqui o limite
+     * pertence ao que é grave. A comparação usa {@code <=} e {@code >=}, então
+     * {@code severeMin = 40} torna 40 grave e deixa 41 fora, e
+     * {@code severeMax = 131} torna 131 grave e deixa 130 fora.
+     */
+    public boolean isSevere(Double value) {
+        if (value == null) {
+            return false;
+        }
+        if (severeMin != null && value <= severeMin) {
+            return true;
+        }
+        return severeMax != null && value >= severeMax;
     }
 
     public String getSeverity() {

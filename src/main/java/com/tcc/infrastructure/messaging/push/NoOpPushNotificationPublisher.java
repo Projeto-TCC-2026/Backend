@@ -1,6 +1,7 @@
 package com.tcc.infrastructure.messaging.push;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -25,5 +26,11 @@ public class NoOpPushNotificationPublisher implements PushNotificationPublisher 
         log.warn("Push desabilitado. Notificacao do alerta {} nao foi enviada para {} dispositivo(s).",
                 alertId, pushTokens == null ? 0 : pushTokens.size());
         return List.of();
+    }
+
+    @Override
+    public List<String> publishAlertCreated(List<String> pushTokens, String title, String body, UUID alertId,
+                                            Map<String, String> extraData, String categoryId) {
+        return publishAlertCreated(pushTokens, title, body, alertId);
     }
 }

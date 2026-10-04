@@ -2,6 +2,7 @@
 @baseUrl = http://localhost:8080/api
 @integrationKey = YOUR_INTEGRATION_KEY_HERE
 @doctorToken = YOUR_DOCTOR_JWT_HERE
+@patientToken = YOUR_PATIENT_JWT_HERE
 
 ### Recebimento e avaliação de leitura de sinal vital (integração serviço a serviço)
 ###
@@ -18,7 +19,50 @@
 ###   4. Compara o valor com a faixa normal cadastrada para o tipo.
 ###   5. Decide o que fazer com o alerta (ver "CONFIRMAÇÃO" abaixo).
 ###
+### VALOR GRAVE: PERGUNTA À PACIENTE ANTES DE AVISAR O MÉDICO
+### Quando o valor é GRAVE, o fluxo de duas leituras não se aplica: esperar a
+### segunda medição demoraria demais. Em vez disso o alerta nasce
+### AWAITING_PATIENT e a paciente é perguntada se está bem, por push.
+###
+###   leitura grave (e plausível)   -> cria alerta AWAITING_PATIENT com prazo de
+###                                    10 min. PUSH com a pergunta. Nenhum e-mail.
+###   já existe AWAITING_PATIENT
+###   do mesmo paciente e tipo      -> só grava a leitura. Nenhum push repetido.
+###   dentro da janela de 4h de um
+###   PENDING do mesmo tipo         -> só grava a leitura (igual ao fluxo comum).
+###   UNCONFIRMED aberto do tipo    -> vira NOT_CONFIRMED: a pergunta substitui a
+###                                    espera pela segunda leitura.
+###
+### RESPOSTA DA PACIENTE (POST /api/mobile/alerts/{alertId}/response)
+###   NOT_OK -> alerta vira PENDING, confirmed_at = measuredAt da leitura grave.
+###             E-MAIL ao médico na hora, com o motivo
+###             "A paciente respondeu que não está bem".
+###   OK     -> alerta vira UNCONFIRMED e volta ao fluxo comum. Nenhum e-mail.
+###             A próxima leitura fora da faixa, em até 2h, confirma por duas
+###             leituras.
+###
+### SEM RESPOSTA EM 10 MINUTOS
+### Um agendador roda a cada 1 minuto. Alerta AWAITING_PATIENT com prazo vencido
+### vira PENDING, confirmed_at = measuredAt da leitura grave, e o médico recebe
+### e-mail com o motivo "A paciente não respondeu em 10 minutos".
+### Silêncio não é "está tudo bem".
+###
+### A resposta e o agendador nunca vencem os dois: a troca de status é um UPDATE
+### condicional em status = 'AWAITING_PATIENT', então o banco serializa os dois
+### no lock da linha. Só o vencedor publica o evento, e o médico recebe no
+### máximo UM e-mail por alerta. Quem perde recebe 409.
+###
+### Faixas GRAVES cadastradas (limites INCLUSIVOS POR DENTRO — atenção, é o
+### oposto da faixa normal: aqui o limite PERTENCE ao que é grave):
+###   tipo         grave quando
+###   HEART_RATE   valor <= 40 ou valor >= 131
+###   SPO2         valor <= 84 (sem limite superior)
+###   TEMPERATURE  valor <= 35.0 (sem limite superior)
+### Ou seja: 40 e 131 são graves, 41 e 130 não. 84 é grave, 85 não.
+### Tipo sem faixa grave cadastrada segue só o fluxo comum.
+
 ### CONFIRMAÇÃO POR DUAS LEITURAS
+### Vale para leitura fora da faixa normal que NÃO é grave.
 ### O médico só é avisado depois que DUAS leituras seguidas confirmam o desvio.
 ### Status do alerta: UNCONFIRMED -> PENDING -> RESOLVED, ou UNCONFIRMED -> NOT_CONFIRMED.
 ###
@@ -202,6 +246,263 @@ X-Integration-Key: {{integrationKey}}
   "value": 12,
   "measuredAt": "2026-08-29T20:05:00Z",
   "unit": "%"
+}
+
+### ---------------------------------------------------------------------------
+### LEITURA GRAVE: a paciente é perguntada antes de o médico ser avisado
+### ---------------------------------------------------------------------------
+
+### 4g. HEART_RATE 35 (<= severe_min 40) -> 201, alertGenerated=true,
+###     alertStatus=AWAITING_PATIENT
+### Sai o PUSH com a pergunta "Sua medição de frequência cardíaca está muito fora
+### do normal. Você está bem?" — sem o valor numérico no texto. O data payload
+### leva alertId e "type": "SEVERE_CHECK", e a notificação vai com a categoria
+### "severe-check", para o app mostrar os botões de resposta.
+### NENHUM e-mail ao médico ainda: o prazo de 10 min começa a contar agora.
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 35,
+  "measuredAt": "2026-08-30T08:00:00Z",
+  "unit": "bpm"
+}
+
+### 4h. Outra leitura grave com o AWAITING_PATIENT da 4g aberto
+### -> 201, alertGenerated=false, alertStatus=null
+### Só grava. A pergunta já está de pé e um segundo push só confundiria.
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 33,
+  "measuredAt": "2026-08-30T08:03:00Z",
+  "unit": "bpm"
+}
+
+### 4i. Limite grave INCLUSIVO: 40 é grave -> 201, alertStatus=AWAITING_PATIENT
+### (execute em um paciente sem AWAITING_PATIENT aberto de HEART_RATE)
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 40,
+  "measuredAt": "2026-08-30T09:00:00Z",
+  "unit": "bpm"
+}
+
+### 4j. 41 NÃO é grave, mas está fora da faixa normal (50–120)
+### -> 201, alertStatus=UNCONFIRMED (fluxo comum de duas leituras)
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 41,
+  "measuredAt": "2026-08-30T10:00:00Z",
+  "unit": "bpm"
+}
+
+### 4k. 131 é grave (>= severe_max) -> 201, alertStatus=AWAITING_PATIENT
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 131,
+  "measuredAt": "2026-08-30T11:00:00Z",
+  "unit": "bpm"
+}
+
+### 4l. 130 NÃO é grave -> 201, alertStatus=UNCONFIRMED
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 130,
+  "measuredAt": "2026-08-30T12:00:00Z",
+  "unit": "bpm"
+}
+
+### 4m. SPO2 84 é grave -> 201, alertStatus=AWAITING_PATIENT
+### A pergunta é por paciente MAIS tipo: o alerta de HEART_RATE não interfere.
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "SPO2",
+  "value": 84,
+  "measuredAt": "2026-08-30T13:00:00Z",
+  "unit": "%"
+}
+
+### 4n. SPO2 85 NÃO é grave, mas está abaixo do normal (90)
+### -> 201, alertStatus=UNCONFIRMED
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "SPO2",
+  "value": 85,
+  "measuredAt": "2026-08-30T14:00:00Z",
+  "unit": "%"
+}
+
+### 4o. TEMPERATURE 35.0 é grave -> 201, alertStatus=AWAITING_PATIENT
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "TEMPERATURE",
+  "value": 35.0,
+  "measuredAt": "2026-08-30T15:00:00Z",
+  "unit": "°C"
+}
+
+### 4p. TEMPERATURE 39.2 NÃO é grave: SPO2 e TEMPERATURE não têm severe_max
+### -> 201, alertStatus=UNCONFIRMED (valor alto segue o fluxo comum)
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "TEMPERATURE",
+  "value": 39.2,
+  "measuredAt": "2026-08-30T16:00:00Z",
+  "unit": "°C"
+}
+
+### 4q. GLUCOSE sem faixa grave cadastrada: valor baixo não dispara a pergunta
+### -> 201, alertGenerated=false (sem faixa normal também não há alerta)
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "GLUCOSE",
+  "value": 10,
+  "measuredAt": "2026-08-30T17:00:00Z",
+  "unit": "mg/dL"
+}
+
+### ---------------------------------------------------------------------------
+### RESPOSTA DA PACIENTE (JWT, role PATIENT)
+###
+### Só alcança alerta do próprio paciente autenticado, e só enquanto o alerta
+### estiver AWAITING_PATIENT. Use o alertId devolvido pela requisição 4g.
+### ---------------------------------------------------------------------------
+
+### 4r. "Não estou bem" -> 200, alertStatus=PENDING, doctorNotified=true
+### O alerta é confirmado com confirmed_at = 08:00Z (horário da MEDIÇÃO grave,
+### não o da resposta) e o E-MAIL sai na hora, com a leitura grave e o motivo
+### "A paciente respondeu que não está bem".
+POST {{baseUrl}}/mobile/alerts/33333333-3333-3333-3333-333333333333/response
+Content-Type: application/json
+Authorization: Bearer {{patientToken}}
+
+{
+  "answer": "NOT_OK"
+}
+
+### 4s. "Estou bem" -> 200, alertStatus=UNCONFIRMED, doctorNotified=false
+### Nenhum e-mail. O alerta volta ao fluxo comum: a próxima leitura fora da
+### faixa, em até 2h, confirma por duas leituras e só então o médico é avisado.
+POST {{baseUrl}}/mobile/alerts/44444444-4444-4444-4444-444444444444/response
+Content-Type: application/json
+Authorization: Bearer {{patientToken}}
+
+{
+  "answer": "OK"
+}
+
+### 4t. Repita a requisição 4r ou 4s: resposta já registrada -> 409
+### Mensagem: "Sua resposta para este alerta já foi registrada."
+POST {{baseUrl}}/mobile/alerts/33333333-3333-3333-3333-333333333333/response
+Content-Type: application/json
+Authorization: Bearer {{patientToken}}
+
+{
+  "answer": "OK"
+}
+
+### 4u. Resposta depois do prazo de 10 min -> 409
+### O agendador já levou o alerta a PENDING e o médico já foi avisado com o
+### motivo "A paciente não respondeu em 10 minutos". Mensagem:
+### "O prazo para responder já venceu e seu médico foi avisado."
+POST {{baseUrl}}/mobile/alerts/55555555-5555-5555-5555-555555555555/response
+Content-Type: application/json
+Authorization: Bearer {{patientToken}}
+
+{
+  "answer": "NOT_OK"
+}
+
+### 4v. Alerta de OUTRO paciente -> 401
+### O escopo é verificado por comparação de paciente, não só pela role.
+POST {{baseUrl}}/mobile/alerts/66666666-6666-6666-6666-666666666666/response
+Content-Type: application/json
+Authorization: Bearer {{patientToken}}
+
+{
+  "answer": "NOT_OK"
+}
+
+### 4w. Resposta inválida (nem OK nem NOT_OK) -> 400
+POST {{baseUrl}}/mobile/alerts/33333333-3333-3333-3333-333333333333/response
+Content-Type: application/json
+Authorization: Bearer {{patientToken}}
+
+{
+  "answer": "TALVEZ"
+}
+
+### 4x. Corpo sem o campo answer -> 400
+POST {{baseUrl}}/mobile/alerts/33333333-3333-3333-3333-333333333333/response
+Content-Type: application/json
+Authorization: Bearer {{patientToken}}
+
+{}
+
+### 4y. Alerta inexistente -> 404
+POST {{baseUrl}}/mobile/alerts/00000000-0000-0000-0000-000000000000/response
+Content-Type: application/json
+Authorization: Bearer {{patientToken}}
+
+{
+  "answer": "OK"
+}
+
+### 4z. Token de médico em endpoint de paciente -> 403
+POST {{baseUrl}}/mobile/alerts/33333333-3333-3333-3333-333333333333/response
+Content-Type: application/json
+Authorization: Bearer {{doctorToken}}
+
+{
+  "answer": "OK"
 }
 
 ### 5. Valor exatamente igual ao limite -> 201, alertGenerated=false (limite é inclusivo)

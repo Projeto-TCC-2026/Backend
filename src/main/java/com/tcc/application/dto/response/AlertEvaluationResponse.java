@@ -14,7 +14,10 @@ import java.util.UUID;
  * aviso. A resposta continua sendo de sucesso.
  *
  * <p>{@code alertStatus} é o status do alerta criado ou atualizado nesta chamada
- * (UNCONFIRMED, PENDING ou NOT_CONFIRMED), ou nulo quando nenhum alerta foi tocado.
+ * (UNCONFIRMED, AWAITING_PATIENT, PENDING ou NOT_CONFIRMED), ou nulo quando nenhum
+ * alerta foi tocado. {@code AWAITING_PATIENT} aparece quando o valor está na faixa
+ * grave do tipo: o alerta pergunta à paciente se ela está bem, em vez de esperar a
+ * segunda leitura.
  *
  * <p>{@code alertGenerated} indica que esta chamada <strong>criou</strong> um alerta
  * novo. Confirmação de alerta existente não cria: nesse caso {@code alertGenerated}
@@ -50,8 +53,9 @@ public record AlertEvaluationResponse(
     }
 
     /**
-     * Leitura gravada e alerta criado a partir dela, ainda não confirmado
-     * (UNCONFIRMED).
+     * Leitura gravada e alerta criado a partir dela, ainda não confirmado:
+     * {@code UNCONFIRMED} no fluxo comum, ou {@code AWAITING_PATIENT} quando o valor
+     * é grave e a paciente está sendo perguntada.
      */
     public static AlertEvaluationResponse withAlert(String severity, UUID alertId,
                                                     String reason, UUID healthReadingId,

@@ -1,6 +1,7 @@
 package com.tcc.infrastructure.messaging.push;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -66,6 +67,66 @@ class ExpoPushNotificationPublisherTest {
                             MediaType.APPLICATION_JSON));
 
             publisher.publishAlertCreated(List.of(TOKEN_A, TOKEN_B), TITLE, BODY, ALERT_ID);
+
+            server.verify();
+        }
+
+        /**
+         * Push da pergunta à paciente. O campo {@code categoryId} é o que o Expo
+         * documenta no "message request format" como identificador da categoria de
+         * notificação, texto, válido em Android e iOS.
+         */
+        @Test
+        @DisplayName("deve enviar categoryId e o data extra junto com o alertId")
+        void shouldSendCategoryIdAndExtraData() {
+            server.expect(requestTo(ENDPOINT))
+                    .andExpect(method(org.springframework.http.HttpMethod.POST))
+                    .andExpect(jsonPath("$[0].categoryId").value("severe-check"))
+                    .andExpect(jsonPath("$[0].data.type").value("SEVERE_CHECK"))
+                    // O alertId continua presente: ele é acrescentado pelo publisher.
+                    .andExpect(jsonPath("$[0].data.alertId").value(ALERT_ID.toString()))
+                    .andRespond(withSuccess("{\"data\":[{\"status\":\"ok\"}]}",
+                            MediaType.APPLICATION_JSON));
+
+            publisher.publishAlertCreated(List.of(TOKEN_A), TITLE, BODY, ALERT_ID,
+                    Map.of("type", "SEVERE_CHECK"), "severe-check");
+
+            server.verify();
+        }
+
+        /**
+         * O push comum não tem categoria, e {@code "categoryId": null} não é o mesmo
+         * que ausência do campo para quem recebe o JSON.
+         */
+        @Test
+        @DisplayName("push sem categoria nao deve enviar o campo categoryId")
+        void shouldOmitCategoryIdWhenAbsent() {
+            server.expect(requestTo(ENDPOINT))
+                    .andExpect(method(org.springframework.http.HttpMethod.POST))
+                    .andExpect(jsonPath("$[0].categoryId").doesNotExist())
+                    .andRespond(withSuccess("{\"data\":[{\"status\":\"ok\"}]}",
+                            MediaType.APPLICATION_JSON));
+
+            publisher.publishAlertCreated(List.of(TOKEN_A), TITLE, BODY, ALERT_ID);
+
+            server.verify();
+        }
+
+        /**
+         * O app depende do alertId para saber qual alerta responder, então ele não
+         * pode ser sobrescrito por uma chave homônima vinda de quem chama.
+         */
+        @Test
+        @DisplayName("alertId nao deve ser sobrescrito por chave homonima no data extra")
+        void shouldNotLetExtraDataOverrideAlertId() {
+            server.expect(requestTo(ENDPOINT))
+                    .andExpect(method(org.springframework.http.HttpMethod.POST))
+                    .andExpect(jsonPath("$[0].data.alertId").value(ALERT_ID.toString()))
+                    .andRespond(withSuccess("{\"data\":[{\"status\":\"ok\"}]}",
+                            MediaType.APPLICATION_JSON));
+
+            publisher.publishAlertCreated(List.of(TOKEN_A), TITLE, BODY, ALERT_ID,
+                    Map.of("alertId", "valor-invadido"), null);
 
             server.verify();
         }

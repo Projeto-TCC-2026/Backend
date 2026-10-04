@@ -1,5 +1,6 @@
 package com.tcc.application.service;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.domain.Page;
@@ -8,6 +9,8 @@ import org.springframework.data.domain.Pageable;
 import com.tcc.application.dto.request.AlertEvaluationRequest;
 import com.tcc.application.dto.response.AlertEvaluationResponse;
 import com.tcc.application.dto.response.AlertResponse;
+import com.tcc.application.dto.response.PatientAlertAnswerResponse;
+import com.tcc.domain.model.PatientAlertAnswer;
 
 public interface AlertService {
 
@@ -32,9 +35,18 @@ public interface AlertService {
      * com um {@code UNCONFIRMED} aberto leva o alerta a {@code NOT_CONFIRMED}.
      * Leitura suspeita é ignorada nessa sequência.
      *
+     * <p><strong>Valor grave:</strong> leitura plausível dentro da faixa grave do
+     * tipo não espera a segunda leitura. O alerta nasce {@code AWAITING_PATIENT} com
+     * prazo de 10 minutos e a paciente é perguntada se está bem; o médico ainda não é
+     * avisado. Já existindo {@code AWAITING_PATIENT} do mesmo paciente e tipo, a
+     * leitura é apenas gravada. Tipo sem faixa grave cadastrada segue só o fluxo
+     * comum. Os limites graves são inclusivos por dentro: é grave quando o valor é
+     * menor ou igual a {@code severeMin}, ou maior ou igual a {@code severeMax}.
+     *
      * <p><strong>Janela de 4 horas:</strong> enquanto existir alerta
      * {@code PENDING} do mesmo paciente e tipo confirmado há menos de 4 horas, nova
-     * leitura fora da faixa é apenas gravada. Passada a janela, o fluxo recomeça.
+     * leitura fora da faixa é apenas gravada — grave ou não. Passada a janela, o
+     * fluxo recomeça.
      *
      * <p>Os limites são inclusivos no normal: valor igual ao mínimo ou ao máximo não
      * gera alerta. Limite nulo significa ausência de limite daquele lado.
@@ -54,4 +66,45 @@ public interface AlertService {
      * médico autenticado.
      */
     AlertResponse resolveAlert(String email, UUID alertId);
+
+    /**
+     * Registra a resposta da paciente à pergunta disparada por uma leitura grave.
+     *
+     * <p>Restrito a alerta da própria paciente autenticada: o escopo é verificado por
+     * comparação de paciente, não só pela role.
+     *
+     * <p>{@code NOT_OK} leva o alerta a {@code PENDING}, com {@code confirmedAt}
+     * igual ao {@code measuredAt} da leitura grave, e dispara o aviso ao médico.
+     * {@code OK} leva a {@code UNCONFIRMED} e devolve o alerta ao fluxo comum: a
+     * próxima leitura fora da faixa, em até 2 horas, confirma por duas leituras.
+     *
+     * @throws com.tcc.exception.ResourceNotFoundException quando o alerta não existe
+     * @throws com.tcc.exception.UnauthorizedException quando o alerta é de outra
+     *         paciente
+     * @throws AlertResponseWindowClosedException quando o alerta não está mais
+     *         aguardando resposta: prazo vencido ou resposta já registrada
+     */
+    PatientAlertAnswerResponse registerPatientResponse(String email, UUID alertId,
+                                                       PatientAlertAnswer answer);
+
+    /**
+     * Ids dos alertas {@code AWAITING_PATIENT} cujo prazo de resposta já venceu.
+     *
+     * <p>Consumido pelo agendador, que trata cada id com
+     * {@link #confirmAlertWithoutPatientResponse}.
+     */
+    List<UUID> findAlertIdsAwaitingPatientPastDeadline();
+
+    /**
+     * Confirma um alerta cujo prazo de resposta venceu sem resposta da paciente: ele
+     * passa a {@code PENDING} e o médico é avisado.
+     *
+     * <p>A troca de status é condicional no banco, então esta chamada e a resposta da
+     * paciente nunca vencem as duas. Só o vencedor publica o evento, então o médico
+     * recebe no máximo um e-mail por alerta.
+     *
+     * @return {@code true} quando esta chamada fez a transição, {@code false} quando
+     *         outro caminho chegou primeiro ou o alerta não existe mais
+     */
+    boolean confirmAlertWithoutPatientResponse(UUID alertId);
 }

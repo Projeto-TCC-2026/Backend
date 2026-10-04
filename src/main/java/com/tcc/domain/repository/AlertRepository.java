@@ -8,10 +8,12 @@ import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.tcc.domain.model.Alert;
+import com.tcc.domain.model.PatientAlertAnswer;
 
 public interface AlertRepository extends JpaRepository<Alert, UUID> {
 
@@ -61,6 +63,69 @@ public interface AlertRepository extends JpaRepository<Alert, UUID> {
             WHERE a.id = :alertId
             """)
     Optional<Alert> findByIdWithPatientAndReading(@Param("alertId") UUID alertId);
+
+    /**
+     * Ids dos alertas AWAITING_PATIENT cujo prazo de resposta já venceu. É a
+     * varredura do agendador que roda a cada minuto.
+     *
+     * <p>Devolve só o id: o agendador não precisa da entidade para decidir, e cada
+     * alerta é carregado depois, já dentro da transação que tenta a troca de status.
+     *
+     * <p>Alerta AWAITING_PATIENT sem prazo gravado é ignorado em vez de tratado como
+     * vencido. Isso não deve existir — o prazo é preenchido na criação — mas um
+     * registro assim seria confirmado imediatamente, avisando o médico sem que a
+     * paciente tivesse tido chance de responder.
+     */
+    @Query("""
+            SELECT a.id FROM Alert a
+            WHERE a.status = 'AWAITING_PATIENT'
+              AND a.patientResponseDeadline IS NOT NULL
+              AND a.patientResponseDeadline <= :now
+            ORDER BY a.patientResponseDeadline ASC
+            """)
+    List<UUID> findIdsAwaitingPatientPastDeadline(@Param("now") LocalDateTime now, Pageable pageable);
+
+    /**
+     * Tira o alerta de AWAITING_PATIENT, de forma atômica.
+     *
+     * <p>Este é o ponto que garante vencedor único entre a resposta da paciente e o
+     * agendador. A condição {@code status = 'AWAITING_PATIENT'} está no próprio
+     * UPDATE, então o banco serializa os dois caminhos no lock da linha: o primeiro
+     * troca o status e recebe 1, o segundo encontra a linha já fora de
+     * AWAITING_PATIENT e recebe 0. Só quem recebe 1 publica o evento, então o médico
+     * recebe no máximo um e-mail.
+     *
+     * <p>Uma leitura seguida de escrita em dois comandos não daria essa garantia: as
+     * duas transações poderiam ler AWAITING_PATIENT antes de qualquer escrita e as
+     * duas se considerariam vencedoras.
+     *
+     * <p>{@code flushAutomatically} descarrega as alterações pendentes antes do
+     * UPDATE, e {@code clearAutomatically} limpa o contexto depois, para que
+     * nenhuma entidade em memória permaneça com o status antigo.
+     *
+     * @param confirmedAt     horário da medição que confirmou, ou nulo quando o
+     *                        alerta não está sendo confirmado (resposta "estou bem")
+     * @param answer          resposta da paciente, ou nulo quando quem age é o
+     *                        agendador
+     * @param respondedAt     horário da resposta, ou nulo quando quem age é o
+     *                        agendador
+     * @return 1 quando este chamador fez a transição, 0 quando outro chegou antes
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            UPDATE Alert a
+               SET a.status = :targetStatus,
+                   a.confirmedAt = :confirmedAt,
+                   a.patientResponse = :answer,
+                   a.patientRespondedAt = :respondedAt
+             WHERE a.id = :alertId
+               AND a.status = 'AWAITING_PATIENT'
+            """)
+    int leaveAwaitingPatient(@Param("alertId") UUID alertId,
+                             @Param("targetStatus") String targetStatus,
+                             @Param("confirmedAt") LocalDateTime confirmedAt,
+                             @Param("answer") PatientAlertAnswer answer,
+                             @Param("respondedAt") LocalDateTime respondedAt);
 
     List<Alert> findByPatientIdOrderByCreatedAtDesc(UUID patientId);
 

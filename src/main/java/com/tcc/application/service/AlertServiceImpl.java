@@ -1,9 +1,11 @@
 package com.tcc.application.service;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -15,13 +17,16 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.tcc.application.dto.request.AlertEvaluationRequest;
 import com.tcc.application.dto.request.AlertRequest;
 import com.tcc.application.dto.response.AlertEvaluationResponse;
 import com.tcc.application.dto.response.AlertResponse;
+import com.tcc.application.dto.response.PatientAlertAnswerResponse;
 import com.tcc.application.mapper.AlertMapper;
+import com.tcc.domain.event.AlertConfirmationReason;
 import com.tcc.domain.event.AlertConfirmedEvent;
 import com.tcc.domain.event.AlertCreatedEvent;
 import com.tcc.domain.model.Alert;
@@ -29,6 +34,7 @@ import com.tcc.domain.model.AlertStatus;
 import com.tcc.domain.model.Doctor;
 import com.tcc.domain.model.HealthReading;
 import com.tcc.domain.model.Patient;
+import com.tcc.domain.model.PatientAlertAnswer;
 import com.tcc.domain.model.ReadingThreshold;
 import com.tcc.domain.model.User;
 import com.tcc.domain.repository.AlertRepository;
@@ -60,8 +66,22 @@ public class AlertServiceImpl implements AlertService {
      */
     private static final Duration RENOTIFY_WINDOW = Duration.ofHours(4);
 
+    /**
+     * Prazo que a paciente tem para responder à pergunta disparada por uma leitura
+     * grave. Vencido o prazo sem resposta, o agendador avisa o médico — o silêncio
+     * dela é tratado como motivo de preocupação, não como "está tudo bem".
+     */
+    private static final Duration PATIENT_RESPONSE_WINDOW = Duration.ofMinutes(10);
+
     /** Só a leitura anterior e o alerta mais recente interessam. */
     private static final Pageable LATEST_ONE = PageRequest.of(0, 1);
+
+    /**
+     * Teto de alertas vencidos tratados por varredura. O agendador roda a cada
+     * minuto, então um acúmulo maior que isso drena em poucos ciclos, e o teto
+     * evita que uma varredura isolada carregue a transação inteira do banco.
+     */
+    private static final Pageable EXPIRED_BATCH = PageRequest.of(0, 200);
 
     private final PatientRepository patientRepository;
     private final ReadingThresholdRepository readingThresholdRepository;
@@ -72,6 +92,7 @@ public class AlertServiceImpl implements AlertService {
     private final DoctorRepository doctorRepository;
     private final DoctorPatientRepository doctorPatientRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final Clock clock;
 
     public AlertServiceImpl(PatientRepository patientRepository,
                             ReadingThresholdRepository readingThresholdRepository,
@@ -81,7 +102,8 @@ public class AlertServiceImpl implements AlertService {
                             UserRepository userRepository,
                             DoctorRepository doctorRepository,
                             DoctorPatientRepository doctorPatientRepository,
-                            ApplicationEventPublisher eventPublisher) {
+                            ApplicationEventPublisher eventPublisher,
+                            Clock clock) {
         this.patientRepository = patientRepository;
         this.readingThresholdRepository = readingThresholdRepository;
         this.alertRepository = alertRepository;
@@ -91,6 +113,7 @@ public class AlertServiceImpl implements AlertService {
         this.doctorRepository = doctorRepository;
         this.doctorPatientRepository = doctorPatientRepository;
         this.eventPublisher = eventPublisher;
+        this.clock = clock;
     }
 
     /**
@@ -104,7 +127,8 @@ public class AlertServiceImpl implements AlertService {
      *   <li>gravação da leitura;</li>
      *   <li>faixa normal;</li>
      *   <li>dentro da faixa: descarta um UNCONFIRMED aberto do tipo;</li>
-     *   <li>fora da faixa: janela de 4h, confirmação, ou alerta novo.</li>
+     *   <li>fora da faixa: janela de 4h, confirmação de um UNCONFIRMED, pergunta à
+     *       paciente quando o valor é grave, ou alerta novo — nessa ordem.</li>
      * </ol>
      *
      * <p>A leitura é gravada independentemente do resultado da avaliação, porque o
@@ -162,7 +186,7 @@ public class AlertServiceImpl implements AlertService {
 
         return reason == null
                 ? handleNormalReading(patient, reading, range)
-                : handleAbnormalReading(patient, reading, range, reason);
+                : handleAbnormalReading(patient, reading, range, request.value(), reason);
     }
 
     /**
@@ -192,12 +216,35 @@ public class AlertServiceImpl implements AlertService {
     }
 
     /**
-     * Leitura fora da faixa normal. Três saídas possíveis, nesta ordem: silenciada
-     * pela janela de 4h de um alerta já confirmado, confirmação de um UNCONFIRMED
-     * recente, ou alerta novo.
+     * Leitura fora da faixa normal. Quatro decisões, nesta ordem:
+     *
+     * <ol>
+     *   <li>janela de 4h de um PENDING recente — o médico acabou de ser avisado
+     *       deste paciente e tipo, então a leitura é apenas gravada. Vale para os
+     *       dois fluxos;</li>
+     *   <li>confirmação de um UNCONFIRMED do mesmo tipo, pelas regras de sempre
+     *       (a leitura do alerta é a anterior não suspeita, e as duas medições
+     *       cabem em 2h). <strong>Independe de a leitura atual ser grave;</strong></li>
+     *   <li>não confirmou e a leitura é grave — pergunta à paciente;</li>
+     *   <li>não confirmou e não é grave — alerta novo UNCONFIRMED.</li>
+     * </ol>
+     *
+     * <p>A tentativa de confirmação precede a checagem de gravidade de propósito, e
+     * é isso que corrige o caminho em que a paciente responde "estou bem". Essa
+     * resposta devolve o alerta a UNCONFIRMED; se a leitura grave seguinte abrisse
+     * outra pergunta em vez de confirmar, uma sequência de leituras graves com
+     * "estou bem" a cada vez nunca chegaria ao médico — cada pergunta descartaria o
+     * UNCONFIRMED que a anterior deixou. Confirmando primeiro, a segunda leitura
+     * seguida fora da faixa avisa o médico, grave ou não.
+     *
+     * <p>O UNCONFIRMED que não confirmou não é descartado aqui: ele segue para o
+     * passo 3 ou 4, que só o fecham quando um alerta novo efetivamente nasce. Fechar
+     * antes deixaria o alerta antigo como NOT_CONFIRMED mesmo nos caminhos que não
+     * criam nada — e aí nenhuma leitura seguinte poderia mais confirmá-lo.
      */
     private AlertEvaluationResponse handleAbnormalReading(Patient patient, HealthReading reading,
-                                                          ReadingThreshold range, String reason) {
+                                                          ReadingThreshold range, Double value,
+                                                          String reason) {
         if (isSilencedByRecentConfirmation(patient, range, reading)) {
             return AlertEvaluationResponse.withoutAlert(reading.getId());
         }
@@ -215,11 +262,26 @@ public class AlertServiceImpl implements AlertService {
                         alert.getSeverity(), alert.getId(), reason, reading.getId(),
                         AlertStatus.PENDING);
             }
-
-            discardUnconfirmed(patient, unconfirmed.get());
         }
 
-        Alert savedAlert = alertRepository.save(buildAlert(patient, reading, range, reason));
+        return range.isSevere(value)
+                ? handleSevereReading(patient, reading, range, reason, unconfirmed)
+                : createUnconfirmedAlert(patient, reading, range, reason, unconfirmed);
+    }
+
+    /**
+     * Cria o alerta UNCONFIRMED do fluxo comum, fechando antes o UNCONFIRMED que a
+     * leitura atual não confirmou.
+     *
+     * @param staleUnconfirmed o UNCONFIRMED que não foi confirmado, se havia algum
+     */
+    private AlertEvaluationResponse createUnconfirmedAlert(Patient patient, HealthReading reading,
+                                                           ReadingThreshold range, String reason,
+                                                           Optional<Alert> staleUnconfirmed) {
+        staleUnconfirmed.ifPresent(alert -> discardUnconfirmed(patient, alert));
+
+        Alert savedAlert = alertRepository.save(
+                buildAlert(patient, reading, range, reason, AlertStatus.UNCONFIRMED));
 
         // Consumido em AFTER_COMMIT: se esta transação sofrer rollback, nenhuma
         // notificação é enviada para um alerta que não existe. Este evento avisa
@@ -232,6 +294,71 @@ public class AlertServiceImpl implements AlertService {
         return AlertEvaluationResponse.withAlert(
                 range.getSeverity(), savedAlert.getId(), reason, reading.getId(),
                 AlertStatus.UNCONFIRMED);
+    }
+
+    /**
+     * Leitura plausível e GRAVE. Em vez de esperar a segunda leitura do fluxo comum,
+     * o alerta nasce AWAITING_PATIENT e pergunta à paciente se ela está bem — é ela
+     * quem tem a informação que o número não dá.
+     *
+     * <p>Só chega aqui leitura grave que <strong>não</strong> confirmou um
+     * UNCONFIRMED: a tentativa de confirmação acontece antes, no chamador, e vale
+     * para leitura grave igual à comum. Duas medições seguidas fora da faixa avisam
+     * o médico mesmo quando a segunda é grave.
+     *
+     * <p>Duas saídas antes de criar qualquer coisa:
+     * <ul>
+     *   <li>já existe AWAITING_PATIENT do mesmo paciente e tipo — a pergunta está
+     *       de pé e um segundo push só confundiria;</li>
+     *   <li>a janela de 4h de um PENDING recente, verificada pelo chamador, que já
+     *       impediu a chegada até aqui.</li>
+     * </ul>
+     *
+     * <p>O prazo de resposta é "agora + 10 minutos", contado pelo {@link Clock}
+     * injetado e não pelo horário da medição: o prazo é para a paciente responder,
+     * e ela só pode começar a contar quando o push sai. Leitura atrasada pela fila
+     * daria um prazo já vencido se usasse {@code measuredAt}.
+     *
+     * @param staleUnconfirmed o UNCONFIRMED que a leitura atual não confirmou, se
+     *        havia algum. Ele é fechado só quando a pergunta nasce de fato: a saída
+     *        por AWAITING_PATIENT já aberto não cria nada, e fechá-lo ali tiraria de
+     *        uma leitura futura a chance de confirmá-lo
+     */
+    private AlertEvaluationResponse handleSevereReading(Patient patient, HealthReading reading,
+                                                         ReadingThreshold range, String reason,
+                                                         Optional<Alert> staleUnconfirmed) {
+        Optional<Alert> awaiting = findLatestAlert(
+                patient.getId(), AlertStatus.AWAITING_PATIENT, range.getReadingType());
+
+        if (awaiting.isPresent()) {
+            log.info("Alerta {} do paciente {} ja aguarda resposta no tipo {}. Leitura gravada sem nova pergunta.",
+                    awaiting.get().getId(), patient.getId(), range.getReadingType());
+            return AlertEvaluationResponse.withoutAlert(reading.getId());
+        }
+
+        // O UNCONFIRMED que não foi confirmado perde a vez: a pergunta à paciente
+        // substitui a espera pela segunda leitura, então ninguém mais vai confirmá-lo.
+        // Sem isso ele ficaria UNCONFIRMED para sempre, como no fluxo comum.
+        staleUnconfirmed.ifPresent(unconfirmed -> discardUnconfirmed(patient, unconfirmed));
+
+        LocalDateTime deadline = LocalDateTime.now(clock).plus(PATIENT_RESPONSE_WINDOW);
+
+        Alert alert = buildAlert(patient, reading, range, reason, AlertStatus.AWAITING_PATIENT);
+        alert.setPatientResponseDeadline(deadline);
+
+        Alert savedAlert = alertRepository.save(alert);
+
+        // Mesmo evento de criação do fluxo comum: ele avisa só o paciente. O listener
+        // de push distingue os dois pelo status do alerta.
+        eventPublisher.publishEvent(new AlertCreatedEvent(savedAlert));
+
+        log.info("Alerta {} criado como {} para o paciente {} no tipo {}. Prazo de resposta de {} min.",
+                savedAlert.getId(), AlertStatus.AWAITING_PATIENT, patient.getId(),
+                range.getReadingType(), PATIENT_RESPONSE_WINDOW.toMinutes());
+
+        return AlertEvaluationResponse.withAlert(
+                range.getSeverity(), savedAlert.getId(), reason, reading.getId(),
+                AlertStatus.AWAITING_PATIENT);
     }
 
     /**
@@ -313,7 +440,8 @@ public class AlertServiceImpl implements AlertService {
 
         // Este é o evento que dispara o e-mail ao médico. Carrega as duas leituras
         // porque o e-mail mostra a progressão, não só o último valor.
-        eventPublisher.publishEvent(new AlertConfirmedEvent(saved, alertReading, reading));
+        eventPublisher.publishEvent(
+                AlertConfirmedEvent.byTwoReadings(saved, alertReading, reading));
 
         log.info("Alerta {} do paciente {} confirmado por segunda leitura e passou a {}.",
                 saved.getId(), patient.getId(), AlertStatus.PENDING);
@@ -369,6 +497,174 @@ public class AlertServiceImpl implements AlertService {
                 .findByPatientIdAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(
                         patient.getId(), LocalDateTime.now().minusDays(7), pageable)
                 .map(alertMapper::toResponse);
+    }
+
+    /**
+     * Registra a resposta da paciente a um alerta de leitura grave.
+     *
+     * <p>O escopo é aplicado por comparação de paciente, não só pela role: a
+     * paciente autenticada alcança apenas alerta dela. Alerta de outra paciente é
+     * recusado como não autorizado, sem revelar nada sobre o alerta.
+     *
+     * <p>{@code NOT_OK} leva o alerta a PENDING com {@code confirmedAt} igual ao
+     * {@code measuredAt} da leitura grave — e não ao horário da resposta: a
+     * referência clínica é quando a medição aconteceu, que é também de onde a janela
+     * de 4h é contada. {@code OK} leva a UNCONFIRMED, devolvendo o alerta ao fluxo
+     * comum: a próxima leitura fora da faixa, em até 2h, confirma por duas leituras.
+     *
+     * <p>A troca de status é condicional no banco, então a resposta da paciente e o
+     * agendador nunca vencem os dois. Perdida a corrida, o alerta já não está
+     * AWAITING_PATIENT e o 409 explica o que aconteceu.
+     */
+    @Override
+    @Transactional
+    public PatientAlertAnswerResponse registerPatientResponse(String email, UUID alertId,
+                                                              PatientAlertAnswer answer) {
+        Patient patient = resolvePatient(email);
+
+        Alert alert = alertRepository.findById(alertId)
+                .orElseThrow(() -> new ResourceNotFoundException(alertNotFoundById(alertId)));
+
+        if (!alert.getPatient().getId().equals(patient.getId())) {
+            log.warn("Paciente {} tentou responder o alerta {}, que e de outro paciente.",
+                    patient.getId(), alertId);
+            throw new UnauthorizedException("Alerta não pertence ao paciente autenticado");
+        }
+
+        if (!AlertStatus.AWAITING_PATIENT.equals(alert.getStatus())) {
+            throw closedWindowFor(alert);
+        }
+
+        LocalDateTime respondedAt = LocalDateTime.now(clock);
+        boolean notOk = answer == PatientAlertAnswer.NOT_OK;
+        String targetStatus = notOk ? AlertStatus.PENDING : AlertStatus.UNCONFIRMED;
+
+        // Em NOT_OK o alerta é confirmado, então confirmedAt recebe o horário da
+        // medição grave. Em OK ele volta ao fluxo comum e continua não confirmado,
+        // então confirmedAt fica nulo — um valor ali faria a janela de 4h silenciar
+        // as leituras seguintes de uma paciente que disse estar bem.
+        HealthReading severeReading = alert.getHealthReading();
+        LocalDateTime confirmedAt =
+                notOk && severeReading != null ? severeReading.getMeasuredAt() : null;
+
+        int changed = alertRepository.leaveAwaitingPatient(
+                alertId, targetStatus, confirmedAt, answer, respondedAt);
+
+        if (changed == 0) {
+            log.info("Resposta do paciente {} ao alerta {} perdeu a corrida com o agendador.",
+                    patient.getId(), alertId);
+            throw AlertResponseWindowClosedException.deadlineExpired();
+        }
+
+        if (notOk) {
+            // Só quem venceu a troca de status publica, então o médico recebe no
+            // máximo um e-mail por alerta.
+            eventPublisher.publishEvent(AlertConfirmedEvent.bySevereReading(
+                    alert, severeReading, AlertConfirmationReason.PACIENTE_NAO_ESTA_BEM));
+
+            log.info("Alerta {} do paciente {} passou a {}: paciente respondeu que nao esta bem.",
+                    alertId, patient.getId(), AlertStatus.PENDING);
+        } else {
+            log.info("Alerta {} do paciente {} passou a {}: paciente respondeu que esta bem.",
+                    alertId, patient.getId(), AlertStatus.UNCONFIRMED);
+        }
+
+        return new PatientAlertAnswerResponse(alertId, answer, respondedAt, targetStatus, notOk);
+    }
+
+    /**
+     * Ids dos alertas AWAITING_PATIENT cujo prazo já venceu, no instante do
+     * {@link Clock} injetado.
+     *
+     * <p>Devolve ids, e não entidades, porque quem chama é o agendador: ele usa cada
+     * id para abrir uma transação própria em
+     * {@link #confirmAlertWithoutPatientResponse}. Entidade carregada aqui estaria
+     * desanexada lá, e o status lido poderia já estar velho no momento da troca.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<UUID> findAlertIdsAwaitingPatientPastDeadline() {
+        return alertRepository.findIdsAwaitingPatientPastDeadline(
+                LocalDateTime.now(clock), EXPIRED_BATCH);
+    }
+
+    /**
+     * Confirma um alerta cujo prazo venceu sem resposta da paciente: ele passa a
+     * PENDING e o médico é avisado, com {@code confirmedAt} igual ao
+     * {@code measuredAt} da leitura grave. O silêncio dela é tratado como motivo de
+     * preocupação, não como "está tudo bem".
+     *
+     * <p>Um alerta por chamada, com transação própria e curta: ela abre, disputa a
+     * linha e fecha. É o que faz a falha em um alerta não desfazer a confirmação dos
+     * outros do mesmo ciclo, e é o que mantém cada disputa com a resposta da
+     * paciente isolada.
+     *
+     * <p>{@code REQUIRES_NEW} é efetivo porque o agendador chama este método pela
+     * interface, atravessando o proxy do Spring. Chamada de dentro desta própria
+     * classe não abriria transação nova.
+     *
+     * @return {@code true} quando esta chamada fez a transição; {@code false} quando
+     *         outro caminho chegou primeiro ou o alerta não existe mais — nos dois
+     *         casos nada é publicado
+     */
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean confirmAlertWithoutPatientResponse(UUID alertId) {
+        Alert alert = alertRepository.findById(alertId).orElse(null);
+
+        if (alert == null || !AlertStatus.AWAITING_PATIENT.equals(alert.getStatus())) {
+            return false;
+        }
+
+        HealthReading severeReading = alert.getHealthReading();
+        LocalDateTime confirmedAt =
+                severeReading == null ? null : severeReading.getMeasuredAt();
+
+        // A paciente não respondeu, então patient_response e patient_responded_at
+        // continuam nulos: eles registram resposta, e não houve resposta.
+        int changed = alertRepository.leaveAwaitingPatient(
+                alertId, AlertStatus.PENDING, confirmedAt, null, null);
+
+        if (changed == 0) {
+            log.info("Alerta {} saiu de {} antes da varredura. Nenhum aviso duplicado.",
+                    alertId, AlertStatus.AWAITING_PATIENT);
+            return false;
+        }
+
+        eventPublisher.publishEvent(AlertConfirmedEvent.bySevereReading(
+                alert, severeReading, AlertConfirmationReason.SEM_RESPOSTA));
+
+        log.info("Alerta {} passou a {}: prazo de {} min venceu sem resposta do paciente.",
+                alertId, AlertStatus.PENDING, PATIENT_RESPONSE_WINDOW.toMinutes());
+
+        return true;
+    }
+
+    /**
+     * Distingue os dois desfechos de janela fechada, para a paciente entender por que
+     * a resposta não foi aceita. Resposta já gravada é um reenvio do app; sem
+     * resposta gravada, o prazo venceu e o agendador já avisou o médico.
+     */
+    private AlertResponseWindowClosedException closedWindowFor(Alert alert) {
+        if (alert.getPatientResponse() != null) {
+            log.info("Alerta {} ja tinha resposta registrada. Nova resposta recusada.", alert.getId());
+            return AlertResponseWindowClosedException.alreadyAnswered();
+        }
+
+        log.info("Alerta {} nao esta mais em {}. Resposta recusada.",
+                alert.getId(), AlertStatus.AWAITING_PATIENT);
+        return AlertResponseWindowClosedException.deadlineExpired();
+    }
+
+    /** Mesmo caminho de {@link #resolveDoctor}: usuário ativo, depois paciente. */
+    private Patient resolvePatient(String email) {
+        UUID userId = userRepository.findByEmailAndActiveTrue(email)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.userNotFoundByEmail(email)))
+                .getId();
+
+        return patientRepository.findByUserId(userId)
+                .orElseThrow(() -> new UnauthorizedException(
+                        "Paciente não encontrado para o usuário autenticado"));
     }
 
     /**
@@ -486,18 +782,19 @@ public class AlertServiceImpl implements AlertService {
      * atribuição de campos da entidade. A leitura que originou o alerta vai no
      * relacionamento, então health_reading_id fica preenchido.
      *
-     * <p>Nasce UNCONFIRMED: só vira PENDING quando uma segunda leitura seguida
-     * confirmar o desvio.
+     * <p>O status vem do chamador: {@code UNCONFIRMED} no fluxo comum, que só vira
+     * PENDING quando uma segunda leitura seguida confirmar o desvio, e
+     * {@code AWAITING_PATIENT} na leitura grave, que espera a resposta da paciente.
      */
     private Alert buildAlert(Patient patient, HealthReading reading,
-                             ReadingThreshold range, String reason) {
+                             ReadingThreshold range, String reason, String status) {
         AlertRequest alertRequest = new AlertRequest(
                 patient.getId(),
                 reading.getId(),
                 range.getSeverity(),
                 buildTitle(range),
                 reason,
-                AlertStatus.UNCONFIRMED
+                status
         );
         return alertMapper.toEntity(alertRequest, patient, reading);
     }

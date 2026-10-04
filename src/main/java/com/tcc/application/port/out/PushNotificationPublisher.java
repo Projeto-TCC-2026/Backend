@@ -1,6 +1,7 @@
 package com.tcc.application.port.out;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public interface PushNotificationPublisher {
@@ -18,4 +19,22 @@ public interface PushNotificationPublisher {
      *         quando não há token a descartar, inclusive em caso de falha de envio.
      */
     List<String> publishAlertCreated(List<String> pushTokens, String title, String body, UUID alertId);
+
+    /**
+     * Mesma coisa, com carga e categoria extras na mensagem.
+     *
+     * <p>Usado pelo push da pergunta à paciente (alerta AWAITING_PATIENT), que
+     * precisa de dois acréscimos em relação ao push comum: um par
+     * {@code "type": "SEVERE_CHECK"} no {@code data}, para o app saber que deve
+     * mostrar os botões de resposta, e uma categoria de notificação, para o sistema
+     * operacional oferecer as ações direto na notificação.
+     *
+     * @param extraData  pares adicionais do campo {@code data}; o {@code alertId}
+     *                   continua sendo acrescentado pela implementação
+     * @param categoryId identificador da categoria de notificação, ou nulo para
+     *                   omitir o campo
+     * @return os mesmos tokens a descartar de {@link #publishAlertCreated}
+     */
+    List<String> publishAlertCreated(List<String> pushTokens, String title, String body, UUID alertId,
+                                     Map<String, String> extraData, String categoryId);
 }

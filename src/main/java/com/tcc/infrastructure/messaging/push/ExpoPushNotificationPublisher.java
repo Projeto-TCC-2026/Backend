@@ -1,6 +1,7 @@
 package com.tcc.infrastructure.messaging.push;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -48,13 +49,26 @@ public class ExpoPushNotificationPublisher implements PushNotificationPublisher 
      */
     @Override
     public List<String> publishAlertCreated(List<String> pushTokens, String title, String body, UUID alertId) {
+        return publishAlertCreated(pushTokens, title, body, alertId, Map.of(), null);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>O {@code alertId} é acrescentado ao {@code data} aqui, depois dos pares
+     * extras, então ele nunca é sobrescrito por quem chama.
+     */
+    @Override
+    public List<String> publishAlertCreated(List<String> pushTokens, String title, String body, UUID alertId,
+                                            Map<String, String> extraData, String categoryId) {
         if (pushTokens == null || pushTokens.isEmpty()) {
             return List.of();
         }
 
+        Map<String, String> data = buildData(extraData, alertId);
+
         List<ExpoPushMessage> messages = pushTokens.stream()
-                .map(token -> new ExpoPushMessage(token, title, body,
-                        Map.of(DATA_KEY_ALERT_ID, alertId.toString())))
+                .map(token -> new ExpoPushMessage(token, title, body, data, categoryId))
                 .toList();
 
         try {
@@ -72,6 +86,23 @@ public class ExpoPushNotificationPublisher implements PushNotificationPublisher 
                     alertId, e.getClass().getSimpleName());
             return List.of();
         }
+    }
+
+    /**
+     * Monta o {@code data} da mensagem. O {@code alertId} entra por último para que
+     * uma chave homônima nos pares extras não o substitua — o app depende dele para
+     * abrir o alerta correto.
+     */
+    private Map<String, String> buildData(Map<String, String> extraData, UUID alertId) {
+        Map<String, String> data = new LinkedHashMap<>();
+
+        if (extraData != null) {
+            data.putAll(extraData);
+        }
+
+        data.put(DATA_KEY_ALERT_ID, alertId.toString());
+
+        return Map.copyOf(data);
     }
 
     /**
