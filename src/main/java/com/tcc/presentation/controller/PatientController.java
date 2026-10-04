@@ -100,13 +100,19 @@ public class PatientController {
     @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
     @Operation(
         summary = "Listar pacientes visíveis ao perfil autenticado",
-        description = "ADMIN vê todos os pacientes ativos. HOSPITAL vê apenas pacientes vinculados a médicos do próprio hospital. DOCTOR vê apenas os seus pacientes."
+        description = "Retorna pacientes visíveis ao perfil autenticado; active=true por padrão. " +
+                      "Use active=false para inativos ou includeInactive=true para todos. " +
+                      "HOSPITAL vê apenas pacientes vinculados a médicos do próprio hospital; DOCTOR vê apenas os seus."
     )
     public ResponseEntity<ApiResponse<Page<PatientResponse>>> getAllPatients(
             Authentication authentication,
+            @RequestParam(required = false) Boolean active,
+            @RequestParam(defaultValue = "false") Boolean includeInactive,
             @PageableDefault(size = 10, sort = "fullName", direction = Sort.Direction.ASC) Pageable pageable) {
 
-        Page<PatientResponse> patients = patientService.getAllActivePatients(extractEmail(authentication), pageable);
+        Boolean activeFilter = active != null ? active : (includeInactive ? null : true);
+        Page<PatientResponse> patients = patientService.getPatientsByActive(
+                extractEmail(authentication), activeFilter, pageable);
         ApiResponse<Page<PatientResponse>> response = ApiResponse.success(patients);
 
         return ResponseEntity.ok(response);

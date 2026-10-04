@@ -147,7 +147,7 @@ class PatientServiceImplTest {
                 PATIENT_ID, null, "Joao Silva", "12345678901", LocalDate.of(1990, 1, 1),
                 "M", "11999999999", "patient@test.com", "Rua A",
                 "Sao Paulo", "SP", "01000000", "O+", 70.0, 1.75,
-                true, null, null
+                true, null, null, null
         );
     }
 
@@ -646,11 +646,57 @@ class PatientServiceImplTest {
             assertThat(result.getContent()).containsExactly(response);
             verify(patientRepository).findPagedActiveByHospitalId(HOSPITAL_ID, pageable);
         }
+
+        @Test
+        @DisplayName("admin lista apenas pacientes inativos quando solicitado")
+        void adminListsInactivePatients() {
+            Pageable pageable = PageRequest.of(0, 10);
+            when(userRepository.findByEmailAndActiveTrue(ADMIN_EMAIL)).thenReturn(Optional.of(adminUser()));
+            when(patientRepository.findVisible(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                    .thenReturn(new PageImpl<>(List.of(patient)));
+            when(patientMapper.toResponse(patient)).thenReturn(response);
+
+            Page<PatientResponse> result = patientService.getPatientsByActive(ADMIN_EMAIL, false, pageable);
+
+            assertThat(result.getContent()).containsExactly(response);
+            verify(patientRepository).findVisible(null, null, null, null, null, null, null, null, null, false, pageable);
+        }
+
+        @Test
+        @DisplayName("admin lista pacientes de todos os status quando solicitado")
+        void adminListsPatientsOfAllStatuses() {
+            Pageable pageable = PageRequest.of(0, 10);
+            when(userRepository.findByEmailAndActiveTrue(ADMIN_EMAIL)).thenReturn(Optional.of(adminUser()));
+            when(patientRepository.findVisible(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                    .thenReturn(new PageImpl<>(List.of(patient)));
+            when(patientMapper.toResponse(patient)).thenReturn(response);
+
+            Page<PatientResponse> result = patientService.getPatientsByActive(ADMIN_EMAIL, null, pageable);
+
+            assertThat(result.getContent()).containsExactly(response);
+            verify(patientRepository).findVisible(null, null, null, null, null, null, null, null, null, null, pageable);
+        }
     }
 
     @Nested
     @DisplayName("getPatientById")
     class GetPatientById {
+
+        @Test
+        @DisplayName("retorna o medico responsavel no detalhe do paciente")
+        void returnsResponsibleDoctorForPatient() {
+            DoctorPatient assignment = new DoctorPatient(doctor, patient);
+            when(patientRepository.findByIdAndActiveTrue(PATIENT_ID)).thenReturn(Optional.of(patient));
+            when(userRepository.findByEmailAndActiveTrue(ADMIN_EMAIL)).thenReturn(Optional.of(adminUser()));
+            when(doctorPatientRepository.findFirstByPatientIdOrderByCreatedAtDesc(PATIENT_ID))
+                    .thenReturn(Optional.of(assignment));
+            when(patientMapper.toResponse(patient, doctor)).thenReturn(response);
+
+            PatientResponse result = patientService.getPatientById(ADMIN_EMAIL, PATIENT_ID);
+
+            assertThat(result).isEqualTo(response);
+            verify(patientMapper).toResponse(patient, doctor);
+        }
 
         @Test
         @DisplayName("doutor nao acessa paciente de outro medico")

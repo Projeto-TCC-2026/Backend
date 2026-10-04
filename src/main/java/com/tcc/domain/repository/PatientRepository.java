@@ -45,28 +45,28 @@ public interface PatientRepository extends JpaRepository<Patient, UUID> {
     @Query(
             value = "SELECT DISTINCT p FROM Patient p " +
                     "LEFT JOIN p.doctorPatients dp " +
-                    "WHERE p.active = true " +
+                    "WHERE (:active IS NULL OR p.active = :active) " +
                     "AND (:doctorId IS NULL OR dp.doctor.id = :doctorId) " +
                     "AND (:hospitalId IS NULL OR dp.doctor.hospital.id = :hospitalId) " +
-                    "AND (:name IS NULL OR LOWER(p.fullName) LIKE LOWER(CONCAT('%', :name, '%'))) " +
-                    "AND (:cpf IS NULL OR p.cpf LIKE CONCAT('%', :cpf, '%')) " +
-                    "AND (:email IS NULL OR LOWER(p.email) LIKE LOWER(CONCAT('%', :email, '%'))) " +
-                    "AND (:phone IS NULL OR p.phone LIKE CONCAT('%', :phone, '%')) " +
-                    "AND (:gender IS NULL OR p.gender = :gender) " +
-                    "AND (:city IS NULL OR LOWER(p.city) LIKE LOWER(CONCAT('%', :city, '%'))) " +
-                    "AND (:state IS NULL OR p.state = :state)",
+                    "AND (COALESCE(:name, '') = '' OR LOWER(p.fullName) LIKE CONCAT('%', LOWER(COALESCE(:name, '')), '%')) " +
+                    "AND (COALESCE(:cpf, '') = '' OR p.cpf LIKE CONCAT('%', :cpf, '%')) " +
+                    "AND (COALESCE(:email, '') = '' OR LOWER(p.email) LIKE CONCAT('%', LOWER(COALESCE(:email, '')), '%')) " +
+                    "AND (COALESCE(:phone, '') = '' OR p.phone LIKE CONCAT('%', :phone, '%')) " +
+                    "AND (COALESCE(:gender, '') = '' OR p.gender = :gender) " +
+                    "AND (COALESCE(:city, '') = '' OR LOWER(p.city) LIKE CONCAT('%', LOWER(COALESCE(:city, '')), '%')) " +
+                    "AND (COALESCE(:state, '') = '' OR p.state = :state)",
             countQuery = "SELECT COUNT(DISTINCT p) FROM Patient p " +
                     "LEFT JOIN p.doctorPatients dp " +
-                    "WHERE p.active = true " +
+                    "WHERE (:active IS NULL OR p.active = :active) " +
                     "AND (:doctorId IS NULL OR dp.doctor.id = :doctorId) " +
                     "AND (:hospitalId IS NULL OR dp.doctor.hospital.id = :hospitalId) " +
-                    "AND (:name IS NULL OR LOWER(p.fullName) LIKE LOWER(CONCAT('%', :name, '%'))) " +
-                    "AND (:cpf IS NULL OR p.cpf LIKE CONCAT('%', :cpf, '%')) " +
-                    "AND (:email IS NULL OR LOWER(p.email) LIKE LOWER(CONCAT('%', :email, '%'))) " +
-                    "AND (:phone IS NULL OR p.phone LIKE CONCAT('%', :phone, '%')) " +
-                    "AND (:gender IS NULL OR p.gender = :gender) " +
-                    "AND (:city IS NULL OR LOWER(p.city) LIKE LOWER(CONCAT('%', :city, '%'))) " +
-                    "AND (:state IS NULL OR p.state = :state)")
+                    "AND (COALESCE(:name, '') = '' OR LOWER(p.fullName) LIKE CONCAT('%', LOWER(COALESCE(:name, '')), '%')) " +
+                    "AND (COALESCE(:cpf, '') = '' OR p.cpf LIKE CONCAT('%', :cpf, '%')) " +
+                    "AND (COALESCE(:email, '') = '' OR LOWER(p.email) LIKE CONCAT('%', LOWER(COALESCE(:email, '')), '%')) " +
+                    "AND (COALESCE(:phone, '') = '' OR p.phone LIKE CONCAT('%', :phone, '%')) " +
+                    "AND (COALESCE(:gender, '') = '' OR p.gender = :gender) " +
+                    "AND (COALESCE(:city, '') = '' OR LOWER(p.city) LIKE CONCAT('%', LOWER(COALESCE(:city, '')), '%')) " +
+                    "AND (COALESCE(:state, '') = '' OR p.state = :state)")
     Page<Patient> findVisible(@Param("doctorId") UUID doctorId,
                               @Param("hospitalId") UUID hospitalId,
                               @Param("name") String name,
@@ -76,6 +76,7 @@ public interface PatientRepository extends JpaRepository<Patient, UUID> {
                               @Param("gender") String gender,
                               @Param("city") String city,
                               @Param("state") String state,
+                              @Param("active") Boolean active,
                               Pageable pageable);
     
     Optional<Patient> findByIdAndActiveTrue(UUID id);

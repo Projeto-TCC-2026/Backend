@@ -4,8 +4,10 @@ import org.springframework.stereotype.Component;
 
 import com.tcc.application.dto.request.PatientRequest;
 import com.tcc.application.dto.request.PatientUpdateRequest;
+import com.tcc.application.dto.response.DoctorSummary;
 import com.tcc.application.dto.response.PatientResponse;
 import com.tcc.application.dto.response.PatientSummary;
+import com.tcc.domain.model.Doctor;
 import com.tcc.domain.model.Patient;
 import com.tcc.domain.model.User;
 
@@ -19,6 +21,10 @@ public class PatientMapper {
     }
 
     public PatientResponse toResponse(Patient patient) {
+        return toResponse(patient, null);
+    }
+
+    public PatientResponse toResponse(Patient patient, Doctor responsibleDoctor) {
         if (patient == null) return null;
         return new PatientResponse(
                 patient.getId(),
@@ -38,8 +44,14 @@ public class PatientMapper {
                 patient.getHeight(),
                 patient.getActive(),
                 patient.getCreatedAt(),
-                patient.getUpdatedAt()
+                patient.getUpdatedAt(),
+                toDoctorSummary(responsibleDoctor)
         );
+    }
+
+    private DoctorSummary toDoctorSummary(Doctor doctor) {
+        if (doctor == null) return null;
+        return new DoctorSummary(doctor.getId(), doctor.getFullName(), doctor.getCrm(), doctor.getSpecialty());
     }
 
     public PatientSummary toSummary(Patient patient) {

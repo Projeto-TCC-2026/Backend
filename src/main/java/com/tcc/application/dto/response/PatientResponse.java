@@ -22,5 +22,6 @@ public record PatientResponse(
         Double height,
         Boolean active,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        DoctorSummary responsibleDoctor
 ) {}

@@ -160,8 +160,14 @@ public class PatientServiceImpl implements PatientService {
     @Override
     @Transactional(readOnly = true)
     public Page<PatientResponse> getAllActivePatients(String requesterEmail, Pageable pageable) {
+        return getPatientsByActive(requesterEmail, true, pageable);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<PatientResponse> getPatientsByActive(String requesterEmail, Boolean active, Pageable pageable) {
         User requester = findRequester(requesterEmail);
-        return listVisible(requester, null, null, null, null, null, null, null, pageable)
+        return listVisible(requester, null, null, null, null, null, null, null, active, pageable)
                 .map(patientMapper::toResponse);
     }
 
@@ -169,7 +175,11 @@ public class PatientServiceImpl implements PatientService {
     @Transactional(readOnly = true)
     public PatientResponse getPatientById(String requesterEmail, UUID id) {
         Patient patient = findAccessiblePatient(requesterEmail, id);
-        return patientMapper.toResponse(patient);
+        Doctor responsibleDoctor = doctorPatientRepository
+                .findFirstByPatientIdOrderByCreatedAtDesc(id)
+                .map(DoctorPatient::getDoctor)
+                .orElse(null);
+        return patientMapper.toResponse(patient, responsibleDoctor);
     }
 
     @Override
@@ -217,35 +227,35 @@ public class PatientServiceImpl implements PatientService {
     @Override
     @Transactional(readOnly = true)
     public Page<PatientResponse> searchByName(String requesterEmail, String name, Pageable pageable) {
-        return listVisible(findRequester(requesterEmail), name, null, null, null, null, null, null, pageable)
+        return listVisible(findRequester(requesterEmail), name, null, null, null, null, null, null, true, pageable)
                 .map(patientMapper::toResponse);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<PatientResponse> searchByCpf(String requesterEmail, String cpf, Pageable pageable) {
-        return listVisible(findRequester(requesterEmail), null, cpf, null, null, null, null, null, pageable)
+        return listVisible(findRequester(requesterEmail), null, cpf, null, null, null, null, null, true, pageable)
                 .map(patientMapper::toResponse);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<PatientResponse> searchByEmail(String requesterEmail, String email, Pageable pageable) {
-        return listVisible(findRequester(requesterEmail), null, null, email, null, null, null, null, pageable)
+        return listVisible(findRequester(requesterEmail), null, null, email, null, null, null, null, true, pageable)
                 .map(patientMapper::toResponse);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<PatientResponse> searchByPhone(String requesterEmail, String phone, Pageable pageable) {
-        return listVisible(findRequester(requesterEmail), null, null, null, phone, null, null, null, pageable)
+        return listVisible(findRequester(requesterEmail), null, null, null, phone, null, null, null, true, pageable)
                 .map(patientMapper::toResponse);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<PatientResponse> filterPatients(String requesterEmail, String name, String gender, String city, String state, Pageable pageable) {
-        return listVisible(findRequester(requesterEmail), name, null, null, null, gender, city, state, pageable)
+        return listVisible(findRequester(requesterEmail), name, null, null, null, gender, city, state, true, pageable)
                 .map(patientMapper::toResponse);
     }
 
@@ -318,6 +328,7 @@ public class PatientServiceImpl implements PatientService {
                                       String gender,
                                       String city,
                                       String state,
+                                      Boolean active,
                                       Pageable pageable) {
         UUID doctorId = null;
         UUID hospitalId = null;
@@ -333,18 +344,18 @@ public class PatientServiceImpl implements PatientService {
         boolean noFilters = name == null && cpf == null && email == null && phone == null
                 && gender == null && city == null && state == null;
 
-        if (noFilters && requester.getRole() == Role.ADMIN) {
+        if (noFilters && Boolean.TRUE.equals(active) && requester.getRole() == Role.ADMIN) {
             return patientRepository.findPagedByActiveTrue(pageable);
         }
-        if (noFilters && requester.getRole() == Role.DOCTOR) {
+        if (noFilters && Boolean.TRUE.equals(active) && requester.getRole() == Role.DOCTOR) {
             return patientRepository.findPagedActiveByDoctorId(doctorId, pageable);
         }
-        if (noFilters && requester.getRole() == Role.HOSPITAL) {
+        if (noFilters && Boolean.TRUE.equals(active) && requester.getRole() == Role.HOSPITAL) {
             return patientRepository.findPagedActiveByHospitalId(hospitalId, pageable);
         }
 
         return patientRepository.findVisible(
-                doctorId, hospitalId, name, cpf, email, phone, gender, city, state, pageable);
+                doctorId, hospitalId, name, cpf, email, phone, gender, city, state, active, pageable);
     }
 
     private Patient findAccessiblePatient(String requesterEmail, UUID id) {

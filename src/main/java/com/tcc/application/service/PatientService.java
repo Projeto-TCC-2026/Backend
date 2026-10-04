@@ -35,6 +35,8 @@ public interface PatientService {
 
     Page<PatientResponse> getAllActivePatients(String requesterEmail, Pageable pageable);
 
+    Page<PatientResponse> getPatientsByActive(String requesterEmail, Boolean active, Pageable pageable);
+
     PatientResponse getPatientById(String requesterEmail, UUID id);
 
     /**

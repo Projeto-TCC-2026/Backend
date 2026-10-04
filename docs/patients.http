@@ -116,12 +116,22 @@ Content-Type: application/json
 GET {{baseUrl}}/api/patients?page=0&size=10&sort=fullName,asc
 Authorization: Bearer {{token}}
 
+### Listar pacientes inativos
+GET {{baseUrl}}/api/patients?active=false&page=0&size=10&sort=fullName,asc
+Authorization: ******
+
+### Listar todos os pacientes (ativos e inativos)
+GET {{baseUrl}}/api/patients?includeInactive=true&page=0&size=10&sort=fullName,asc
+Authorization: ******
+
 ### 2.1 - Listar com paginação diferente
 GET {{baseUrl}}/api/patients?page=0&size=5&sort=birthDate,desc
 Authorization: Bearer {{token}}
 
 ### ============================================
 ### 3. GET - Buscar paciente por ID
+### A resposta inclui responsibleDoctor, com o médico do vínculo mais recente.
+### O vínculo é informativo e não pode ser alterado pelo endpoint de atualização.
 ### ============================================
 GET {{baseUrl}}/api/patients/550e8400-e29b-41d4-a716-446655440001
 Authorization: Bearer {{token}}
@@ -340,6 +350,12 @@ Content-Type: application/json
 #     "cpf": "12345678901",
 #     "birthDate": "1990-05-15",
 #     "active": true,
+#     "responsibleDoctor": {
+#       "id": "550e8400-e29b-41d4-a716-446655440002",
+#       "fullName": "Dra. Ana Costa",
+#       "crm": "CRM12345",
+#       "specialty": "Cardiologia"
+#     },
 #     ...
 #   }
 # }
