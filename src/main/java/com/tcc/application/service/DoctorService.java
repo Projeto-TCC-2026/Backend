@@ -23,6 +23,8 @@ public interface DoctorService {
     AccessLinkResponse generateAccessLink(UUID doctorId);
     
     Page<DoctorResponse> getAllDoctors(Pageable pageable);
+
+    Page<DoctorResponse> getAllDoctors(Pageable pageable, Boolean active);
     
     DoctorResponse getDoctorById(UUID id);
     

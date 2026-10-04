@@ -19,6 +19,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import com.tcc.application.dto.request.DoctorRequest;
 import com.tcc.application.dto.response.DoctorResponse;
@@ -27,6 +31,7 @@ import com.tcc.domain.model.Doctor;
 import com.tcc.domain.model.DoctorPatient;
 import com.tcc.domain.model.DoctorProcedure;
 import com.tcc.domain.model.Hospital;
+import com.tcc.domain.model.Patient;
 import com.tcc.domain.model.Role;
 import com.tcc.domain.model.User;
 import com.tcc.domain.repository.DoctorRepository;
@@ -79,6 +84,37 @@ class DoctorServiceImplTest {
         request = new DoctorRequest(USER_ID, HOSPITAL_ID, "Dr. Carlos", "11122233344", "CRM12345", "Cardiologia", "11988887777");
 
         response = new DoctorResponse(DOCTOR_ID, null, null, "Dr. Carlos", "11122233344", "CRM12345", true, "Cardiologia", "11988887777", null, null);
+    }
+
+    @Nested
+    @DisplayName("getAllDoctors")
+    class GetAllDoctors {
+
+        private final Pageable pageable = PageRequest.of(0, 10);
+
+        @Test
+        @DisplayName("lista doutores inativos quando solicitado")
+        void shouldListInactiveDoctors() {
+            when(doctorRepository.findAllByActiveFalse(pageable)).thenReturn(new PageImpl<>(List.of(doctor)));
+            when(doctorMapper.toResponse(doctor)).thenReturn(response);
+
+            Page<DoctorResponse> result = doctorService.getAllDoctors(pageable, false);
+
+            assertThat(result.getContent()).containsExactly(response);
+            verify(doctorRepository).findAllByActiveFalse(pageable);
+        }
+
+        @Test
+        @DisplayName("lista doutores de todos os status quando solicitado")
+        void shouldListDoctorsOfAllStatuses() {
+            when(doctorRepository.findAll(pageable)).thenReturn(new PageImpl<>(List.of(doctor)));
+            when(doctorMapper.toResponse(doctor)).thenReturn(response);
+
+            Page<DoctorResponse> result = doctorService.getAllDoctors(pageable, null);
+
+            assertThat(result.getContent()).containsExactly(response);
+            verify(doctorRepository).findAll(pageable);
+        }
     }
 
     @Nested
@@ -192,7 +228,9 @@ class DoctorServiceImplTest {
         @Test
         @DisplayName("deve lancar excecao quando ha pacientes associados")
         void shouldThrowWhenHasAssociatedPatients() {
-            List<DoctorPatient> patients = List.of(new DoctorPatient());
+            Patient activePatient = new Patient();
+            activePatient.setActive(true);
+            List<DoctorPatient> patients = List.of(new DoctorPatient(doctor, activePatient));
             doctor.setDoctorPatients(new ArrayList<>(patients));
             doctor.setDoctorProcedures(new ArrayList<>());
             when(doctorRepository.findById(DOCTOR_ID)).thenReturn(Optional.of(doctor));
@@ -202,6 +240,23 @@ class DoctorServiceImplTest {
                     .hasMessageContaining("pacientes associados");
 
             verify(doctorRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("deve inativar doutor quando os pacientes associados estao inativos")
+        void shouldDeactivateDoctorWhenAssociatedPatientsAreInactive() {
+            Patient inactivePatient = new Patient();
+            inactivePatient.setActive(false);
+            doctor.setDoctorPatients(new ArrayList<>(List.of(new DoctorPatient(doctor, inactivePatient))));
+            doctor.setDoctorProcedures(new ArrayList<>());
+            when(doctorRepository.findById(DOCTOR_ID)).thenReturn(Optional.of(doctor));
+
+            doctorService.deleteDoctor(DOCTOR_ID);
+
+            verify(doctorRepository).save(doctor);
+            verify(userRepository).save(user);
+            assertThat(doctor.getActive()).isFalse();
+            assertThat(user.getActive()).isFalse();
         }
 
         @Test

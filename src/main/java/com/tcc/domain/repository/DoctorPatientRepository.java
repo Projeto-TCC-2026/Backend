@@ -36,6 +36,8 @@ public interface DoctorPatientRepository extends JpaRepository<DoctorPatient, UU
     List<DoctorPatient> findByDoctorId(UUID doctorId);
     
     List<DoctorPatient> findByPatientId(UUID patientId);
+
+    Optional<DoctorPatient> findFirstByPatientIdOrderByCreatedAtDesc(UUID patientId);
     
     Optional<DoctorPatient> findByDoctorIdAndPatientId(UUID doctorId, UUID patientId);
     

@@ -148,8 +148,21 @@ public class DoctorServiceImpl implements DoctorService {
     @Override
     @Transactional(readOnly = true)
     public Page<DoctorResponse> getAllDoctors(Pageable pageable) {
-        return doctorRepository.findAllByActiveTrue(pageable)
-                .map(doctorMapper::toResponse);
+        return getAllDoctors(pageable, true);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<DoctorResponse> getAllDoctors(Pageable pageable, Boolean active) {
+        Page<Doctor> doctors;
+        if (active == null) {
+            doctors = doctorRepository.findAll(pageable);
+        } else if (active) {
+            doctors = doctorRepository.findAllByActiveTrue(pageable);
+        } else {
+            doctors = doctorRepository.findAllByActiveFalse(pageable);
+        }
+        return doctors.map(doctorMapper::toResponse);
     }
 
     @Override
@@ -192,8 +205,11 @@ public class DoctorServiceImpl implements DoctorService {
         Doctor doctor = doctorRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.doctorNotFoundById(id)));
 
-        if (!doctor.getDoctorPatients().isEmpty()) {
-            throw new BusinessException(ErrorMessages.doctorHasPatients(doctor.getDoctorPatients().size()));
+        long activePatientCount = doctor.getDoctorPatients().stream()
+                .filter(doctorPatient -> Boolean.TRUE.equals(doctorPatient.getPatient().getActive()))
+                .count();
+        if (activePatientCount > 0) {
+            throw new BusinessException(ErrorMessages.doctorHasPatients(activePatientCount));
         }
 
         if (!doctor.getDoctorProcedures().isEmpty()) {

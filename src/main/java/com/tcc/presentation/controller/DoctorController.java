@@ -89,14 +89,18 @@ public class DoctorController {
     @PreAuthorize("hasRole('ADMIN') or hasRole('DOCTOR')")
     @Operation(
         summary = "Listar todos os doutores",
-        description = "Retorna uma lista paginada de todos os doutores cadastrados no sistema. " +
+        description = "Retorna uma lista paginada de doutores. Por padrão retorna apenas ativos; " +
+                      "use active=false para inativos ou includeInactive=true para todos. " +
                       "Suporta paginação (page, size) e ordenação (sort). " +
                       "Inclui informações do hospital associado."
     )
     public ResponseEntity<ApiResponse<Page<DoctorResponse>>> getAllDoctors(
+            @RequestParam(required = false) Boolean active,
+            @RequestParam(defaultValue = "false") Boolean includeInactive,
             @PageableDefault(size = 10, sort = "fullName", direction = Sort.Direction.ASC) Pageable pageable) {
         
-        Page<DoctorResponse> doctors = doctorService.getAllDoctors(pageable);
+        Boolean activeFilter = active != null ? active : (includeInactive ? null : true);
+        Page<DoctorResponse> doctors = doctorService.getAllDoctors(pageable, activeFilter);
         ApiResponse<Page<DoctorResponse>> response = ApiResponse.success(doctors);
         
         return ResponseEntity.ok(response);
@@ -139,9 +143,9 @@ public class DoctorController {
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(
-        summary = "Excluir doutor",
-        description = "Remove um doutor do sistema. Apenas administradores podem excluir doutores. " +
-                      "Não é possível excluir se houver pacientes ou procedimentos associados."
+        summary = "Inativar doutor",
+        description = "Inativa o doutor e sua conta de usuário, preservando o histórico. " +
+                      "Não é possível inativar se houver pacientes ou procedimentos associados."
     )
     public ResponseEntity<ApiResponse<Void>> deleteDoctor(
             @Parameter(description = "ID do doutor", example = "1", required = true)

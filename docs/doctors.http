@@ -22,6 +22,22 @@ Authorization: {{token}}
 GET {{baseUrl}}/doctors?page=0&size=10&sort=fullName,asc
 Authorization: {{token}}
 
+### Listar médicos inativos
+GET {{baseUrl}}/doctors?active=false&page=0&size=10&sort=fullName,asc
+Authorization: {{token}}
+
+### Listar médicos ativos e inativos
+GET {{baseUrl}}/doctors?includeInactive=true&page=0&size=10&sort=fullName,asc
+Authorization: {{token}}
+
+### Listar médicos inativos do hospital autenticado
+GET {{baseUrl}}/hospital/doctors?active=false&page=0&size=10&sort=fullName,asc
+Authorization: {{token}}
+
+### Listar todos os médicos do hospital autenticado
+GET {{baseUrl}}/hospital/doctors?includeInactive=true&page=0&size=10&sort=fullName,asc
+Authorization: {{token}}
+
 ### 3. Buscar médico por ID
 GET {{baseUrl}}/doctors/{{doctorId}}
 Authorization: {{token}}
@@ -45,7 +61,7 @@ Authorization: {{token}}
   "phone": "11987654321"
 }
 
-### 6. Excluir médico
+### 6. Inativar médico (soft delete)
 DELETE {{baseUrl}}/doctors/{{doctorId}}
 Authorization: {{token}}
 
