@@ -27,9 +27,9 @@ public interface HospitalRepository extends JpaRepository<Hospital, UUID> {
     Page<Hospital> findByActive(Boolean active, Pageable pageable);
     
     @Query("SELECT h FROM Hospital h WHERE " +
-           "(:name IS NULL OR LOWER(h.name) LIKE LOWER(CONCAT('%', :name, '%'))) AND " +
-           "(:city IS NULL OR LOWER(h.city) LIKE LOWER(CONCAT('%', :city, '%'))) AND " +
-           "(:state IS NULL OR UPPER(h.state) = UPPER(:state))")
+           "(COALESCE(:name, '') = '' OR LOWER(h.name) LIKE CONCAT('%', LOWER(COALESCE(:name, '')), '%')) AND " +
+           "(COALESCE(:city, '') = '' OR LOWER(h.city) LIKE CONCAT('%', LOWER(COALESCE(:city, '')), '%')) AND " +
+           "(COALESCE(:state, '') = '' OR UPPER(h.state) = UPPER(COALESCE(:state, '')))")
     Page<Hospital> findByFilters(
         @Param("name") String name,
         @Param("city") String city,
@@ -38,9 +38,9 @@ public interface HospitalRepository extends JpaRepository<Hospital, UUID> {
     );
     
     @Query("SELECT h FROM Hospital h WHERE " +
-           "(:name IS NULL OR LOWER(h.name) LIKE LOWER(CONCAT('%', :name, '%'))) AND " +
-           "(:city IS NULL OR LOWER(h.city) LIKE LOWER(CONCAT('%', :city, '%'))) AND " +
-           "(:state IS NULL OR UPPER(h.state) = UPPER(:state)) AND " +
+           "(COALESCE(:name, '') = '' OR LOWER(h.name) LIKE CONCAT('%', LOWER(COALESCE(:name, '')), '%')) AND " +
+           "(COALESCE(:city, '') = '' OR LOWER(h.city) LIKE CONCAT('%', LOWER(COALESCE(:city, '')), '%')) AND " +
+           "(COALESCE(:state, '') = '' OR UPPER(h.state) = UPPER(COALESCE(:state, ''))) AND " +
            "h.active = :active")
     Page<Hospital> findByFiltersAndActive(
         @Param("name") String name,

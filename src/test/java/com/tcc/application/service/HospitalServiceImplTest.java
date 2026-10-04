@@ -113,18 +113,37 @@ class HospitalServiceImplTest {
         }
 
         @Test
-        @DisplayName("deve lancar excecao quando ha doutores associados")
-        void shouldThrowWhenHasAssociatedDoctors() {
-            List<Doctor> doctors = List.of(new Doctor());
+        @DisplayName("deve lancar excecao quando ha doutores ativos associados")
+        void shouldThrowWhenHasActiveAssociatedDoctors() {
+            Doctor activeDoctor = new Doctor();
+            activeDoctor.setActive(true);
+            Doctor inactiveDoctor = new Doctor();
+            inactiveDoctor.setActive(false);
+            List<Doctor> doctors = List.of(activeDoctor, inactiveDoctor);
             hospital.setDoctors(new ArrayList<>(doctors));
             when(hospitalRepository.findById(HOSPITAL_ID)).thenReturn(Optional.of(hospital));
 
             assertThatThrownBy(() -> hospitalService.deleteHospital(HOSPITAL_ID))
                     .isInstanceOf(BusinessException.class)
-                    .hasMessageContaining("doutores associados");
+                    .hasMessageContaining("Existem 1 doutores associados");
 
             assertThat(hospital.getActive()).isTrue();
             verify(hospitalRepository, never()).save(any());
+            verify(hospitalRepository, never()).delete(any());
+        }
+
+        @Test
+        @DisplayName("deve inativar hospital quando os doutores associados estao inativos")
+        void shouldInactivateHospitalWhenAssociatedDoctorsAreInactive() {
+            Doctor inactiveDoctor = new Doctor();
+            inactiveDoctor.setActive(false);
+            hospital.setDoctors(new ArrayList<>(List.of(inactiveDoctor)));
+            when(hospitalRepository.findById(HOSPITAL_ID)).thenReturn(Optional.of(hospital));
+
+            hospitalService.deleteHospital(HOSPITAL_ID);
+
+            assertThat(hospital.getActive()).isFalse();
+            verify(hospitalRepository).save(hospital);
             verify(hospitalRepository, never()).delete(any());
         }
 

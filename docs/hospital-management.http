@@ -234,6 +234,14 @@ Authorization: Bearer {{admin_token}}
 GET {{host}}/api/admin/hospitals
 Authorization: Bearer {{admin_token}}
 
+### Listar hospitais inativos
+GET {{host}}/api/admin/hospitals?active=false
+Authorization: ******
+
+### Listar todos os hospitais (ativos e inativos)
+GET {{host}}/api/admin/hospitals?includeInactive=true
+Authorization: ******
+
 ### Cadastrar via endpoint alternativo
 POST {{host}}/api/admin/hospitals
 Authorization: Bearer {{admin_token}}

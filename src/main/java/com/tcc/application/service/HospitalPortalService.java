@@ -26,6 +26,8 @@ public interface HospitalPortalService {
     /** Lista paginada de médicos do próprio hospital. */
     Page<DoctorResponse> listDoctors(String email, Pageable pageable);
 
+    Page<DoctorResponse> listDoctors(String email, Boolean active, Pageable pageable);
+
     /** Cadastra um médico vinculado automaticamente ao hospital do usuário autenticado. */
     DoctorResponse createDoctor(String email, DoctorRequest request);
 

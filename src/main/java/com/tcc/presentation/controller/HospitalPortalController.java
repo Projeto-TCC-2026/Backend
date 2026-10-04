@@ -79,13 +79,17 @@ public class HospitalPortalController {
     @GetMapping("/doctors")
     @Operation(
         summary = "Listar médicos do hospital",
-        description = "Retorna lista paginada dos médicos vinculados ao hospital do usuário autenticado"
+        description = "Retorna médicos paginados do hospital autenticado. Por padrão apenas ativos; " +
+                      "use active=false para inativos ou includeInactive=true para todos."
     )
     public ResponseEntity<ApiResponse<Page<DoctorResponse>>> listDoctors(
             Authentication authentication,
+            @RequestParam(required = false) Boolean active,
+            @RequestParam(defaultValue = "false") Boolean includeInactive,
             @PageableDefault(size = 10, sort = "fullName", direction = Sort.Direction.ASC) Pageable pageable) {
         String email = extractEmail(authentication);
-        return ResponseEntity.ok(ApiResponse.success(hospitalPortalService.listDoctors(email, pageable)));
+        Boolean activeFilter = active != null ? active : (includeInactive ? null : true);
+        return ResponseEntity.ok(ApiResponse.success(hospitalPortalService.listDoctors(email, activeFilter, pageable)));
     }
 
     @PostMapping("/doctors")
@@ -144,8 +148,8 @@ public class HospitalPortalController {
 
     @DeleteMapping("/doctors/{id}")
     @Operation(
-        summary = "Remover médico",
-        description = "Remove um médico, validando que pertence ao hospital do usuário autenticado. " +
+        summary = "Inativar médico",
+        description = "Inativa um médico e sua conta, validando que pertence ao hospital autenticado. " +
                       "Bloqueado se houver pacientes ou procedimentos associados."
     )
     public ResponseEntity<ApiResponse<Void>> deleteDoctor(

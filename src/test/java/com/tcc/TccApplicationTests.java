@@ -1,7 +1,13 @@
 package com.tcc;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.tcc.domain.repository.HospitalRepository;
+import com.tcc.domain.repository.PatientRepository;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
@@ -45,8 +51,37 @@ import org.springframework.test.context.TestPropertySource;
 })
 class TccApplicationTests {
 
+    @Autowired
+    private PatientRepository patientRepository;
+
+    @Autowired
+    private HospitalRepository hospitalRepository;
+
 	@Test
 	void contextLoads() {
 	}
+
+    @Test
+    void patientStatusFilterAcceptsInactiveStatusWithoutTextFilters() {
+        var result = patientRepository.findVisible(
+                null, null, null, null, null, null, null, null, null, false, PageRequest.of(0, 10));
+
+        assertThat(result.getContent()).isEmpty();
+    }
+
+    @Test
+    void hospitalStatusFilterAcceptsAllStatusesWithoutTextFilters() {
+        var result = hospitalRepository.findByFilters(null, null, null, PageRequest.of(0, 10));
+
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void hospitalStatusFilterAcceptsUnsetOptionalTextFilters() {
+        var result = hospitalRepository.findByFiltersAndActive(
+                "Central", null, null, true, PageRequest.of(0, 10));
+
+        assertThat(result).isNotNull();
+    }
 
 }

@@ -74,12 +74,16 @@ public class AdminController {
     @GetMapping("/hospitals")
     @Operation(
         summary = "Listar todos os hospitais (Admin)",
-        description = "Lista todos os hospitais cadastrados na plataforma com paginação e ordenação"
+        description = "Lista hospitais com paginação e ordenação. Por padrão retorna apenas ativos; " +
+                      "use active=false para inativos ou includeInactive=true para todos."
     )
     public ResponseEntity<ApiResponse<Page<HospitalResponse>>> getAllHospitals(
+            @RequestParam(required = false) Boolean active,
+            @RequestParam(defaultValue = "false") Boolean includeInactive,
             @PageableDefault(size = 10, sort = "name", direction = Sort.Direction.ASC) Pageable pageable) {
         
-        Page<HospitalResponse> hospitals = hospitalService.getAllHospitals(pageable);
+        Boolean activeFilter = active != null ? active : (includeInactive ? null : true);
+        Page<HospitalResponse> hospitals = hospitalService.filterHospitals(null, null, null, activeFilter, pageable);
         ApiResponse<Page<HospitalResponse>> response = ApiResponse.success(hospitals);
         
         return ResponseEntity.ok(response);

@@ -8,6 +8,7 @@ import com.tcc.application.dto.response.DoctorResponse;
 import com.tcc.application.dto.response.HospitalDashboardResponse;
 import com.tcc.application.dto.response.HospitalResponse;
 import com.tcc.application.mapper.DoctorMapper;
+import com.tcc.domain.model.Doctor;
 import com.tcc.domain.model.Hospital;
 import com.tcc.domain.model.User;
 import com.tcc.domain.repository.DoctorRepository;
@@ -71,8 +72,22 @@ public class HospitalPortalServiceImpl implements HospitalPortalService {
     @Override
     @Transactional(readOnly = true)
     public Page<DoctorResponse> listDoctors(String email, Pageable pageable) {
+        return listDoctors(email, true, pageable);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<DoctorResponse> listDoctors(String email, Boolean active, Pageable pageable) {
         Hospital hospital = resolveHospital(email);
-        return doctorRepository.findByHospitalIdAndActiveTrue(hospital.getId(), pageable)
+        Page<Doctor> doctors;
+        if (active == null) {
+            doctors = doctorRepository.findByHospitalId(hospital.getId(), pageable);
+        } else if (active) {
+            doctors = doctorRepository.findByHospitalIdAndActiveTrue(hospital.getId(), pageable);
+        } else {
+            doctors = doctorRepository.findByHospitalIdAndActiveFalse(hospital.getId(), pageable);
+        }
+        return doctors
                 .map(doctorMapper::toResponse);
     }
 

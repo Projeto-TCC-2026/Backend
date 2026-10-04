@@ -91,8 +91,11 @@ public class HospitalServiceImpl implements HospitalService {
         Hospital hospital = hospitalRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorMessages.hospitalNotFoundById(id)));
 
-        if (!hospital.getDoctors().isEmpty()) {
-            throw new BusinessException(ErrorMessages.hospitalHasDoctors(hospital.getDoctors().size()));
+        long activeDoctorCount = hospital.getDoctors().stream()
+                .filter(doctor -> Boolean.TRUE.equals(doctor.getActive()))
+                .count();
+        if (activeDoctorCount > 0) {
+            throw new BusinessException(ErrorMessages.hospitalHasDoctors(activeDoctorCount));
         }
 
         hospital.setActive(false);
