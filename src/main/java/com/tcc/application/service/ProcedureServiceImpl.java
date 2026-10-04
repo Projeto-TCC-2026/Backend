@@ -92,20 +92,31 @@ public class ProcedureServiceImpl implements ProcedureService {
     public Page<ProcedureResponse> listProcedures(String email, Boolean includeInactive, Pageable pageable) {
         Hospital hospital = resolveHospital(email);
 
-        return listProceduresForKnownHospital(hospital, includeInactive, pageable);
+        return listProceduresForKnownHospital(hospital, Boolean.TRUE.equals(includeInactive) ? null : true, pageable);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<ProcedureResponse> listProceduresForHospital(UUID hospitalId, Boolean includeInactive, Pageable pageable) {
-        return listProceduresForKnownHospital(findHospital(hospitalId), includeInactive, pageable);
+        return listProceduresForKnownHospital(findHospital(hospitalId), Boolean.TRUE.equals(includeInactive) ? null : true, pageable);
     }
 
-    private Page<ProcedureResponse> listProceduresForKnownHospital(Hospital hospital, Boolean includeInactive, Pageable pageable) {
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ProcedureResponse> listProceduresByActive(String email, Boolean active, Pageable pageable) {
+        return listProceduresForKnownHospital(resolveHospital(email), active, pageable);
+    }
 
-        Page<Procedure> procedures = Boolean.TRUE.equals(includeInactive)
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ProcedureResponse> listProceduresForHospitalByActive(UUID hospitalId, Boolean active, Pageable pageable) {
+        return listProceduresForKnownHospital(findHospital(hospitalId), active, pageable);
+    }
+
+    private Page<ProcedureResponse> listProceduresForKnownHospital(Hospital hospital, Boolean active, Pageable pageable) {
+        Page<Procedure> procedures = active == null
                 ? procedureRepository.findByHospitalId(hospital.getId(), pageable)
-                : procedureRepository.findByHospitalIdAndActive(hospital.getId(), true, pageable);
+                : procedureRepository.findByHospitalIdAndActive(hospital.getId(), active, pageable);
 
         return procedures.map(procedureMapper::toResponse);
     }

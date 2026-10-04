@@ -66,15 +66,17 @@ public class ProcedureController {
     @Operation(
         summary = "Listar procedimentos do hospital",
         description = "Retorna lista paginada dos procedimentos do hospital do usuário autenticado. " +
-                      "Por padrão retorna apenas os ativos; use includeInactive=true para incluir os inativos."
+                      "Por padrão retorna apenas os ativos; use active=false para inativos ou includeInactive=true para todos."
     )
     public ResponseEntity<ApiResponse<Page<ProcedureResponse>>> listProcedures(
             Authentication authentication,
             @Parameter(description = "Inclui procedimentos inativos na listagem")
             @RequestParam(defaultValue = "false") Boolean includeInactive,
+            @RequestParam(required = false) Boolean active,
             @PageableDefault(size = 10, sort = "title", direction = Sort.Direction.ASC) Pageable pageable) {
         String email = extractEmail(authentication);
-        Page<ProcedureResponse> procedures = procedureService.listProcedures(email, includeInactive, pageable);
+        Boolean activeFilter = active != null ? active : (includeInactive ? null : true);
+        Page<ProcedureResponse> procedures = procedureService.listProceduresByActive(email, activeFilter, pageable);
         return ResponseEntity.ok(ApiResponse.success(procedures));
     }
 

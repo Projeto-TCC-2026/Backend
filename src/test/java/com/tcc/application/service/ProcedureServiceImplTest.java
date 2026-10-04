@@ -196,6 +196,34 @@ class ProcedureServiceImplTest {
             assertThat(result.getContent()).containsExactly(response);
             verify(procedureRepository, never()).findByHospitalIdAndActive(any(), any(), any());
         }
+
+        @Test
+        @DisplayName("deve listar apenas procedimentos inativos quando solicitado")
+        void shouldListOnlyInactiveWhenRequested() {
+            Page<Procedure> page = new PageImpl<>(List.of(procedure));
+            when(userRepository.findByEmailWithHospital(EMAIL)).thenReturn(Optional.of(hospitalUser));
+            when(procedureRepository.findByHospitalIdAndActive(HOSPITAL_ID, false, pageable)).thenReturn(page);
+            when(procedureMapper.toResponse(procedure)).thenReturn(response);
+
+            Page<ProcedureResponse> result = procedureService.listProceduresByActive(EMAIL, false, pageable);
+
+            assertThat(result.getContent()).containsExactly(response);
+            verify(procedureRepository).findByHospitalIdAndActive(HOSPITAL_ID, false, pageable);
+        }
+
+        @Test
+        @DisplayName("deve listar todos os status quando solicitado")
+        void shouldListAllStatusesWhenRequested() {
+            Page<Procedure> page = new PageImpl<>(List.of(procedure));
+            when(userRepository.findByEmailWithHospital(EMAIL)).thenReturn(Optional.of(hospitalUser));
+            when(procedureRepository.findByHospitalId(HOSPITAL_ID, pageable)).thenReturn(page);
+            when(procedureMapper.toResponse(procedure)).thenReturn(response);
+
+            Page<ProcedureResponse> result = procedureService.listProceduresByActive(EMAIL, null, pageable);
+
+            assertThat(result.getContent()).containsExactly(response);
+            verify(procedureRepository).findByHospitalId(HOSPITAL_ID, pageable);
+        }
     }
 
     @Nested

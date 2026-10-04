@@ -48,6 +48,10 @@ Authorization: Bearer {{hospitalToken}}
 GET {{baseUrl}}/api/hospital/procedures?includeInactive=true
 Authorization: Bearer {{hospitalToken}}
 
+### 5.1 Listar apenas procedimentos inativos
+GET {{baseUrl}}/api/hospital/procedures?active=false
+Authorization: ******
+
 ### 6. Buscar procedimento por ID
 GET {{baseUrl}}/api/hospital/procedures/{{procedureId}}
 Authorization: Bearer {{hospitalToken}}

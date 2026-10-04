@@ -25,6 +25,10 @@ public interface ProcedureService {
 
     Page<ProcedureResponse> listProceduresForHospital(UUID hospitalId, Boolean includeInactive, Pageable pageable);
 
+    Page<ProcedureResponse> listProceduresByActive(String email, Boolean active, Pageable pageable);
+
+    Page<ProcedureResponse> listProceduresForHospitalByActive(UUID hospitalId, Boolean active, Pageable pageable);
+
     ProcedureResponse getProcedureById(String email, UUID id);
 
     ProcedureResponse getProcedureByIdForHospital(UUID hospitalId, UUID id);

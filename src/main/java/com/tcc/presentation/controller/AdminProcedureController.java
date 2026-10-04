@@ -52,9 +52,11 @@ public class AdminProcedureController {
     public ResponseEntity<ApiResponse<Page<ProcedureResponse>>> list(
             @RequestParam UUID hospitalId,
             @RequestParam(defaultValue = "false") Boolean includeInactive,
+            @RequestParam(required = false) Boolean active,
             @PageableDefault(size = 10, sort = "title", direction = Sort.Direction.ASC) Pageable pageable) {
+        Boolean activeFilter = active != null ? active : (includeInactive ? null : true);
         return ResponseEntity.ok(ApiResponse.success(
-                procedureService.listProceduresForHospital(hospitalId, includeInactive, pageable)));
+                procedureService.listProceduresForHospitalByActive(hospitalId, activeFilter, pageable)));
     }
 
     @GetMapping("/{id}")
