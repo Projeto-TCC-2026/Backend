@@ -1,16 +1,17 @@
 package com.tcc.domain.repository;
 
-import com.tcc.domain.model.Alert;
-import org.springframework.data.jpa.repository.JpaRepository;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.List;
-import java.time.LocalDateTime;
-import java.util.Optional;
-import java.util.UUID;
+import com.tcc.domain.model.Alert;
 
 public interface AlertRepository extends JpaRepository<Alert, UUID> {
 
@@ -25,13 +26,29 @@ public interface AlertRepository extends JpaRepository<Alert, UUID> {
     List<Alert> findByPatientIdAndStatus(UUID patientId, String status);
 
     /**
-     * Deduplicação de alerta: já existe alerta em aberto do paciente para este tipo
-     * de leitura? O tipo vem da leitura associada ao alerta, então alerta sem
-     * leitura (criado antes desta versão) nunca casa aqui.
+     * Alerta mais recente do paciente naquele status para o tipo de leitura.
+     *
+     * <p>Usado em dois pontos do fluxo de confirmação: buscar o UNCONFIRMED que a
+     * leitura atual pode confirmar, e buscar o PENDING cuja janela de 4h pode ainda
+     * estar bloqueando novos avisos. Traz a leitura associada junto porque o passo
+     * seguinte compara a leitura do alerta com a leitura anterior.
+     *
+     * <p>Ordena por {@code createdAt} desc e pagina em 1 em vez de usar
+     * {@code findFirst}: o projeto não tem derived query com {@code First} hoje, e
+     * o JPQL explícito permite o JOIN FETCH da leitura na mesma ida ao banco.
      */
-    boolean existsByPatientIdAndStatusAndHealthReading_ReadingType(UUID patientId,
-                                                                  String status,
-                                                                  String readingType);
+    @Query("""
+            SELECT a FROM Alert a
+            JOIN FETCH a.healthReading r
+            WHERE a.patient.id = :patientId
+              AND a.status = :status
+              AND r.readingType = :readingType
+            ORDER BY a.createdAt DESC
+            """)
+    List<Alert> findLatestByPatientAndStatusAndReadingType(@Param("patientId") UUID patientId,
+                                                           @Param("status") String status,
+                                                           @Param("readingType") String readingType,
+                                                           Pageable pageable);
 
     /**
      * Carrega o alerta junto com o paciente, para o listener de e-mail poder ler o

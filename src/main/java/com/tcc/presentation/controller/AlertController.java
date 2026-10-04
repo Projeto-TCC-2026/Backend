@@ -42,18 +42,27 @@ public class AlertController {
     @PreAuthorize("hasAuthority('ROLE_INTEGRATION')")
     @Operation(
         summary = "Receber e avaliar leitura de sinal vital",
-        description = "Grava a leitura recebida em health_readings — dentro ou fora da faixa normal — e depois "
-                    + "compara o valor com a faixa cadastrada para o tipo. Quando o valor está fora dessa faixa, "
-                    + "cria um alerta com status PENDING apontando para a leitura gravada, e dispara os avisos "
-                    + "(push ao paciente e e-mail aos médicos vinculados) depois do commit. Os limites são "
-                    + "inclusivos no normal: valor igual ao mínimo ou ao máximo não gera alerta, e limite nulo "
-                    + "significa ausência de limite daquele lado. Quando não há faixa cadastrada para o tipo, a "
-                    + "leitura é gravada e a resposta vem com alertGenerated=false. "
+        description = "Grava a leitura recebida em health_readings e decide o que fazer com ela. "
+                    + "Valor impossível: quando o valor está fora da faixa plausível do tipo, a leitura é "
+                    + "gravada com suspect=true, não é avaliada, não gera alerta e não avisa ninguém — a "
+                    + "resposta é 201 com suspectReading=true. Tipo sem faixa plausível cadastrada não sofre "
+                    + "esse filtro. "
+                    + "Avaliação: o valor é comparado com a faixa normal do tipo. Os limites são inclusivos no "
+                    + "normal, e limite nulo significa ausência de limite daquele lado. Quando não há faixa "
+                    + "cadastrada para o tipo, a leitura é gravada e a resposta vem com alertGenerated=false. "
+                    + "Confirmação por duas leituras: a primeira leitura fora da faixa cria um alerta "
+                    + "UNCONFIRMED e dispara apenas o push ao paciente. Se a leitura seguinte do mesmo tipo "
+                    + "também estiver fora da faixa e tiver sido medida em até 2 horas depois, o alerta passa a "
+                    + "PENDING, grava confirmed_at e só então os médicos vinculados recebem e-mail, com as duas "
+                    + "leituras. Se a leitura seguinte estiver dentro da faixa, o alerta passa a NOT_CONFIRMED e "
+                    + "ninguém é avisado. Leitura suspeita no meio é ignorada: não confirma nem quebra a "
+                    + "sequência. "
+                    + "Janela de 4 horas: enquanto existir alerta PENDING do mesmo paciente e tipo confirmado há "
+                    + "menos de 4 horas, nova leitura fora da faixa é apenas gravada, sem criar alerta e sem "
+                    + "avisar. Passada a janela, uma nova leitura fora da faixa cria outro UNCONFIRMED. "
                     + "Idempotência: leitura com o mesmo patientId, readingType e measuredAt já recebida não é "
                     + "gravada de novo, não gera alerta e não avisa ninguém — a resposta é 200 com "
                     + "duplicateReading=true e o id da leitura original. "
-                    + "Deduplicação: se já existe alerta PENDING do mesmo paciente para o mesmo tipo de leitura, "
-                    + "nenhum novo alerta é criado e nenhum aviso é disparado, mas a leitura é gravada. "
                     + "Endpoint chamado por serviço, autenticado por chave de integração no header "
                     + "X-Integration-Key."
     )
@@ -63,7 +72,9 @@ public class AlertController {
                 description = "Leitura já recebida anteriormente. Nada foi gravado e nenhum aviso foi enviado"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
-                description = "Leitura gravada e avaliada. alertGenerated indica se um alerta foi criado"),
+                description = "Leitura gravada. alertGenerated indica se um alerta foi criado, alertStatus traz "
+                            + "o status do alerta criado ou atualizado, e suspectReading indica leitura "
+                            + "descartada por valor implausível"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "Dados inválidos na requisição"),

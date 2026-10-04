@@ -1,5 +1,6 @@
 package com.tcc.application.listener;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,7 +28,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.tcc.application.port.out.PushNotificationPublisher;
 import com.tcc.domain.event.AlertCreatedEvent;
 import com.tcc.domain.model.Alert;
+import com.tcc.domain.model.AlertStatus;
 import com.tcc.domain.model.DeviceToken;
+import com.tcc.domain.model.HealthReading;
 import com.tcc.domain.model.Patient;
 import com.tcc.domain.model.Role;
 import com.tcc.domain.model.User;
@@ -55,6 +58,7 @@ class AlertPushNotificationListenerTest {
 
     private User user;
     private Patient patient;
+    private HealthReading reading;
     private Alert alert;
 
     @BeforeEach
@@ -66,12 +70,21 @@ class AlertPushNotificationListenerTest {
         patient.setId(UUID.randomUUID());
         patient.setUser(user);
 
+        reading = new HealthReading();
+        reading.setId(UUID.randomUUID());
+        reading.setPatient(patient);
+        reading.setReadingType("HEART_RATE");
+        reading.setValue("155.0");
+        reading.setMeasuredAt(LocalDateTime.of(2026, 9, 29, 14, 32));
+
         alert = new Alert();
         alert.setId(ALERT_ID);
         alert.setPatient(patient);
+        alert.setHealthReading(reading);
         alert.setSeverity("CRITICAL");
         alert.setDescription("Valor acima do máximo normal de 120.0 para HEART_RATE");
-        alert.setStatus("PENDING");
+        // O push sai na criação do alerta, quando ele ainda está UNCONFIRMED.
+        alert.setStatus(AlertStatus.UNCONFIRMED);
     }
 
     private AlertCreatedEvent eventOf(Alert alert) {
@@ -108,8 +121,8 @@ class AlertPushNotificationListenerTest {
         }
 
         @Test
-        @DisplayName("deve derivar o titulo da severidade e o corpo da descricao do alerta")
-        void shouldDeriveTitleFromSeverityAndBodyFromDescription() {
+        @DisplayName("deve derivar o titulo da severidade e o corpo do tipo da leitura")
+        void shouldDeriveTitleFromSeverityAndBodyFromReadingType() {
             when(alertRepository.findById(ALERT_ID)).thenReturn(Optional.of(alert));
             when(deviceTokenRepository.findByUserId(user.getId()))
                     .thenReturn(List.of(deviceTokenOf(TOKEN_A)));
@@ -124,7 +137,52 @@ class AlertPushNotificationListenerTest {
                     anyList(), titleCaptor.capture(), bodyCaptor.capture(), eq(ALERT_ID));
 
             assertThat(titleCaptor.getValue()).isEqualTo("Alerta crítico de saúde");
-            assertThat(bodyCaptor.getValue()).isEqualTo(alert.getDescription());
+            assertThat(bodyCaptor.getValue())
+                    .isEqualTo("Sua medição de frequência cardíaca saiu do normal. "
+                            + "Se não estiver bem, use a opção 'Não estou bem' no app.");
+        }
+
+        /**
+         * O corpo não pode repassar o limite numérico violado, que é a descrição do
+         * alerta: é informação clínica crua para o paciente numa notificação.
+         */
+        @Test
+        @DisplayName("corpo nao deve conter o limite numerico da descricao do alerta")
+        void shouldNotLeakThresholdDetailIntoPushBody() {
+            when(alertRepository.findById(ALERT_ID)).thenReturn(Optional.of(alert));
+            when(deviceTokenRepository.findByUserId(user.getId()))
+                    .thenReturn(List.of(deviceTokenOf(TOKEN_A)));
+            when(pushNotificationPublisher.publishAlertCreated(anyList(), anyString(), anyString(), eq(ALERT_ID)))
+                    .thenReturn(List.of());
+
+            listener.onAlertCreated(eventOf(alert));
+
+            ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+            verify(pushNotificationPublisher).publishAlertCreated(
+                    anyList(), anyString(), bodyCaptor.capture(), eq(ALERT_ID));
+
+            assertThat(bodyCaptor.getValue())
+                    .doesNotContain("120.0")
+                    .doesNotContain("155.0");
+        }
+
+        @Test
+        @DisplayName("deve traduzir SPO2 e TEMPERATURE no corpo do push")
+        void shouldTranslateOtherReadingTypes() {
+            reading.setReadingType("SPO2");
+            when(alertRepository.findById(ALERT_ID)).thenReturn(Optional.of(alert));
+            when(deviceTokenRepository.findByUserId(user.getId()))
+                    .thenReturn(List.of(deviceTokenOf(TOKEN_A)));
+            when(pushNotificationPublisher.publishAlertCreated(anyList(), anyString(), anyString(), eq(ALERT_ID)))
+                    .thenReturn(List.of());
+
+            listener.onAlertCreated(eventOf(alert));
+
+            ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+            verify(pushNotificationPublisher).publishAlertCreated(
+                    anyList(), anyString(), bodyCaptor.capture(), eq(ALERT_ID));
+
+            assertThat(bodyCaptor.getValue()).contains("saturação de oxigênio");
         }
 
         @Test
@@ -147,9 +205,9 @@ class AlertPushNotificationListenerTest {
         }
 
         @Test
-        @DisplayName("deve usar corpo generico quando a descricao do alerta esta em branco")
-        void shouldUseGenericBodyWhenDescriptionIsBlank() {
-            alert.setDescription("   ");
+        @DisplayName("deve usar rotulo generico quando o alerta nao tem leitura associada")
+        void shouldUseGenericLabelWhenAlertHasNoReading() {
+            alert.setHealthReading(null);
             when(alertRepository.findById(ALERT_ID)).thenReturn(Optional.of(alert));
             when(deviceTokenRepository.findByUserId(user.getId()))
                     .thenReturn(List.of(deviceTokenOf(TOKEN_A)));
@@ -162,7 +220,10 @@ class AlertPushNotificationListenerTest {
             verify(pushNotificationPublisher).publishAlertCreated(
                     anyList(), anyString(), bodyCaptor.capture(), eq(ALERT_ID));
 
-            assertThat(bodyCaptor.getValue()).isNotBlank();
+            assertThat(bodyCaptor.getValue())
+                    .isNotBlank()
+                    .contains("sinal vital")
+                    .contains("Não estou bem");
         }
     }
 

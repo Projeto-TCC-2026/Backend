@@ -9,10 +9,16 @@ import java.util.UUID;
  * havia sido recebida antes, {@code duplicateReading} vem true e o id é o da
  * leitura original — nada foi gravado de novo e nenhum alerta foi criado.
  *
- * <p>Quando a leitura está dentro da faixa normal, quando não há faixa cadastrada
- * para o tipo, ou quando já existe alerta em aberto do mesmo paciente para o mesmo
- * tipo, {@code alertGenerated} vem false e severity, alertId e reason vêm nulos.
- * Nesses casos a leitura continua sendo gravada.
+ * <p>{@code suspectReading} vem true quando o valor está fora da faixa plausível do
+ * tipo: a leitura é gravada como suspeita e não avaliada, então não há alerta nem
+ * aviso. A resposta continua sendo de sucesso.
+ *
+ * <p>{@code alertStatus} é o status do alerta criado ou atualizado nesta chamada
+ * (UNCONFIRMED, PENDING ou NOT_CONFIRMED), ou nulo quando nenhum alerta foi tocado.
+ *
+ * <p>{@code alertGenerated} indica que esta chamada <strong>criou</strong> um alerta
+ * novo. Confirmação de alerta existente não cria: nesse caso {@code alertGenerated}
+ * é false, mas {@code alertId} e {@code alertStatus} vêm preenchidos.
  */
 public record AlertEvaluationResponse(
         boolean alertGenerated,
@@ -20,22 +26,48 @@ public record AlertEvaluationResponse(
         UUID alertId,
         String reason,
         UUID healthReadingId,
-        boolean duplicateReading
+        boolean duplicateReading,
+        boolean suspectReading,
+        String alertStatus
 ) {
 
     /** Leitura já recebida antes: nada gravado, nada criado, nada avisado. */
     public static AlertEvaluationResponse duplicate(UUID healthReadingId) {
-        return new AlertEvaluationResponse(false, null, null, null, healthReadingId, true);
+        return new AlertEvaluationResponse(
+                false, null, null, null, healthReadingId, true, false, null);
     }
 
-    /** Leitura gravada e dentro do esperado, ou sem alerta por deduplicação. */
+    /** Valor fora da faixa plausível: gravada como suspeita, sem avaliação. */
+    public static AlertEvaluationResponse suspect(UUID healthReadingId, String reason) {
+        return new AlertEvaluationResponse(
+                false, null, null, reason, healthReadingId, false, true, null);
+    }
+
+    /** Leitura gravada e avaliada, sem alerta criado nem atualizado. */
     public static AlertEvaluationResponse withoutAlert(UUID healthReadingId) {
-        return new AlertEvaluationResponse(false, null, null, null, healthReadingId, false);
+        return new AlertEvaluationResponse(
+                false, null, null, null, healthReadingId, false, false, null);
     }
 
-    /** Leitura gravada e alerta criado a partir dela. */
+    /**
+     * Leitura gravada e alerta criado a partir dela, ainda não confirmado
+     * (UNCONFIRMED).
+     */
     public static AlertEvaluationResponse withAlert(String severity, UUID alertId,
-                                                   String reason, UUID healthReadingId) {
-        return new AlertEvaluationResponse(true, severity, alertId, reason, healthReadingId, false);
+                                                    String reason, UUID healthReadingId,
+                                                    String alertStatus) {
+        return new AlertEvaluationResponse(
+                true, severity, alertId, reason, healthReadingId, false, false, alertStatus);
+    }
+
+    /**
+     * Alerta que já existia teve o status alterado por esta leitura: confirmado
+     * (PENDING) ou descartado (NOT_CONFIRMED). Nenhum alerta novo foi criado.
+     */
+    public static AlertEvaluationResponse withUpdatedAlert(String severity, UUID alertId,
+                                                           String reason, UUID healthReadingId,
+                                                           String alertStatus) {
+        return new AlertEvaluationResponse(
+                false, severity, alertId, reason, healthReadingId, false, false, alertStatus);
     }
 }

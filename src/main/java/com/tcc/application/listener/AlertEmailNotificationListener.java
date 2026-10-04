@@ -16,7 +16,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 import com.tcc.application.port.out.AlertEmailSender;
-import com.tcc.domain.event.AlertCreatedEvent;
+import com.tcc.domain.event.AlertConfirmedEvent;
 import com.tcc.domain.model.Alert;
 import com.tcc.domain.model.Doctor;
 import com.tcc.domain.model.HealthReading;
@@ -29,9 +29,13 @@ import com.tcc.domain.repository.NotificationRepository;
  * Avisa por e-mail os médicos com vínculo ativo com o paciente do alerta, e grava
  * uma linha em {@code notifications} por destinatário.
  *
- * <p>Listener separado do {@code AlertPushNotificationListener} de propósito: os
- * dois escutam o mesmo evento e falham de forma independente. Erro no e-mail não
- * afeta o alerta já gravado nem o push ao paciente, e vice-versa.
+ * <p>Escuta {@link AlertConfirmedEvent}, não a criação do alerta: o médico só é
+ * avisado depois que uma segunda leitura seguida confirma o desvio. Na criação
+ * (alerta UNCONFIRMED) apenas o paciente recebe push, pelo
+ * {@code AlertPushNotificationListener}.
+ *
+ * <p>Os dois listeners são separados de propósito e falham de forma independente.
+ * Erro no e-mail não afeta o alerta já gravado nem o push ao paciente, e vice-versa.
  */
 @Component
 public class AlertEmailNotificationListener {
@@ -81,18 +85,19 @@ public class AlertEmailNotificationListener {
      */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void onAlertCreated(AlertCreatedEvent event) {
+    public void onAlertConfirmed(AlertConfirmedEvent event) {
         UUID alertId = event.alert().getId();
 
         try {
-            notifyDoctors(alertId);
+            notifyDoctors(alertId, event.firstReading(), event.confirmingReading());
         } catch (Exception e) {
             log.error("Falha ao enviar e-mail do alerta {}. exception={}",
                     alertId, e.getClass().getSimpleName());
         }
     }
 
-    private void notifyDoctors(UUID alertId) {
+    private void notifyDoctors(UUID alertId, HealthReading firstReading,
+                               HealthReading confirmingReading) {
         Alert alert = alertRepository.findByIdWithPatientAndReading(alertId).orElse(null);
 
         if (alert == null) {
@@ -110,7 +115,7 @@ public class AlertEmailNotificationListener {
         }
 
         String subject = buildSubject(alert);
-        String body = buildBody(alert);
+        String body = buildBody(alert, firstReading, confirmingReading);
 
         for (Doctor doctor : doctors) {
             notifyDoctor(alert, doctor, subject, body);
@@ -148,35 +153,62 @@ public class AlertEmailNotificationListener {
     }
 
     /**
-     * Texto simples, em português, com o que o médico precisa para decidir: quem,
-     * o que foi medido, quanto deu, a gravidade e quando a medição aconteceu.
+     * Texto simples, em português, com o que o médico precisa para decidir: quem, o
+     * que foi medido, as DUAS leituras que confirmaram o desvio, a gravidade e
+     * quando cada medição aconteceu.
+     *
+     * <p>As duas leituras aparecem porque o alerta só chega ao médico depois de
+     * confirmado: mostrar apenas o último valor esconderia a progressão, que é o que
+     * distingue um desvio sustentado de uma medição isolada.
      *
      * <p>O horário da medição é o ponto central: a leitura pode chegar atrasada pela
      * fila, então o horário de criação do alerta não serve como referência clínica.
      */
-    private String buildBody(Alert alert) {
-        HealthReading reading = alert.getHealthReading();
-
+    private String buildBody(Alert alert, HealthReading firstReading,
+                             HealthReading confirmingReading) {
         return """
-                Um alerta foi gerado para o paciente sob seus cuidados.
+                Um alerta foi confirmado por duas leituras seguidas para o paciente sob seus cuidados.
 
                 Paciente: %s
                 Tipo da leitura: %s
-                Valor medido: %s
                 Severidade: %s
-                Horário da medição: %s (horário de Brasília)
+
+                1ª leitura: %s em %s
+                2ª leitura: %s em %s
+                (horários de Brasília)
 
                 Motivo: %s
 
                 Acesse o portal para ver o histórico completo do paciente.
                 """.formatted(
                 alert.getPatient().getFullName(),
-                reading == null ? NOT_INFORMED : reading.getReadingType(),
-                formatValue(reading),
+                readingType(alert, firstReading, confirmingReading),
                 alert.getSeverity() == null ? NOT_INFORMED : alert.getSeverity(),
-                formatMeasuredAt(reading),
+                formatValue(firstReading),
+                formatMeasuredAt(firstReading),
+                formatValue(confirmingReading),
+                formatMeasuredAt(confirmingReading),
                 alert.getDescription() == null || alert.getDescription().isBlank()
                         ? NOT_INFORMED : alert.getDescription());
+    }
+
+    /**
+     * Tipo da leitura, procurado nas três fontes disponíveis. As duas leituras do
+     * evento são sempre do mesmo tipo — a confirmação exige isso — então qualquer uma
+     * serve; a do alerta entra como terceira opção.
+     */
+    private String readingType(Alert alert, HealthReading firstReading,
+                               HealthReading confirmingReading) {
+        if (firstReading != null && firstReading.getReadingType() != null) {
+            return firstReading.getReadingType();
+        }
+        if (confirmingReading != null && confirmingReading.getReadingType() != null) {
+            return confirmingReading.getReadingType();
+        }
+        if (alert.getHealthReading() != null && alert.getHealthReading().getReadingType() != null) {
+            return alert.getHealthReading().getReadingType();
+        }
+        return NOT_INFORMED;
     }
 
     private String formatValue(HealthReading reading) {

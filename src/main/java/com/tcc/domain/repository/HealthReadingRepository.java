@@ -1,12 +1,16 @@
 package com.tcc.domain.repository;
 
-import com.tcc.domain.model.HealthReading;
-import org.springframework.data.jpa.repository.JpaRepository;
-
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import com.tcc.domain.model.HealthReading;
 
 public interface HealthReadingRepository extends JpaRepository<HealthReading, UUID> {
     
@@ -35,4 +39,28 @@ public interface HealthReadingRepository extends JpaRepository<HealthReading, UU
     Optional<HealthReading> findByPatientIdAndReadingTypeAndMeasuredAt(UUID patientId,
                                                                       String readingType,
                                                                       LocalDateTime measuredAt);
+
+    /**
+     * "Leitura anterior" do mesmo paciente e tipo: a mais recente, não suspeita, com
+     * {@code measuredAt} estritamente menor que o da leitura atual.
+     *
+     * <p>O filtro {@code suspect = false} é o que faz uma leitura impossível no meio
+     * do caminho não quebrar a sequência de confirmação — ela é pulada como se não
+     * existisse.
+     *
+     * <p>Ordena por {@code measuredAt} desc e pagina em 1; quem chama pega o
+     * primeiro elemento, se houver.
+     */
+    @Query("""
+            SELECT r FROM HealthReading r
+            WHERE r.patient.id = :patientId
+              AND r.readingType = :readingType
+              AND r.suspect = false
+              AND r.measuredAt < :before
+            ORDER BY r.measuredAt DESC
+            """)
+    List<HealthReading> findPreviousTrustedReadings(@Param("patientId") UUID patientId,
+                                                    @Param("readingType") String readingType,
+                                                    @Param("before") LocalDateTime before,
+                                                    Pageable pageable);
 }

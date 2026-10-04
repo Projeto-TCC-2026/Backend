@@ -1,10 +1,22 @@
 package com.tcc.domain.model;
 
-import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "alerts")
@@ -36,6 +48,15 @@ public class Alert {
 
     @Column(nullable = false)
     private LocalDateTime createdAt;
+
+    /**
+     * Momento em que o alerta passou de UNCONFIRMED para PENDING, ou seja, quando
+     * uma segunda leitura seguida confirmou o problema. Nulo enquanto o alerta não
+     * for confirmado. A janela de 4h que evita repetir o aviso ao médico é contada
+     * a partir daqui.
+     */
+    @Column(name = "confirmed_at")
+    private LocalDateTime confirmedAt;
 
     @OneToMany(mappedBy = "alert", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Notification> notifications = new ArrayList<>();
@@ -119,6 +140,14 @@ public class Alert {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getConfirmedAt() {
+        return confirmedAt;
+    }
+
+    public void setConfirmedAt(LocalDateTime confirmedAt) {
+        this.confirmedAt = confirmedAt;
     }
 
     public List<Notification> getNotifications() {

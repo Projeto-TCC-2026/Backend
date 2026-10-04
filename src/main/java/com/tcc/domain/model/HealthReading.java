@@ -1,10 +1,21 @@
 package com.tcc.domain.model;
 
-import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "health_readings")
@@ -42,6 +53,14 @@ public class HealthReading {
 
     @Column(nullable = false)
     private LocalDateTime measuredAt;
+
+    /**
+     * Leitura fora da faixa plausível do tipo, ou seja, valor que o corpo não
+     * produz. Gravada para não perder o registro do que o sensor enviou, mas
+     * ignorada na avaliação de risco e na sequência de confirmação.
+     */
+    @Column(nullable = false)
+    private Boolean suspect = false;
 
     @OneToMany(mappedBy = "healthReading", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Alert> alerts = new ArrayList<>();
@@ -121,6 +140,18 @@ public class HealthReading {
 
     public void setMeasuredAt(LocalDateTime measuredAt) {
         this.measuredAt = measuredAt;
+    }
+
+    public Boolean getSuspect() {
+        return suspect;
+    }
+
+    public void setSuspect(Boolean suspect) {
+        this.suspect = suspect;
+    }
+
+    public boolean isSuspect() {
+        return suspect != null && suspect;
     }
 
     public List<Alert> getAlerts() {

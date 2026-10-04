@@ -12,16 +12,39 @@
 ### O que o endpoint faz, em ordem:
 ###   1. Leitura repetida (mesmo patientId + readingType + measuredAt)? Responde 200
 ###      com duplicateReading=true e não grava nada.
-###   2. Grava a leitura em health_readings — normal ou fora da faixa.
-###   3. Compara o valor com a faixa cadastrada para o tipo.
-###   4. Já existe alerta PENDING do mesmo paciente para o mesmo tipo? Não cria outro.
-###   5. Cria o alerta com health_reading_id preenchido e dispara os avisos
-###      (push ao paciente, e-mail aos médicos vinculados) depois do commit.
+###   2. Valor fora da faixa PLAUSÍVEL? Grava com suspect=true, NÃO avalia, não cria
+###      alerta e não avisa ninguém. Responde 201 com suspectReading=true.
+###   3. Grava a leitura em health_readings — normal ou fora da faixa normal.
+###   4. Compara o valor com a faixa normal cadastrada para o tipo.
+###   5. Decide o que fazer com o alerta (ver "CONFIRMAÇÃO" abaixo).
 ###
-### Faixas normais cadastradas na V26 (limites INCLUSIVOS no normal):
-###   HEART_RATE  50 a 120
-###   SPO2        mínimo 90, sem máximo
-###   TEMPERATURE 35.5 a 38.0
+### CONFIRMAÇÃO POR DUAS LEITURAS
+### O médico só é avisado depois que DUAS leituras seguidas confirmam o desvio.
+### Status do alerta: UNCONFIRMED -> PENDING -> RESOLVED, ou UNCONFIRMED -> NOT_CONFIRMED.
+###
+###   1ª leitura fora da faixa      -> cria alerta UNCONFIRMED. Só PUSH ao paciente.
+###   2ª leitura fora, em até 2h,
+###   sendo a leitura imediatamente
+###   anterior a do alerta          -> alerta passa a PENDING, grava confirmed_at.
+###                                    Só E-MAIL aos médicos, com as DUAS leituras.
+###   2ª leitura fora com mais
+###   de 2h de diferença            -> não confirma; cria um novo UNCONFIRMED.
+###   leitura dentro da faixa
+###   com UNCONFIRMED aberto        -> alerta passa a NOT_CONFIRMED. Ninguém é avisado.
+###   leitura suspeita no meio      -> ignorada: não confirma nem quebra a sequência.
+###
+### JANELA DE 4 HORAS
+### Enquanto houver alerta PENDING do mesmo paciente e tipo confirmado há menos de
+### 4h, nova leitura fora da faixa é apenas gravada — nada é criado e ninguém é
+### avisado. Passadas as 4h (contadas de confirmed_at), o fluxo volta ao normal e
+### uma nova leitura fora da faixa cria outro UNCONFIRMED.
+###
+### Faixas cadastradas (limites INCLUSIVOS em ambas):
+###   tipo         normal (V26)        plausível (V35)
+###   HEART_RATE   50 a 120            25 a 250
+###   SPO2         mínimo 90           50 a 100
+###   TEMPERATURE  35.5 a 38.0         30 a 45
+### Tipo sem faixa plausível cadastrada não sofre o filtro de implausibilidade.
 ###
 ### Campo unit é opcional e vai no corpo do e-mail junto com o valor.
 ###
@@ -46,7 +69,9 @@ X-Integration-Key: {{integrationKey}}
   "unit": "bpm"
 }
 
-### 2. Frequência cardíaca abaixo do mínimo -> 201, alertGenerated=true, severity CRITICAL
+### 2. 1ª leitura abaixo do mínimo -> 201, alertGenerated=true,
+###    alertStatus=UNCONFIRMED, severity CRITICAL
+### Só o PUSH ao paciente sai aqui. Nenhum e-mail ao médico.
 ### Resposta traz healthReadingId: é a leitura que o alerta referencia.
 POST {{baseUrl}}/integration/alerts/evaluate
 Content-Type: application/json
@@ -88,8 +113,10 @@ X-Integration-Key: {{integrationKey}}
   "unit": "bpm"
 }
 
-### 4. Outra leitura alterada de HEART_RATE, com o alerta da 2 ainda PENDING
-### -> 201, leitura gravada, alertGenerated=false (deduplicação por paciente + tipo)
+### 4. 2ª leitura fora da faixa, 5 min depois da 2 -> CONFIRMA o alerta
+### -> 201, alertGenerated=false (nenhum alerta novo), alertStatus=PENDING
+### O alerta da 2 passa a PENDING com confirmed_at = 14:40Z. Agora sai o
+### E-MAIL aos médicos vinculados, mostrando as duas leituras (42 e 38).
 POST {{baseUrl}}/integration/alerts/evaluate
 Content-Type: application/json
 X-Integration-Key: {{integrationKey}}
@@ -97,9 +124,84 @@ X-Integration-Key: {{integrationKey}}
 {
   "patientId": "550e8400-e29b-41d4-a716-446655440000",
   "readingType": "HEART_RATE",
-  "value": 155,
+  "value": 38,
   "measuredAt": "2026-08-29T14:40:00Z",
   "unit": "bpm"
+}
+
+### 4b. 3ª leitura fora da faixa, 1h depois -> dentro da janela de 4h
+### -> 201, alertGenerated=false, alertStatus=null
+### Leitura gravada; nenhum alerta criado e nenhum aviso repetido.
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 40,
+  "measuredAt": "2026-08-29T15:40:00Z",
+  "unit": "bpm"
+}
+
+### 4c. Leitura fora da faixa mais de 4h após a confirmação (14:40Z + 4h)
+### -> 201, alertGenerated=true, alertStatus=UNCONFIRMED
+### A janela venceu: o ciclo recomeça e o paciente recebe push de novo.
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 40,
+  "measuredAt": "2026-08-29T19:00:00Z",
+  "unit": "bpm"
+}
+
+### 4d. Leitura NORMAL com o UNCONFIRMED da 4c aberto
+### -> 201, alertGenerated=false, alertStatus=NOT_CONFIRMED
+### O desvio não se repetiu: o alerta é descartado e ninguém é avisado.
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 80,
+  "measuredAt": "2026-08-29T19:30:00Z",
+  "unit": "bpm"
+}
+
+### 4e. Leitura IMPOSSÍVEL (fora da faixa plausível 25–250)
+### -> 201, suspectReading=true, alertStatus=null
+### Gravada com suspect=true, não avaliada. Não cria alerta, não avisa ninguém e
+### não interfere na sequência de confirmação. 201 de propósito: um 4xx faria a
+### fila mandar a mensagem para a DLQ e a leitura se perderia.
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "HEART_RATE",
+  "value": 400,
+  "measuredAt": "2026-08-29T20:00:00Z",
+  "unit": "bpm"
+}
+
+### 4f. SPO2 abaixo do mínimo plausível (50) -> 201, suspectReading=true
+POST {{baseUrl}}/integration/alerts/evaluate
+Content-Type: application/json
+X-Integration-Key: {{integrationKey}}
+
+{
+  "patientId": "550e8400-e29b-41d4-a716-446655440000",
+  "readingType": "SPO2",
+  "value": 12,
+  "measuredAt": "2026-08-29T20:05:00Z",
+  "unit": "%"
 }
 
 ### 5. Valor exatamente igual ao limite -> 201, alertGenerated=false (limite é inclusivo)
@@ -115,8 +217,9 @@ X-Integration-Key: {{integrationKey}}
   "unit": "bpm"
 }
 
-### 6. SPO2 abaixo do mínimo -> 201, alertGenerated=true
-### Tipo diferente de HEART_RATE, então o alerta PENDING da 2 não bloqueia este.
+### 6. SPO2 abaixo do mínimo -> 201, alertGenerated=true, alertStatus=UNCONFIRMED
+### A confirmação e a janela de 4h são por paciente MAIS tipo de leitura, então o
+### alerta de HEART_RATE não interfere aqui.
 POST {{baseUrl}}/integration/alerts/evaluate
 Content-Type: application/json
 X-Integration-Key: {{integrationKey}}
@@ -142,7 +245,7 @@ X-Integration-Key: {{integrationKey}}
   "unit": "%"
 }
 
-### 8. Temperatura acima do máximo -> 201, alertGenerated=true
+### 8. Temperatura acima do máximo -> 201, alertGenerated=true, alertStatus=UNCONFIRMED
 ### Medição antiga chegando atrasada: o e-mail ao médico mostra measuredAt,
 ### não o horário de chegada.
 POST {{baseUrl}}/integration/alerts/evaluate
@@ -159,6 +262,8 @@ X-Integration-Key: {{integrationKey}}
 
 ### 9. Tipo de leitura sem faixa cadastrada -> 201, alertGenerated=false (não é erro)
 ### A leitura é gravada mesmo sem faixa: o histórico não depende da avaliação.
+### Sem faixa normal não há alerta, e sem faixa plausível não há filtro de
+### implausibilidade — então suspectReading também vem false, qualquer que seja o valor.
 POST {{baseUrl}}/integration/alerts/evaluate
 Content-Type: application/json
 X-Integration-Key: {{integrationKey}}

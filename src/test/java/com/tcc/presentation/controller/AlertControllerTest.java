@@ -23,6 +23,7 @@ import com.tcc.application.dto.response.AlertEvaluationResponse;
 import com.tcc.application.dto.response.ApiResponse;
 import com.tcc.application.service.AlertDuplicateReadingException;
 import com.tcc.application.service.AlertService;
+import com.tcc.domain.model.AlertStatus;
 import com.tcc.exception.ResourceNotFoundException;
 
 /**
@@ -56,10 +57,11 @@ class AlertControllerTest {
     class NewReading {
 
         @Test
-        @DisplayName("leitura gravada com alerta deve responder 201")
+        @DisplayName("leitura gravada com alerta UNCONFIRMED deve responder 201")
         void shouldReturnCreatedWhenAlertIsGenerated() {
             when(alertService.evaluateReading(any())).thenReturn(
-                    AlertEvaluationResponse.withAlert("CRITICAL", ALERT_ID, "Valor acima", READING_ID));
+                    AlertEvaluationResponse.withAlert("CRITICAL", ALERT_ID, "Valor acima",
+                            READING_ID, AlertStatus.UNCONFIRMED));
 
             ResponseEntity<ApiResponse<AlertEvaluationResponse>> response =
                     alertController.evaluateReading(request());
@@ -68,6 +70,8 @@ class AlertControllerTest {
             assertThat(response.getBody()).isNotNull();
             assertThat(response.getBody().getData().alertGenerated()).isTrue();
             assertThat(response.getBody().getData().healthReadingId()).isEqualTo(READING_ID);
+            assertThat(response.getBody().getData().alertStatus()).isEqualTo(AlertStatus.UNCONFIRMED);
+            assertThat(response.getBody().getData().suspectReading()).isFalse();
         }
 
         @Test
@@ -82,6 +86,50 @@ class AlertControllerTest {
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
             assertThat(response.getBody().getData().alertGenerated()).isFalse();
             assertThat(response.getBody().getData().duplicateReading()).isFalse();
+            assertThat(response.getBody().getData().alertStatus()).isNull();
+        }
+
+        @Test
+        @DisplayName("alerta confirmado nesta chamada deve responder 201 com PENDING e alertGenerated false")
+        void shouldReturnCreatedWhenAlertIsConfirmed() {
+            when(alertService.evaluateReading(any())).thenReturn(
+                    AlertEvaluationResponse.withUpdatedAlert("CRITICAL", ALERT_ID, "Valor acima",
+                            READING_ID, AlertStatus.PENDING));
+
+            ResponseEntity<ApiResponse<AlertEvaluationResponse>> response =
+                    alertController.evaluateReading(request());
+
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+            // Nenhum alerta novo foi criado: o existente foi promovido.
+            assertThat(response.getBody().getData().alertGenerated()).isFalse();
+            assertThat(response.getBody().getData().alertStatus()).isEqualTo(AlertStatus.PENDING);
+            assertThat(response.getBody().getData().alertId()).isEqualTo(ALERT_ID);
+        }
+    }
+
+    @Nested
+    @DisplayName("leitura implausível")
+    class SuspectReading {
+
+        /**
+         * 201 e não 4xx de propósito: um 4xx faria a fila mandar a mensagem para a
+         * DLQ e a leitura se perderia, quando o certo é registrá-la como suspeita.
+         */
+        @Test
+        @DisplayName("leitura suspeita deve responder 201 com suspectReading true")
+        void shouldReturnCreatedForSuspectReading() {
+            when(alertService.evaluateReading(any())).thenReturn(
+                    AlertEvaluationResponse.suspect(READING_ID, "Valor fora da faixa plausível"));
+
+            ResponseEntity<ApiResponse<AlertEvaluationResponse>> response =
+                    alertController.evaluateReading(request());
+
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+            assertThat(response.getBody().isSuccess()).isTrue();
+            assertThat(response.getBody().getData().suspectReading()).isTrue();
+            assertThat(response.getBody().getData().alertGenerated()).isFalse();
+            assertThat(response.getBody().getData().alertStatus()).isNull();
+            assertThat(response.getBody().getData().healthReadingId()).isEqualTo(READING_ID);
         }
     }
 

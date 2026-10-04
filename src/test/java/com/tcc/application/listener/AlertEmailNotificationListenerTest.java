@@ -27,7 +27,7 @@ import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.tcc.application.port.out.AlertEmailSender;
-import com.tcc.domain.event.AlertCreatedEvent;
+import com.tcc.domain.event.AlertConfirmedEvent;
 import com.tcc.domain.model.Alert;
 import com.tcc.domain.model.Doctor;
 import com.tcc.domain.model.HealthReading;
@@ -63,16 +63,19 @@ class AlertEmailNotificationListenerTest {
     private static final String DOCTOR_A_EMAIL = "doctor.a@tcc.com";
     private static final String DOCTOR_B_EMAIL = "doctor.b@tcc.com";
     /**
-     * Horário gravado, em UTC — é a convenção da coluna {@code measured_at}.
+     * Horários gravados, em UTC — é a convenção da coluna {@code measured_at}.
      * 14:32 UTC equivale a 11:32 em America/Sao_Paulo (UTC-3), e é esse o horário
      * que o e-mail precisa mostrar, em qualquer fuso de servidor.
      */
-    private static final LocalDateTime MEASURED_AT_UTC = LocalDateTime.of(2026, 9, 29, 14, 32);
+    private static final LocalDateTime FIRST_MEASURED_AT_UTC = LocalDateTime.of(2026, 9, 29, 13, 15);
+    private static final LocalDateTime SECOND_MEASURED_AT_UTC = LocalDateTime.of(2026, 9, 29, 14, 32);
 
-    private static final String EXPECTED_IN_EMAIL = "29/09/2026 às 11:32";
+    private static final String FIRST_EXPECTED_IN_EMAIL = "29/09/2026 às 10:15";
+    private static final String SECOND_EXPECTED_IN_EMAIL = "29/09/2026 às 11:32";
 
     private Patient patient;
-    private HealthReading reading;
+    private HealthReading firstReading;
+    private HealthReading confirmingReading;
     private Alert alert;
 
     @BeforeEach
@@ -81,25 +84,32 @@ class AlertEmailNotificationListenerTest {
         patient.setId(PATIENT_ID);
         patient.setFullName("Maria da Silva");
 
-        reading = new HealthReading();
-        reading.setId(UUID.randomUUID());
-        reading.setPatient(patient);
-        reading.setReadingType("HEART_RATE");
-        reading.setValue("155.0");
-        reading.setUnit("bpm");
-        reading.setMeasuredAt(MEASURED_AT_UTC);
+        firstReading = readingOf("150.0", FIRST_MEASURED_AT_UTC);
+        confirmingReading = readingOf("155.0", SECOND_MEASURED_AT_UTC);
 
         alert = new Alert();
         alert.setId(ALERT_ID);
         alert.setPatient(patient);
-        alert.setHealthReading(reading);
+        alert.setHealthReading(firstReading);
         alert.setSeverity("CRITICAL");
         alert.setDescription("Valor acima do máximo normal de 120.0 para HEART_RATE");
         alert.setStatus("PENDING");
+        alert.setConfirmedAt(SECOND_MEASURED_AT_UTC);
     }
 
-    private AlertCreatedEvent eventOf() {
-        return new AlertCreatedEvent(alert);
+    private HealthReading readingOf(String value, LocalDateTime measuredAt) {
+        HealthReading reading = new HealthReading();
+        reading.setId(UUID.randomUUID());
+        reading.setPatient(patient);
+        reading.setReadingType("HEART_RATE");
+        reading.setValue(value);
+        reading.setUnit("bpm");
+        reading.setMeasuredAt(measuredAt);
+        return reading;
+    }
+
+    private AlertConfirmedEvent eventOf() {
+        return new AlertConfirmedEvent(alert, firstReading, confirmingReading);
     }
 
     private Doctor doctorOf(String email) {
@@ -134,7 +144,7 @@ class AlertEmailNotificationListenerTest {
             when(alertEmailSender.sendAlertEmail(anyString(), anyString(), anyString(), eq(ALERT_ID)))
                     .thenReturn(true);
 
-            listener.onAlertCreated(eventOf());
+            listener.onAlertConfirmed(eventOf());
 
             ArgumentCaptor<String> recipientCaptor = ArgumentCaptor.forClass(String.class);
             verify(alertEmailSender, times(2))
@@ -166,7 +176,7 @@ class AlertEmailNotificationListenerTest {
             when(alertEmailSender.sendAlertEmail(anyString(), anyString(), anyString(), eq(ALERT_ID)))
                     .thenReturn(true);
 
-            listener.onAlertCreated(eventOf());
+            listener.onAlertConfirmed(eventOf());
 
             ArgumentCaptor<String> subjectCaptor = ArgumentCaptor.forClass(String.class);
             ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
@@ -179,13 +189,42 @@ class AlertEmailNotificationListenerTest {
             assertThat(body)
                     .contains("Maria da Silva")
                     .contains("HEART_RATE")
-                    .contains("155.0 bpm")
                     .contains("CRITICAL")
-                    // 14:32 UTC gravado -> 11:32 exibido. Não depende do fuso da
-                    // máquina: os dois fusos da conversão são explícitos no código.
-                    .contains(EXPECTED_IN_EMAIL)
+                    // As DUAS leituras, com valor e horário de cada uma: é a
+                    // progressão que justifica o aviso ao médico.
+                    .contains("1ª leitura: 150.0 bpm")
+                    .contains("2ª leitura: 155.0 bpm")
+                    // 13:15 e 14:32 UTC gravados -> 10:15 e 11:32 exibidos. Não
+                    // depende do fuso da máquina: os dois fusos da conversão são
+                    // explícitos no código.
+                    .contains(FIRST_EXPECTED_IN_EMAIL)
+                    .contains(SECOND_EXPECTED_IN_EMAIL)
                     .doesNotContain("14:32")
-                    .contains("Brasília");
+                    .doesNotContain("13:15")
+                    .contains("Brasília")
+                    .contains("confirmado por duas leituras");
+        }
+
+        @Test
+        @DisplayName("deve mostrar as duas leituras na ordem: primeira antes da confirmadora")
+        void shouldShowReadingsInChronologicalOrder() {
+            stubAlertFound();
+            when(doctorPatientRepository.findActiveDoctorsByPatientId(PATIENT_ID))
+                    .thenReturn(List.of(doctorOf(DOCTOR_A_EMAIL)));
+            when(alertEmailSender.sendAlertEmail(anyString(), anyString(), anyString(), eq(ALERT_ID)))
+                    .thenReturn(true);
+
+            listener.onAlertConfirmed(eventOf());
+
+            ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+            verify(alertEmailSender).sendAlertEmail(
+                    anyString(), anyString(), bodyCaptor.capture(), eq(ALERT_ID));
+
+            String body = bodyCaptor.getValue();
+
+            assertThat(body.indexOf(FIRST_EXPECTED_IN_EMAIL))
+                    .as("1ª leitura deve aparecer antes da 2ª")
+                    .isLessThan(body.indexOf(SECOND_EXPECTED_IN_EMAIL));
         }
 
         /**
@@ -207,7 +246,8 @@ class AlertEmailNotificationListenerTest {
 
                     assertThat(bodySentWithFreshMocks())
                             .as("corpo do e-mail com a JVM em %s", zone)
-                            .contains(EXPECTED_IN_EMAIL);
+                            .contains(FIRST_EXPECTED_IN_EMAIL)
+                            .contains(SECOND_EXPECTED_IN_EMAIL);
                 }
             } finally {
                 TimeZone.setDefault(original);
@@ -234,7 +274,7 @@ class AlertEmailNotificationListenerTest {
 
             new AlertEmailNotificationListener(
                     alertRepo, doctorPatientRepo, notificationRepo, sender)
-                    .onAlertCreated(eventOf());
+                    .onAlertConfirmed(eventOf());
 
             ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
             verify(sender).sendAlertEmail(
@@ -250,7 +290,7 @@ class AlertEmailNotificationListenerTest {
             when(doctorPatientRepository.findActiveDoctorsByPatientId(PATIENT_ID))
                     .thenReturn(List.of());
 
-            listener.onAlertCreated(eventOf());
+            listener.onAlertConfirmed(eventOf());
 
             verifyNoInteractions(alertEmailSender, notificationRepository);
         }
@@ -260,7 +300,7 @@ class AlertEmailNotificationListenerTest {
         void shouldNotSendWhenAlertNoLongerExists() {
             when(alertRepository.findByIdWithPatientAndReading(ALERT_ID)).thenReturn(Optional.empty());
 
-            listener.onAlertCreated(eventOf());
+            listener.onAlertConfirmed(eventOf());
 
             verifyNoInteractions(alertEmailSender, notificationRepository);
             verify(doctorPatientRepository, never()).findActiveDoctorsByPatientId(any());
@@ -280,7 +320,7 @@ class AlertEmailNotificationListenerTest {
             when(alertEmailSender.sendAlertEmail(anyString(), anyString(), anyString(), eq(ALERT_ID)))
                     .thenReturn(false);
 
-            assertThatCode(() -> listener.onAlertCreated(eventOf())).doesNotThrowAnyException();
+            assertThatCode(() -> listener.onAlertConfirmed(eventOf())).doesNotThrowAnyException();
 
             ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
             verify(notificationRepository).save(captor.capture());
@@ -296,7 +336,7 @@ class AlertEmailNotificationListenerTest {
             when(alertEmailSender.sendAlertEmail(anyString(), anyString(), anyString(), eq(ALERT_ID)))
                     .thenThrow(new RuntimeException("SES fora do ar"));
 
-            assertThatCode(() -> listener.onAlertCreated(eventOf())).doesNotThrowAnyException();
+            assertThatCode(() -> listener.onAlertConfirmed(eventOf())).doesNotThrowAnyException();
         }
 
         @Test
@@ -305,7 +345,7 @@ class AlertEmailNotificationListenerTest {
             when(alertRepository.findByIdWithPatientAndReading(ALERT_ID))
                     .thenThrow(new RuntimeException("banco indisponivel"));
 
-            assertThatCode(() -> listener.onAlertCreated(eventOf())).doesNotThrowAnyException();
+            assertThatCode(() -> listener.onAlertConfirmed(eventOf())).doesNotThrowAnyException();
 
             verifyNoInteractions(alertEmailSender, notificationRepository);
         }
@@ -315,17 +355,25 @@ class AlertEmailNotificationListenerTest {
     @DisplayName("dados ausentes no alerta")
     class MissingData {
 
+        /**
+         * Defesa contra evento mal formado. Não deve acontecer no fluxo normal — a
+         * confirmação só é publicada com as duas leituras — mas o e-mail não pode
+         * sair com campo vazio nem quebrar por NullPointerException.
+         */
         @Test
-        @DisplayName("alerta sem leitura associada deve gerar corpo sem campo vazio")
-        void shouldHandleAlertWithoutReading() {
+        @DisplayName("evento sem as leituras deve gerar corpo sem campo vazio")
+        void shouldHandleEventWithoutReadings() {
             alert.setHealthReading(null);
+            firstReading = null;
+            confirmingReading = null;
+
             stubAlertFound();
             when(doctorPatientRepository.findActiveDoctorsByPatientId(PATIENT_ID))
                     .thenReturn(List.of(doctorOf(DOCTOR_A_EMAIL)));
             when(alertEmailSender.sendAlertEmail(anyString(), anyString(), anyString(), eq(ALERT_ID)))
                     .thenReturn(true);
 
-            listener.onAlertCreated(eventOf());
+            listener.onAlertConfirmed(eventOf());
 
             ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
             verify(alertEmailSender).sendAlertEmail(
@@ -346,7 +394,7 @@ class AlertEmailNotificationListenerTest {
             when(alertEmailSender.sendAlertEmail(eq(null), anyString(), anyString(), eq(ALERT_ID)))
                     .thenReturn(false);
 
-            listener.onAlertCreated(eventOf());
+            listener.onAlertConfirmed(eventOf());
 
             ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
             verify(notificationRepository).save(captor.capture());

@@ -37,6 +37,20 @@ public class ReadingThreshold {
     @Column(name = "normal_max")
     private Double normalMax;
 
+    /**
+     * Limite inferior do que é fisiologicamente possível medir. Valor abaixo disso
+     * é defeito de sensor, não quadro clínico. Nulo desliga o filtro deste lado.
+     */
+    @Column(name = "plausible_min")
+    private Double plausibleMin;
+
+    /**
+     * Limite superior do que é fisiologicamente possível medir. Nulo desliga o
+     * filtro deste lado.
+     */
+    @Column(name = "plausible_max")
+    private Double plausibleMax;
+
     @Column(nullable = false, length = 50)
     private String severity;
 
@@ -93,6 +107,39 @@ public class ReadingThreshold {
 
     public void setNormalMax(Double normalMax) {
         this.normalMax = normalMax;
+    }
+
+    public Double getPlausibleMin() {
+        return plausibleMin;
+    }
+
+    public void setPlausibleMin(Double plausibleMin) {
+        this.plausibleMin = plausibleMin;
+    }
+
+    public Double getPlausibleMax() {
+        return plausibleMax;
+    }
+
+    public void setPlausibleMax(Double plausibleMax) {
+        this.plausibleMax = plausibleMax;
+    }
+
+    /**
+     * Verdadeiro quando o valor está fora do que é possível medir. Sem faixa
+     * plausível cadastrada nada é implausível: o filtro fica desligado para o tipo.
+     *
+     * <p>Os limites são inclusivos no plausível, como já acontece na faixa normal:
+     * valor igual ao limite é aceito.
+     */
+    public boolean isImplausible(Double value) {
+        if (value == null) {
+            return false;
+        }
+        if (plausibleMin != null && value < plausibleMin) {
+            return true;
+        }
+        return plausibleMax != null && value > plausibleMax;
     }
 
     public String getSeverity() {

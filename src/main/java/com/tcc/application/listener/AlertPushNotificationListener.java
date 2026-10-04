@@ -31,8 +31,20 @@ public class AlertPushNotificationListener {
             "LOW", "Aviso sobre sua leitura");
 
     private static final String DEFAULT_TITLE = "Alerta de saúde";
-    private static final String DEFAULT_BODY =
-            "Uma de suas leituras ficou fora da faixa esperada. Abra o aplicativo para ver os detalhes.";
+
+    /** Usado quando o alerta não tem leitura associada e o tipo é desconhecido. */
+    private static final String FALLBACK_READING_LABEL = "sinal vital";
+
+    /**
+     * Texto do push ao paciente.
+     *
+     * <p>O alerta ainda está UNCONFIRMED neste momento: uma única leitura saiu da
+     * faixa e nada foi confirmado. Por isso a mensagem não afirma que há um problema
+     * — ela informa o desvio e oferece o caminho de ação no app, sem alarmar.
+     */
+    private static final String BODY_TEMPLATE =
+            "Sua medição de %s saiu do normal. Se não estiver bem, "
+                    + "use a opção 'Não estou bem' no app.";
 
     private final AlertRepository alertRepository;
     private final DeviceTokenRepository deviceTokenRepository;
@@ -129,11 +141,33 @@ public class AlertPushNotificationListener {
     }
 
     /**
-     * O motivo do alerta está na descrição. Quando ela vem vazia, usa um texto
-     * genérico: a notificação não pode chegar sem corpo.
+     * Monta o corpo a partir do tipo da leitura que originou o alerta.
+     *
+     * <p>Não usa mais a descrição do alerta: ela carrega o limite numérico violado
+     * ("Valor acima do máximo normal de 120.0"), que é informação clínica crua para
+     * mostrar ao paciente numa notificação. O tipo da leitura basta para ele
+     * entender o que foi medido.
      */
     private String buildBody(Alert alert) {
-        String description = alert.getDescription();
-        return (description == null || description.isBlank()) ? DEFAULT_BODY : description;
+        return BODY_TEMPLATE.formatted(readingLabel(alert));
+    }
+
+    /**
+     * Rótulo do tipo de leitura em português. Tipo não mapeado cai no próprio nome
+     * técnico, em minúsculas, que ainda é mais informativo que um texto genérico.
+     */
+    private String readingLabel(Alert alert) {
+        if (alert.getHealthReading() == null || alert.getHealthReading().getReadingType() == null) {
+            return FALLBACK_READING_LABEL;
+        }
+
+        String readingType = alert.getHealthReading().getReadingType();
+
+        return switch (readingType.toUpperCase()) {
+            case "HEART_RATE" -> "frequência cardíaca";
+            case "SPO2" -> "saturação de oxigênio";
+            case "TEMPERATURE" -> "temperatura";
+            default -> readingType.toLowerCase().replace('_', ' ');
+        };
     }
 }

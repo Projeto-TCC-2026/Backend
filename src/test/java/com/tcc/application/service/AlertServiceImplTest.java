@@ -3,6 +3,7 @@ package com.tcc.application.service;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import static org.mockito.Mockito.never;
@@ -27,13 +29,16 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import com.tcc.application.dto.request.AlertEvaluationRequest;
 import com.tcc.application.dto.response.AlertEvaluationResponse;
 import com.tcc.application.dto.response.AlertResponse;
 import com.tcc.application.mapper.AlertMapper;
+import com.tcc.domain.event.AlertConfirmedEvent;
 import com.tcc.domain.event.AlertCreatedEvent;
 import com.tcc.domain.model.Alert;
+import com.tcc.domain.model.AlertStatus;
 import com.tcc.domain.model.Doctor;
 import com.tcc.domain.model.HealthReading;
 import com.tcc.domain.model.Hospital;
@@ -51,6 +56,13 @@ import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.ResourceNotFoundException;
 import com.tcc.exception.UnauthorizedException;
 
+/**
+ * Fluxo de leitura → alerta.
+ *
+ * <p>Todos os horários são construídos com deslocamento explícito e as asserções
+ * comparam {@code LocalDateTime} já em UTC, então nenhum teste depende do fuso da
+ * máquina.
+ */
 @ExtendWith(MockitoExtension.class)
 class AlertServiceImplTest {
 
@@ -88,6 +100,7 @@ class AlertServiceImplTest {
     private static final UUID NONEXISTENT_PATIENT_ID = UUID.randomUUID();
     private static final UUID ALERT_ID = UUID.randomUUID();
     private static final UUID READING_ID = UUID.randomUUID();
+    private static final UUID PREVIOUS_READING_ID = UUID.randomUUID();
     private static final UUID DOCTOR_ID = UUID.randomUUID();
 
     private static final String HEART_RATE = "HEART_RATE";
@@ -113,6 +126,8 @@ class AlertServiceImplTest {
         patient.setFullName("Paciente de Teste");
     }
 
+    // --- Fábricas ---
+
     private AlertEvaluationRequest requestOf(String readingType, Double value) {
         return requestOf(readingType, value, MEASURED_AT_UTC);
     }
@@ -122,10 +137,49 @@ class AlertServiceImplTest {
         return new AlertEvaluationRequest(PATIENT_ID, readingType, value, measuredAt, "bpm");
     }
 
+    /** Faixa normal sem faixa plausível: o filtro de implausibilidade fica desligado. */
     private ReadingThreshold thresholdOf(String readingType, Double min, Double max) {
         ReadingThreshold threshold = new ReadingThreshold(readingType, min, max, "CRITICAL");
         threshold.setId(UUID.randomUUID());
         return threshold;
+    }
+
+    /** Faixa normal mais faixa plausível, como a V35 deixa os tipos cadastrados. */
+    private ReadingThreshold thresholdWithPlausible(String readingType, Double min, Double max,
+                                                    Double plausibleMin, Double plausibleMax) {
+        ReadingThreshold threshold = thresholdOf(readingType, min, max);
+        threshold.setPlausibleMin(plausibleMin);
+        threshold.setPlausibleMax(plausibleMax);
+        return threshold;
+    }
+
+    private HealthReading readingOf(UUID id, String readingType, String value,
+                                    LocalDateTime measuredAt, boolean suspect) {
+        HealthReading reading = new HealthReading();
+        reading.setId(id);
+        reading.setPatient(patient);
+        reading.setReadingType(readingType);
+        reading.setValue(value);
+        reading.setMeasuredAt(measuredAt);
+        reading.setSuspect(suspect);
+        return reading;
+    }
+
+    private Alert alertOf(UUID id, String status, HealthReading reading, LocalDateTime confirmedAt) {
+        Alert alert = new Alert();
+        alert.setId(id);
+        alert.setPatient(patient);
+        alert.setHealthReading(reading);
+        alert.setSeverity("CRITICAL");
+        alert.setStatus(status);
+        alert.setConfirmedAt(confirmedAt);
+        return alert;
+    }
+
+    // --- Stubs ---
+
+    private void stubReadingNotYetReceived(String readingType) {
+        stubReadingNotYetReceived(readingType, MEASURED_AT_STORED);
     }
 
     /**
@@ -134,9 +188,9 @@ class AlertServiceImplTest {
      * <p>O stub casa com o horário já normalizado em UTC. Se o service deixar de
      * converter, a consulta chega com outro valor, o stub não casa e o teste falha.
      */
-    private void stubReadingNotYetReceived(String readingType) {
+    private void stubReadingNotYetReceived(String readingType, LocalDateTime storedAt) {
         when(healthReadingRepository.findByPatientIdAndReadingTypeAndMeasuredAt(
-                PATIENT_ID, readingType, MEASURED_AT_STORED)).thenReturn(Optional.empty());
+                PATIENT_ID, readingType, storedAt)).thenReturn(Optional.empty());
         when(healthReadingRepository.saveAndFlush(any(HealthReading.class)))
                 .thenAnswer(invocation -> {
                     HealthReading reading = invocation.getArgument(0);
@@ -145,7 +199,25 @@ class AlertServiceImplTest {
                 });
     }
 
-    /** Simula a persistência atribuindo um id ao alerta salvo. */
+    /**
+     * Stub de gravação de alerta, sem o mapper.
+     *
+     * <p>Usado nos caminhos que apenas atualizam um alerta existente (confirmação e
+     * NOT_CONFIRMED). O mapper fica de fora de propósito: com a strictness do
+     * Mockito, stubá-lo aqui falharia o teste por stub não usado — o que é
+     * justamente a prova de que nenhum alerta novo foi construído.
+     */
+    private void stubAlertSave() {
+        when(alertRepository.save(any(Alert.class))).thenAnswer(invocation -> {
+            Alert alert = invocation.getArgument(0);
+            if (alert.getId() == null) {
+                alert.setId(ALERT_ID);
+            }
+            return alert;
+        });
+    }
+
+    /** Stub completo: mapper mais gravação, para os caminhos que criam alerta novo. */
     private void stubAlertPersistence() {
         when(alertMapper.toEntity(any(), any(), any())).thenAnswer(invocation -> {
             var alertRequest = (com.tcc.application.dto.request.AlertRequest) invocation.getArgument(0);
@@ -158,48 +230,491 @@ class AlertServiceImplTest {
             alert.setStatus(alertRequest.status());
             return alert;
         });
-        when(alertRepository.save(any(Alert.class))).thenAnswer(invocation -> {
-            Alert alert = invocation.getArgument(0);
-            alert.setId(ALERT_ID);
-            return alert;
-        });
+        stubAlertSave();
     }
 
-    private void stubNoPendingAlert(String readingType) {
-        when(alertRepository.existsByPatientIdAndStatusAndHealthReading_ReadingType(
-                PATIENT_ID, "PENDING", readingType)).thenReturn(false);
+    private void stubNoAlert(String status, String readingType) {
+        when(alertRepository.findLatestByPatientAndStatusAndReadingType(
+                eq(PATIENT_ID), eq(status), eq(readingType), any(Pageable.class)))
+                .thenReturn(List.of());
+    }
+
+    private void stubLatestAlert(String status, String readingType, Alert alert) {
+        when(alertRepository.findLatestByPatientAndStatusAndReadingType(
+                eq(PATIENT_ID), eq(status), eq(readingType), any(Pageable.class)))
+                .thenReturn(List.of(alert));
+    }
+
+    private void stubPreviousReading(String readingType, LocalDateTime before, HealthReading reading) {
+        when(healthReadingRepository.findPreviousTrustedReadings(
+                eq(PATIENT_ID), eq(readingType), eq(before), any(Pageable.class)))
+                .thenReturn(reading == null ? List.of() : List.of(reading));
     }
 
     @Nested
-    @DisplayName("gravação da leitura")
-    class ReadingPersistence {
+    @DisplayName("leitura implausível")
+    class ImplausibleReading {
 
         @Test
-        @DisplayName("leitura normal deve ser gravada sem gerar alerta")
-        void shouldPersistNormalReadingWithoutAlert() {
+        @DisplayName("deve gravar como suspeita, sem avaliar, sem alerta e sem avisar")
+        void shouldPersistAsSuspectWithoutEvaluating() {
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
+            stubReadingNotYetReceived(HEART_RATE);
+            when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                    .thenReturn(Optional.of(thresholdWithPlausible(HEART_RATE, 50.0, 120.0, 25.0, 250.0)));
+
+            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 300.0));
+
+            ArgumentCaptor<HealthReading> captor = ArgumentCaptor.forClass(HealthReading.class);
+            verify(healthReadingRepository).saveAndFlush(captor.capture());
+
+            assertThat(captor.getValue().isSuspect()).isTrue();
+            assertThat(captor.getValue().getValue()).isEqualTo("300.0");
+
+            assertThat(result.suspectReading()).isTrue();
+            assertThat(result.alertGenerated()).isFalse();
+            assertThat(result.alertStatus()).isNull();
+            assertThat(result.healthReadingId()).isEqualTo(READING_ID);
+            assertThat(result.reason()).contains("plausível");
+
+            verify(alertRepository, never()).save(any());
+            verifyNoInteractions(eventPublisher);
+        }
+
+        @Test
+        @DisplayName("valor abaixo do minimo plausivel tambem e suspeito")
+        void shouldFlagValueBelowPlausibleMinimum() {
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
+            stubReadingNotYetReceived(HEART_RATE);
+            when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                    .thenReturn(Optional.of(thresholdWithPlausible(HEART_RATE, 50.0, 120.0, 25.0, 250.0)));
+
+            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 10.0));
+
+            assertThat(result.suspectReading()).isTrue();
+            verify(alertRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("limite plausivel e inclusivo: valor igual ao maximo e avaliado normalmente")
+        void shouldAcceptValueEqualToPlausibleMaximum() {
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
+            stubReadingNotYetReceived(HEART_RATE);
+            when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                    .thenReturn(Optional.of(thresholdWithPlausible(HEART_RATE, 50.0, 120.0, 25.0, 250.0)));
+            stubNoAlert(AlertStatus.PENDING, HEART_RATE);
+            stubNoAlert(AlertStatus.UNCONFIRMED, HEART_RATE);
+            stubAlertPersistence();
+
+            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 250.0));
+
+            assertThat(result.suspectReading()).isFalse();
+            assertThat(result.alertStatus()).isEqualTo(AlertStatus.UNCONFIRMED);
+        }
+
+        @Test
+        @DisplayName("tipo sem faixa plausivel cadastrada nao sofre o filtro")
+        void shouldSkipFilterWhenPlausibleRangeIsNotConfigured() {
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
+            stubReadingNotYetReceived(SPO2);
+            when(readingThresholdRepository.findByReadingType(SPO2))
+                    .thenReturn(Optional.of(thresholdOf(SPO2, 90.0, null)));
+            stubNoAlert(AlertStatus.PENDING, SPO2);
+            stubNoAlert(AlertStatus.UNCONFIRMED, SPO2);
+            stubAlertPersistence();
+
+            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(SPO2, 5.0));
+
+            assertThat(result.suspectReading()).isFalse();
+            assertThat(result.alertStatus()).isEqualTo(AlertStatus.UNCONFIRMED);
+        }
+    }
+
+    @Nested
+    @DisplayName("primeira leitura fora da faixa")
+    class FirstAbnormalReading {
+
+        @Test
+        @DisplayName("deve criar alerta UNCONFIRMED e publicar apenas o evento de criacao")
+        void shouldCreateUnconfirmedAlertAndPublishCreatedEvent() {
             when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
             stubReadingNotYetReceived(HEART_RATE);
             when(readingThresholdRepository.findByReadingType(HEART_RATE))
                     .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+            stubNoAlert(AlertStatus.PENDING, HEART_RATE);
+            stubNoAlert(AlertStatus.UNCONFIRMED, HEART_RATE);
+            stubAlertPersistence();
+
+            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 150.0));
+
+            ArgumentCaptor<Alert> alertCaptor = ArgumentCaptor.forClass(Alert.class);
+            verify(alertRepository).save(alertCaptor.capture());
+
+            Alert saved = alertCaptor.getValue();
+            assertThat(saved.getStatus()).isEqualTo(AlertStatus.UNCONFIRMED);
+            assertThat(saved.getConfirmedAt()).isNull();
+            assertThat(saved.getHealthReading().getId()).isEqualTo(READING_ID);
+            assertThat(saved.getSeverity()).isEqualTo("CRITICAL");
+            assertThat(saved.getTitle()).isNotBlank();
+            assertThat(saved.getDescription()).contains("acima");
+
+            // Só o evento de criação: o médico ainda não é avisado.
+            verify(eventPublisher).publishEvent(any(AlertCreatedEvent.class));
+            verify(eventPublisher, never()).publishEvent(any(AlertConfirmedEvent.class));
+
+            assertThat(result.alertGenerated()).isTrue();
+            assertThat(result.alertStatus()).isEqualTo(AlertStatus.UNCONFIRMED);
+            assertThat(result.alertId()).isEqualTo(ALERT_ID);
+            assertThat(result.reason()).contains("acima");
+        }
+
+        @Test
+        @DisplayName("valor abaixo do minimo normal tambem cria alerta UNCONFIRMED")
+        void shouldCreateUnconfirmedAlertWhenValueIsBelowMinimum() {
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
+            stubReadingNotYetReceived(HEART_RATE);
+            when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                    .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+            stubNoAlert(AlertStatus.PENDING, HEART_RATE);
+            stubNoAlert(AlertStatus.UNCONFIRMED, HEART_RATE);
+            stubAlertPersistence();
+
+            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 45.0));
+
+            ArgumentCaptor<Alert> alertCaptor = ArgumentCaptor.forClass(Alert.class);
+            verify(alertRepository).save(alertCaptor.capture());
+
+            Alert saved = alertCaptor.getValue();
+            assertThat(saved.getStatus()).isEqualTo(AlertStatus.UNCONFIRMED);
+            assertThat(saved.getDescription()).contains("abaixo");
+
+            assertThat(result.alertGenerated()).isTrue();
+            assertThat(result.alertStatus()).isEqualTo(AlertStatus.UNCONFIRMED);
+            assertThat(result.reason()).contains("abaixo");
+            verify(eventPublisher).publishEvent(any(AlertCreatedEvent.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("confirmação por segunda leitura")
+    class Confirmation {
+
+        private static final LocalDateTime FIRST_AT = LocalDateTime.of(2026, 9, 29, 13, 0);
+
+        @Test
+        @DisplayName("segunda leitura fora dentro de 2h deve confirmar, gravar confirmed_at e publicar evento")
+        void shouldConfirmWhenSecondReadingIsWithinTwoHours() {
+            HealthReading first = readingOf(PREVIOUS_READING_ID, HEART_RATE, "150.0", FIRST_AT, false);
+            Alert unconfirmed = alertOf(ALERT_ID, AlertStatus.UNCONFIRMED, first, null);
+
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
+            stubReadingNotYetReceived(HEART_RATE);
+            when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                    .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+            stubNoAlert(AlertStatus.PENDING, HEART_RATE);
+            stubLatestAlert(AlertStatus.UNCONFIRMED, HEART_RATE, unconfirmed);
+            stubPreviousReading(HEART_RATE, MEASURED_AT_STORED, first);
+            stubAlertSave();
+
+            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 155.0));
+
+            assertThat(unconfirmed.getStatus()).isEqualTo(AlertStatus.PENDING);
+            assertThat(unconfirmed.getConfirmedAt()).isEqualTo(MEASURED_AT_STORED);
+
+            ArgumentCaptor<AlertConfirmedEvent> captor =
+                    ArgumentCaptor.forClass(AlertConfirmedEvent.class);
+            verify(eventPublisher).publishEvent(captor.capture());
+
+            AlertConfirmedEvent event = captor.getValue();
+            assertThat(event.firstReading().getId()).isEqualTo(PREVIOUS_READING_ID);
+            assertThat(event.confirmingReading().getId()).isEqualTo(READING_ID);
+
+            // Nenhum alerta novo foi criado: o existente foi promovido.
+            assertThat(result.alertGenerated()).isFalse();
+            assertThat(result.alertStatus()).isEqualTo(AlertStatus.PENDING);
+            assertThat(result.alertId()).isEqualTo(ALERT_ID);
+            verify(alertMapper, never()).toEntity(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("segunda leitura fora com mais de 2h nao confirma e cria novo UNCONFIRMED")
+        void shouldNotConfirmWhenGapExceedsTwoHours() {
+            LocalDateTime longAgo = MEASURED_AT_STORED.minusHours(3);
+            HealthReading first = readingOf(PREVIOUS_READING_ID, HEART_RATE, "150.0", longAgo, false);
+            Alert unconfirmed = alertOf(ALERT_ID, AlertStatus.UNCONFIRMED, first, null);
+
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
+            stubReadingNotYetReceived(HEART_RATE);
+            when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                    .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+            stubNoAlert(AlertStatus.PENDING, HEART_RATE);
+            stubLatestAlert(AlertStatus.UNCONFIRMED, HEART_RATE, unconfirmed);
+            stubPreviousReading(HEART_RATE, MEASURED_AT_STORED, first);
+            stubAlertPersistence();
+
+            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 155.0));
+
+            // O antigo não fica UNCONFIRMED para sempre: sem confirmação, ele é fechado.
+            assertThat(unconfirmed.getStatus()).isEqualTo(AlertStatus.NOT_CONFIRMED);
+            assertThat(unconfirmed.getConfirmedAt()).isNull();
+
+            verify(eventPublisher).publishEvent(any(AlertCreatedEvent.class));
+            verify(eventPublisher, never()).publishEvent(any(AlertConfirmedEvent.class));
+
+            assertThat(result.alertGenerated()).isTrue();
+            assertThat(result.alertStatus()).isEqualTo(AlertStatus.UNCONFIRMED);
+        }
+
+        /**
+         * O alerta antigo não pode ficar UNCONFIRMED indefinidamente: a leitura atual
+         * cria um alerta novo, que passa a ser o mais recente do tipo, e nenhuma
+         * leitura seguinte voltaria a alcançar o antigo.
+         */
+        @Test
+        @DisplayName("UNCONFIRMED nao confirmado vira NOT_CONFIRMED quando um alerta novo nasce")
+        void shouldCloseOldUnconfirmedWhenNewAlertIsCreated() {
+            UUID oldAlertId = UUID.randomUUID();
+            LocalDateTime longAgo = MEASURED_AT_STORED.minusHours(3);
+            HealthReading first = readingOf(PREVIOUS_READING_ID, HEART_RATE, "150.0", longAgo, false);
+            Alert oldUnconfirmed = alertOf(oldAlertId, AlertStatus.UNCONFIRMED, first, null);
+
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
+            stubReadingNotYetReceived(HEART_RATE);
+            when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                    .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+            stubNoAlert(AlertStatus.PENDING, HEART_RATE);
+            stubLatestAlert(AlertStatus.UNCONFIRMED, HEART_RATE, oldUnconfirmed);
+            stubPreviousReading(HEART_RATE, MEASURED_AT_STORED, first);
+            stubAlertPersistence();
+
+            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 155.0));
+
+            ArgumentCaptor<Alert> captor = ArgumentCaptor.forClass(Alert.class);
+            verify(alertRepository, times(2)).save(captor.capture());
+
+            // Ordem importa: o antigo é fechado antes de o novo ser gravado.
+            Alert closed = captor.getAllValues().get(0);
+            Alert created = captor.getAllValues().get(1);
+
+            assertThat(closed.getId()).isEqualTo(oldAlertId);
+            assertThat(closed.getStatus()).isEqualTo(AlertStatus.NOT_CONFIRMED);
+
+            assertThat(created.getId()).isEqualTo(ALERT_ID);
+            assertThat(created.getStatus()).isEqualTo(AlertStatus.UNCONFIRMED);
+            assertThat(created.getHealthReading().getId()).isEqualTo(READING_ID);
+
+            assertThat(result.alertGenerated()).isTrue();
+            assertThat(result.alertStatus()).isEqualTo(AlertStatus.UNCONFIRMED);
+            assertThat(result.alertId()).isEqualTo(ALERT_ID);
+
+            // O antigo é fechado em silêncio: só o alerta novo avisa o paciente.
+            verify(eventPublisher).publishEvent(any(AlertCreatedEvent.class));
+            verify(eventPublisher, never()).publishEvent(any(AlertConfirmedEvent.class));
+        }
+
+        /**
+         * A leitura suspeita é invisível para a busca da leitura anterior — o filtro
+         * {@code suspect = false} está na própria query. O teste representa isso
+         * devolvendo a primeira leitura como anterior, que é o que o banco faria,
+         * e prova que a confirmação acontece mesmo tendo havido uma suspeita no meio.
+         */
+        @Test
+        @DisplayName("leitura suspeita entre as duas nao quebra a sequencia")
+        void shouldConfirmEvenWithSuspectReadingInBetween() {
+            HealthReading first = readingOf(PREVIOUS_READING_ID, HEART_RATE, "150.0", FIRST_AT, false);
+            Alert unconfirmed = alertOf(ALERT_ID, AlertStatus.UNCONFIRMED, first, null);
+
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
+            stubReadingNotYetReceived(HEART_RATE);
+            when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                    .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+            stubNoAlert(AlertStatus.PENDING, HEART_RATE);
+            stubLatestAlert(AlertStatus.UNCONFIRMED, HEART_RATE, unconfirmed);
+            stubPreviousReading(HEART_RATE, MEASURED_AT_STORED, first);
+            stubAlertSave();
+
+            alertService.evaluateReading(requestOf(HEART_RATE, 155.0));
+
+            assertThat(unconfirmed.getStatus()).isEqualTo(AlertStatus.PENDING);
+            verify(eventPublisher).publishEvent(any(AlertConfirmedEvent.class));
+
+            // A consulta exclui as suspeitas: é ela que garante o "não quebra".
+            verify(healthReadingRepository).findPreviousTrustedReadings(
+                    eq(PATIENT_ID), eq(HEART_RATE), eq(MEASURED_AT_STORED), any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("nao confirma quando a leitura anterior nao e a do alerta")
+        void shouldNotConfirmWhenPreviousReadingIsNotTheAlertReading() {
+            HealthReading alertReading =
+                    readingOf(PREVIOUS_READING_ID, HEART_RATE, "150.0", FIRST_AT, false);
+            HealthReading otherReading = readingOf(
+                    UUID.randomUUID(), HEART_RATE, "80.0", FIRST_AT.plusMinutes(30), false);
+            Alert unconfirmed = alertOf(ALERT_ID, AlertStatus.UNCONFIRMED, alertReading, null);
+
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
+            stubReadingNotYetReceived(HEART_RATE);
+            when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                    .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+            stubNoAlert(AlertStatus.PENDING, HEART_RATE);
+            stubLatestAlert(AlertStatus.UNCONFIRMED, HEART_RATE, unconfirmed);
+            stubPreviousReading(HEART_RATE, MEASURED_AT_STORED, otherReading);
+            stubAlertPersistence();
+
+            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 155.0));
+
+            // Sequência quebrada: o antigo é fechado e a leitura atual abre outro.
+            assertThat(unconfirmed.getStatus()).isEqualTo(AlertStatus.NOT_CONFIRMED);
+            assertThat(result.alertStatus()).isEqualTo(AlertStatus.UNCONFIRMED);
+            assertThat(result.alertGenerated()).isTrue();
+            verify(eventPublisher, never()).publishEvent(any(AlertConfirmedEvent.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("leitura normal depois de UNCONFIRMED")
+    class NormalAfterUnconfirmed {
+
+        @Test
+        @DisplayName("deve marcar o alerta como NOT_CONFIRMED sem avisar ninguem")
+        void shouldMarkAlertAsNotConfirmed() {
+            HealthReading first = readingOf(PREVIOUS_READING_ID, HEART_RATE, "150.0",
+                    MEASURED_AT_STORED.minusMinutes(30), false);
+            Alert unconfirmed = alertOf(ALERT_ID, AlertStatus.UNCONFIRMED, first, null);
+
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
+            stubReadingNotYetReceived(HEART_RATE);
+            when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                    .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+            stubLatestAlert(AlertStatus.UNCONFIRMED, HEART_RATE, unconfirmed);
+            stubAlertSave();
 
             AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 80.0));
+
+            assertThat(unconfirmed.getStatus()).isEqualTo(AlertStatus.NOT_CONFIRMED);
+            assertThat(result.alertStatus()).isEqualTo(AlertStatus.NOT_CONFIRMED);
+            assertThat(result.alertGenerated()).isFalse();
+            verifyNoInteractions(eventPublisher);
+        }
+
+        @Test
+        @DisplayName("sem alerta UNCONFIRMED a leitura normal apenas e gravada")
+        void shouldOnlyPersistWhenThereIsNoUnconfirmedAlert() {
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
+            stubReadingNotYetReceived(HEART_RATE);
+            when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                    .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+            stubNoAlert(AlertStatus.UNCONFIRMED, HEART_RATE);
+
+            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 80.0));
+
+            assertThat(result.alertStatus()).isNull();
+            assertThat(result.alertGenerated()).isFalse();
+            assertThat(result.healthReadingId()).isEqualTo(READING_ID);
+            verify(alertRepository, never()).save(any());
+            verifyNoInteractions(eventPublisher);
+        }
+    }
+
+    @Nested
+    @DisplayName("janela de 4h do alerta confirmado")
+    class RenotifyWindow {
+
+        @Test
+        @DisplayName("PENDING confirmado ha menos de 4h nao cria nem atualiza nada")
+        void shouldStaySilentWhenConfirmedLessThanFourHoursAgo() {
+            HealthReading first = readingOf(PREVIOUS_READING_ID, HEART_RATE, "150.0",
+                    MEASURED_AT_STORED.minusHours(3), false);
+            Alert pending = alertOf(ALERT_ID, AlertStatus.PENDING, first,
+                    MEASURED_AT_STORED.minusHours(3));
+
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
+            stubReadingNotYetReceived(HEART_RATE);
+            when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                    .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+            stubLatestAlert(AlertStatus.PENDING, HEART_RATE, pending);
+
+            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 155.0));
+
+            assertThat(result.alertGenerated()).isFalse();
+            assertThat(result.alertStatus()).isNull();
+            assertThat(result.healthReadingId()).isEqualTo(READING_ID);
+
+            verify(alertRepository, never()).save(any());
+            verifyNoInteractions(eventPublisher);
+        }
+
+        @Test
+        @DisplayName("PENDING confirmado ha mais de 4h permite novo UNCONFIRMED")
+        void shouldCreateNewUnconfirmedWhenConfirmedMoreThanFourHoursAgo() {
+            HealthReading first = readingOf(PREVIOUS_READING_ID, HEART_RATE, "150.0",
+                    MEASURED_AT_STORED.minusHours(5), false);
+            Alert pending = alertOf(ALERT_ID, AlertStatus.PENDING, first,
+                    MEASURED_AT_STORED.minusHours(5));
+
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
+            stubReadingNotYetReceived(HEART_RATE);
+            when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                    .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+            stubLatestAlert(AlertStatus.PENDING, HEART_RATE, pending);
+            stubNoAlert(AlertStatus.UNCONFIRMED, HEART_RATE);
+            stubAlertPersistence();
+
+            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 155.0));
+
+            assertThat(result.alertGenerated()).isTrue();
+            assertThat(result.alertStatus()).isEqualTo(AlertStatus.UNCONFIRMED);
+            verify(eventPublisher).publishEvent(any(AlertCreatedEvent.class));
+        }
+
+        /**
+         * Alerta criado antes da V35 nasceu PENDING e nunca teve confirmed_at. Se ele
+         * silenciasse a leitura atual, a janela nunca venceria e o paciente ficaria
+         * sem alerta para sempre naquele tipo.
+         */
+        @Test
+        @DisplayName("PENDING sem confirmed_at nao silencia a leitura atual")
+        void shouldNotSilenceWhenPendingHasNoConfirmedAt() {
+            HealthReading first = readingOf(PREVIOUS_READING_ID, HEART_RATE, "150.0",
+                    MEASURED_AT_STORED.minusHours(1), false);
+            Alert legacyPending = alertOf(ALERT_ID, AlertStatus.PENDING, first, null);
+
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
+            stubReadingNotYetReceived(HEART_RATE);
+            when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                    .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+            stubLatestAlert(AlertStatus.PENDING, HEART_RATE, legacyPending);
+            stubNoAlert(AlertStatus.UNCONFIRMED, HEART_RATE);
+            stubAlertPersistence();
+
+            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 155.0));
+
+            assertThat(result.alertStatus()).isEqualTo(AlertStatus.UNCONFIRMED);
+        }
+    }
+
+    @Nested
+    @DisplayName("gravação e normalização da leitura")
+    class ReadingPersistence {
+
+        @Test
+        @DisplayName("leitura normal deve ser gravada com suspect false")
+        void shouldPersistNormalReadingAsNotSuspect() {
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
+            stubReadingNotYetReceived(HEART_RATE);
+            when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                    .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+            stubNoAlert(AlertStatus.UNCONFIRMED, HEART_RATE);
+
+            alertService.evaluateReading(requestOf(HEART_RATE, 80.0));
 
             ArgumentCaptor<HealthReading> captor = ArgumentCaptor.forClass(HealthReading.class);
             verify(healthReadingRepository).saveAndFlush(captor.capture());
 
             HealthReading saved = captor.getValue();
-            assertThat(saved.getPatient()).isEqualTo(patient);
-            assertThat(saved.getReadingType()).isEqualTo(HEART_RATE);
-            assertThat(saved.getValue()).isEqualTo("80.0");
-            assertThat(saved.getUnit()).isEqualTo("bpm");
+            assertThat(saved.isSuspect()).isFalse();
             assertThat(saved.getMeasuredAt()).isEqualTo(MEASURED_AT_STORED);
             assertThat(saved.getPatientDevice()).isNull();
-
-            assertThat(result.alertGenerated()).isFalse();
-            assertThat(result.duplicateReading()).isFalse();
-            assertThat(result.healthReadingId()).isEqualTo(READING_ID);
-            verify(alertRepository, never()).save(any());
-            verifyNoInteractions(eventPublisher);
         }
 
         @Test
@@ -213,8 +728,30 @@ class AlertServiceImplTest {
 
             verify(healthReadingRepository).saveAndFlush(any(HealthReading.class));
             assertThat(result.alertGenerated()).isFalse();
+            assertThat(result.suspectReading()).isFalse();
             assertThat(result.healthReadingId()).isEqualTo(READING_ID);
             verify(alertRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("os dois fusos do mesmo instante devem gravar o mesmo measuredAt")
+        void shouldNormalizeBothOffsetsToTheSameStoredValue() {
+            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
+            stubReadingNotYetReceived(HEART_RATE);
+            when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                    .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+            stubNoAlert(AlertStatus.UNCONFIRMED, HEART_RATE);
+
+            alertService.evaluateReading(requestOf(HEART_RATE, 80.0, MEASURED_AT_UTC));
+            alertService.evaluateReading(
+                    requestOf(HEART_RATE, 80.0, MEASURED_AT_SAME_INSTANT_OFFSET));
+
+            ArgumentCaptor<HealthReading> captor = ArgumentCaptor.forClass(HealthReading.class);
+            verify(healthReadingRepository, times(2)).saveAndFlush(captor.capture());
+
+            assertThat(captor.getAllValues())
+                    .extracting(HealthReading::getMeasuredAt)
+                    .containsExactly(MEASURED_AT_STORED, MEASURED_AT_STORED);
         }
     }
 
@@ -229,6 +766,7 @@ class AlertServiceImplTest {
             stubReadingNotYetReceived(HEART_RATE);
             when(readingThresholdRepository.findByReadingType(HEART_RATE))
                     .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+            stubNoAlert(AlertStatus.UNCONFIRMED, HEART_RATE);
 
             AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 50.0));
 
@@ -243,6 +781,7 @@ class AlertServiceImplTest {
             stubReadingNotYetReceived(HEART_RATE);
             when(readingThresholdRepository.findByReadingType(HEART_RATE))
                     .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
+            stubNoAlert(AlertStatus.UNCONFIRMED, HEART_RATE);
 
             AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 120.0));
 
@@ -257,6 +796,7 @@ class AlertServiceImplTest {
             stubReadingNotYetReceived(SPO2);
             when(readingThresholdRepository.findByReadingType(SPO2))
                     .thenReturn(Optional.of(thresholdOf(SPO2, 90.0, null)));
+            stubNoAlert(AlertStatus.UNCONFIRMED, SPO2);
 
             AlertEvaluationResponse result = alertService.evaluateReading(requestOf(SPO2, 99.0));
 
@@ -272,7 +812,7 @@ class AlertServiceImplTest {
             Alert alert = new Alert();
             alert.setPatient(patient);
             AlertResponse response = new AlertResponse(ALERT_ID, null, null, "CRITICAL",
-                    "Alerta", "Descrição", "PENDING", LocalDateTime.now());
+                    "Alerta", "Descrição", AlertStatus.PENDING, LocalDateTime.now());
             PageRequest pageable = PageRequest.of(0, 20);
 
             when(userRepository.findByEmailAndActiveTrue(user.getEmail())).thenReturn(Optional.of(user));
@@ -280,7 +820,7 @@ class AlertServiceImplTest {
             when(alertRepository.findByPatientIdAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(
                     org.mockito.ArgumentMatchers.eq(PATIENT_ID),
                     any(LocalDateTime.class),
-                    org.mockito.ArgumentMatchers.eq(pageable))).thenReturn(new PageImpl<>(java.util.List.of(alert)));
+                    org.mockito.ArgumentMatchers.eq(pageable))).thenReturn(new PageImpl<>(List.of(alert)));
             when(alertMapper.toResponse(alert)).thenReturn(response);
 
             var result = alertService.listRecentForPatient(user.getEmail(), pageable);
@@ -290,78 +830,6 @@ class AlertServiceImplTest {
                     org.mockito.ArgumentMatchers.eq(PATIENT_ID),
                     any(LocalDateTime.class),
                     org.mockito.ArgumentMatchers.eq(pageable));
-        }
-    }
-
-    @Nested
-    @DisplayName("valor fora da faixa normal")
-    class OutsideNormalRange {
-
-        @Test
-        @DisplayName("deve gravar a leitura, criar alerta ligado a ela e publicar o evento")
-        void shouldPersistReadingCreateLinkedAlertAndPublishEvent() {
-            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
-            stubReadingNotYetReceived(HEART_RATE);
-            when(readingThresholdRepository.findByReadingType(HEART_RATE))
-                    .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
-            stubNoPendingAlert(HEART_RATE);
-            stubAlertPersistence();
-
-            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 130.0));
-
-            ArgumentCaptor<Alert> alertCaptor = ArgumentCaptor.forClass(Alert.class);
-            verify(alertRepository).save(alertCaptor.capture());
-
-            Alert saved = alertCaptor.getValue();
-            assertThat(saved.getStatus()).isEqualTo("PENDING");
-            assertThat(saved.getSeverity()).isEqualTo("CRITICAL");
-            assertThat(saved.getPatient()).isEqualTo(patient);
-            assertThat(saved.getHealthReading()).isNotNull();
-            assertThat(saved.getHealthReading().getId()).isEqualTo(READING_ID);
-            assertThat(saved.getTitle()).isNotBlank();
-
-            ArgumentCaptor<AlertCreatedEvent> eventCaptor =
-                    ArgumentCaptor.forClass(AlertCreatedEvent.class);
-            verify(eventPublisher).publishEvent(eventCaptor.capture());
-            assertThat(eventCaptor.getValue().alert().getId()).isEqualTo(ALERT_ID);
-
-            assertThat(result.alertGenerated()).isTrue();
-            assertThat(result.severity()).isEqualTo("CRITICAL");
-            assertThat(result.alertId()).isEqualTo(ALERT_ID);
-            assertThat(result.healthReadingId()).isEqualTo(READING_ID);
-            assertThat(result.reason()).contains("acima");
-        }
-
-        @Test
-        @DisplayName("deve gerar alerta quando valor esta abaixo do minimo")
-        void shouldGenerateAlertWhenValueIsBelowMinimum() {
-            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
-            stubReadingNotYetReceived(HEART_RATE);
-            when(readingThresholdRepository.findByReadingType(HEART_RATE))
-                    .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
-            stubNoPendingAlert(HEART_RATE);
-            stubAlertPersistence();
-
-            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 45.0));
-
-            assertThat(result.alertGenerated()).isTrue();
-            assertThat(result.reason()).contains("abaixo");
-        }
-
-        @Test
-        @DisplayName("deve gerar alerta quando faixa sem maximo recebe valor abaixo do minimo")
-        void shouldGenerateAlertWhenValueIsBelowMinimumOnOpenEndedRange() {
-            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
-            stubReadingNotYetReceived(SPO2);
-            when(readingThresholdRepository.findByReadingType(SPO2))
-                    .thenReturn(Optional.of(thresholdOf(SPO2, 90.0, null)));
-            stubNoPendingAlert(SPO2);
-            stubAlertPersistence();
-
-            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(SPO2, 85.0));
-
-            assertThat(result.alertGenerated()).isTrue();
-            assertThat(result.severity()).isEqualTo("CRITICAL");
         }
     }
 
@@ -381,6 +849,7 @@ class AlertServiceImplTest {
 
             assertThat(result.duplicateReading()).isTrue();
             assertThat(result.alertGenerated()).isFalse();
+            assertThat(result.alertStatus()).isNull();
             assertThat(result.healthReadingId()).isEqualTo(READING_ID);
 
             verify(healthReadingRepository, never()).saveAndFlush(any());
@@ -394,7 +863,6 @@ class AlertServiceImplTest {
             HealthReading existing = new HealthReading();
             existing.setId(READING_ID);
 
-            // Gravado a partir de 14:30Z; agora chega 11:30-03:00, o mesmo instante.
             when(healthReadingRepository.findByPatientIdAndReadingTypeAndMeasuredAt(
                     PATIENT_ID, HEART_RATE, MEASURED_AT_STORED)).thenReturn(Optional.of(existing));
 
@@ -403,32 +871,10 @@ class AlertServiceImplTest {
 
             assertThat(result.duplicateReading()).isTrue();
             assertThat(result.healthReadingId()).isEqualTo(READING_ID);
-
-            // Prova a normalização: a consulta usou o horário em UTC, não 11:30.
             verify(healthReadingRepository).findByPatientIdAndReadingTypeAndMeasuredAt(
                     PATIENT_ID, HEART_RATE, MEASURED_AT_STORED);
             verify(healthReadingRepository, never()).saveAndFlush(any());
             verify(alertRepository, never()).save(any());
-        }
-
-        @Test
-        @DisplayName("os dois fusos do mesmo instante devem gravar o mesmo measuredAt")
-        void shouldNormalizeBothOffsetsToTheSameStoredValue() {
-            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
-            stubReadingNotYetReceived(HEART_RATE);
-            when(readingThresholdRepository.findByReadingType(HEART_RATE))
-                    .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
-
-            alertService.evaluateReading(requestOf(HEART_RATE, 80.0, MEASURED_AT_UTC));
-            alertService.evaluateReading(
-                    requestOf(HEART_RATE, 80.0, MEASURED_AT_SAME_INSTANT_OFFSET));
-
-            ArgumentCaptor<HealthReading> captor = ArgumentCaptor.forClass(HealthReading.class);
-            verify(healthReadingRepository, times(2)).saveAndFlush(captor.capture());
-
-            assertThat(captor.getAllValues())
-                    .extracting(HealthReading::getMeasuredAt)
-                    .containsExactly(MEASURED_AT_STORED, MEASURED_AT_STORED);
         }
 
         @Test
@@ -437,6 +883,8 @@ class AlertServiceImplTest {
             when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
             when(healthReadingRepository.findByPatientIdAndReadingTypeAndMeasuredAt(
                     PATIENT_ID, HEART_RATE, MEASURED_AT_STORED)).thenReturn(Optional.empty());
+            when(readingThresholdRepository.findByReadingType(HEART_RATE))
+                    .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
             when(healthReadingRepository.saveAndFlush(any(HealthReading.class)))
                     .thenThrow(new DataIntegrityViolationException("uq_health_readings..."));
 
@@ -444,32 +892,6 @@ class AlertServiceImplTest {
 
             assertThatThrownBy(() -> alertService.evaluateReading(request))
                     .isInstanceOf(AlertDuplicateReadingException.class);
-
-            verify(alertRepository, never()).save(any());
-            verifyNoInteractions(eventPublisher);
-        }
-    }
-
-    @Nested
-    @DisplayName("deduplicação de alerta")
-    class AlertDeduplication {
-
-        @Test
-        @DisplayName("com alerta PENDING do mesmo tipo deve gravar a leitura e nao criar alerta")
-        void shouldPersistReadingButSkipAlertWhenPendingAlreadyExists() {
-            when(patientRepository.findById(PATIENT_ID)).thenReturn(Optional.of(patient));
-            stubReadingNotYetReceived(HEART_RATE);
-            when(readingThresholdRepository.findByReadingType(HEART_RATE))
-                    .thenReturn(Optional.of(thresholdOf(HEART_RATE, 50.0, 120.0)));
-            when(alertRepository.existsByPatientIdAndStatusAndHealthReading_ReadingType(
-                    PATIENT_ID, "PENDING", HEART_RATE)).thenReturn(true);
-
-            AlertEvaluationResponse result = alertService.evaluateReading(requestOf(HEART_RATE, 190.0));
-
-            verify(healthReadingRepository).saveAndFlush(any(HealthReading.class));
-            assertThat(result.alertGenerated()).isFalse();
-            assertThat(result.duplicateReading()).isFalse();
-            assertThat(result.healthReadingId()).isEqualTo(READING_ID);
 
             verify(alertRepository, never()).save(any());
             verifyNoInteractions(eventPublisher);
@@ -507,11 +929,7 @@ class AlertServiceImplTest {
         private static final String DOCTOR_EMAIL = "doctor@tcc.com";
 
         private Alert pendingAlert() {
-            Alert alert = new Alert();
-            alert.setId(ALERT_ID);
-            alert.setPatient(patient);
-            alert.setStatus("PENDING");
-            return alert;
+            return alertOf(ALERT_ID, AlertStatus.PENDING, null, MEASURED_AT_STORED);
         }
 
         private void stubAuthenticatedDoctor() {
@@ -538,12 +956,12 @@ class AlertServiceImplTest {
             when(alertRepository.save(alert)).thenReturn(alert);
             when(alertMapper.toResponse(alert)).thenReturn(new AlertResponse(
                     ALERT_ID, null, READING_ID, "CRITICAL", "Alerta", "Motivo",
-                    "RESOLVED", LocalDateTime.now()));
+                    AlertStatus.RESOLVED, LocalDateTime.now()));
 
             AlertResponse result = alertService.resolveAlert(DOCTOR_EMAIL, ALERT_ID);
 
-            assertThat(alert.getStatus()).isEqualTo("RESOLVED");
-            assertThat(result.status()).isEqualTo("RESOLVED");
+            assertThat(alert.getStatus()).isEqualTo(AlertStatus.RESOLVED);
+            assertThat(result.status()).isEqualTo(AlertStatus.RESOLVED);
             verify(alertRepository).save(alert);
         }
 
@@ -551,7 +969,7 @@ class AlertServiceImplTest {
         @DisplayName("alerta ja RESOLVED nao deve ser gravado de novo e devolve o estado atual")
         void shouldNotSaveAgainWhenAlertIsAlreadyResolved() {
             Alert alert = pendingAlert();
-            alert.setStatus("RESOLVED");
+            alert.setStatus(AlertStatus.RESOLVED);
 
             stubAuthenticatedDoctor();
             when(alertRepository.findById(ALERT_ID)).thenReturn(Optional.of(alert));
@@ -559,11 +977,11 @@ class AlertServiceImplTest {
                     .thenReturn(true);
             when(alertMapper.toResponse(alert)).thenReturn(new AlertResponse(
                     ALERT_ID, null, READING_ID, "CRITICAL", "Alerta", "Motivo",
-                    "RESOLVED", LocalDateTime.now()));
+                    AlertStatus.RESOLVED, LocalDateTime.now()));
 
             AlertResponse result = alertService.resolveAlert(DOCTOR_EMAIL, ALERT_ID);
 
-            assertThat(result.status()).isEqualTo("RESOLVED");
+            assertThat(result.status()).isEqualTo(AlertStatus.RESOLVED);
             verify(alertRepository, never()).save(any());
         }
 
@@ -579,7 +997,7 @@ class AlertServiceImplTest {
             assertThatThrownBy(() -> alertService.resolveAlert(DOCTOR_EMAIL, ALERT_ID))
                     .isInstanceOf(UnauthorizedException.class);
 
-            assertThat(alert.getStatus()).isEqualTo("PENDING");
+            assertThat(alert.getStatus()).isEqualTo(AlertStatus.PENDING);
             verify(alertRepository, never()).save(any());
         }
 
