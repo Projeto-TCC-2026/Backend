@@ -1,6 +1,7 @@
 package com.tcc.domain.repository;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -12,6 +13,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import com.tcc.domain.event.AlertConfirmationReason;
 import com.tcc.domain.model.Alert;
 import com.tcc.domain.model.PatientAlertAnswer;
 
@@ -103,12 +105,19 @@ public interface AlertRepository extends JpaRepository<Alert, UUID> {
      * UPDATE, e {@code clearAutomatically} limpa o contexto depois, para que
      * nenhuma entidade em memória permaneça com o status antigo.
      *
+     * <p>O motivo da confirmação entra neste mesmo UPDATE, e não em uma segunda
+     * escrita: ele descreve a transição, então precisa ser gravado por quem venceu a
+     * corrida e só por ele. Gravar depois, fora da condição, deixaria o perdedor
+     * sobrescrevendo o motivo de quem realmente confirmou o alerta.
+     *
      * @param confirmedAt     horário da medição que confirmou, ou nulo quando o
      *                        alerta não está sendo confirmado (resposta "estou bem")
      * @param answer          resposta da paciente, ou nulo quando quem age é o
      *                        agendador
      * @param respondedAt     horário da resposta, ou nulo quando quem age é o
      *                        agendador
+     * @param confirmationReason motivo da confirmação, ou nulo quando o alerta não
+     *                        está sendo confirmado (resposta "estou bem")
      * @return 1 quando este chamador fez a transição, 0 quando outro chegou antes
      */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
@@ -117,7 +126,8 @@ public interface AlertRepository extends JpaRepository<Alert, UUID> {
                SET a.status = :targetStatus,
                    a.confirmedAt = :confirmedAt,
                    a.patientResponse = :answer,
-                   a.patientRespondedAt = :respondedAt
+                   a.patientRespondedAt = :respondedAt,
+                   a.confirmationReason = :confirmationReason
              WHERE a.id = :alertId
                AND a.status = 'AWAITING_PATIENT'
             """)
@@ -125,23 +135,82 @@ public interface AlertRepository extends JpaRepository<Alert, UUID> {
                              @Param("targetStatus") String targetStatus,
                              @Param("confirmedAt") LocalDateTime confirmedAt,
                              @Param("answer") PatientAlertAnswer answer,
-                             @Param("respondedAt") LocalDateTime respondedAt);
+                             @Param("respondedAt") LocalDateTime respondedAt,
+                             @Param("confirmationReason") AlertConfirmationReason confirmationReason);
+
+    /**
+     * Alertas dos pacientes vinculados ao médico, restritos aos status que fazem
+     * sentido para ele.
+     *
+     * <p>O recorte por médico está <strong>na consulta</strong>: o EXISTS em
+     * {@code doctor_patients} é o que impede o alerta de um paciente de outro médico
+     * de ser carregado. Filtrar em memória depois traria dado de saúde de paciente
+     * fora do escopo para dentro da aplicação, mesmo que o descartasse em seguida.
+     *
+     * <p>EXISTS, e não JOIN: o vínculo médico-paciente não tem restrição de
+     * unicidade na tabela, então um paciente vinculado duas vezes ao mesmo médico
+     * duplicaria o alerta no JOIN e estragaria a contagem da página. O semi-join
+     * responde "existe vínculo?" sem multiplicar linhas.
+     *
+     * <p>Paciente e leitura vêm por JOIN FETCH, na mesma ida ao banco: a resposta
+     * mostra nome do paciente, tipo, valor e horário da medição, e sem isso cada
+     * item da página custaria duas consultas extras. A leitura é LEFT porque alerta
+     * pode não ter leitura associada.
+     *
+     * <p>A contagem é explícita porque a consulta principal tem JOIN FETCH, que não
+     * pode aparecer em {@code COUNT}. Ela repete a condição de escopo e de status —
+     * se uma das duas mudar, a outra precisa mudar junto.
+     *
+     * @param statuses os status visíveis ao médico. Nunca inclui UNCONFIRMED nem
+     *                 NOT_CONFIRMED: são estados internos do fluxo de confirmação
+     */
+    @Query(value = """
+            SELECT a FROM Alert a
+            JOIN FETCH a.patient p
+            LEFT JOIN FETCH a.healthReading r
+            WHERE a.status IN :statuses
+              AND EXISTS (SELECT 1 FROM DoctorPatient dp
+                           WHERE dp.patient.id = p.id
+                             AND dp.doctor.id = :doctorId)
+            """,
+            countQuery = """
+            SELECT COUNT(a) FROM Alert a
+            WHERE a.status IN :statuses
+              AND EXISTS (SELECT 1 FROM DoctorPatient dp
+                           WHERE dp.patient.id = a.patient.id
+                             AND dp.doctor.id = :doctorId)
+            """)
+    Page<Alert> findForDoctor(@Param("doctorId") UUID doctorId,
+                              @Param("statuses") Collection<String> statuses,
+                              Pageable pageable);
 
     List<Alert> findByPatientIdOrderByCreatedAtDesc(UUID patientId);
 
     Page<Alert> findByPatientIdAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(
             UUID patientId, LocalDateTime since, Pageable pageable);
 
+    /**
+     * Alertas do período para a planilha, restritos aos status informados.
+     *
+     * <p>O filtro de status é parâmetro da consulta, e não descarte em memória: a
+     * planilha de alertas não deve nem carregar o que não vai exibir, porque cada
+     * linha trazida junto é dado de saúde de paciente.
+     *
+     * @param statuses status que entram na planilha. Hoje só PENDING e RESOLVED, os
+     *                 dois estados em que o alerta efetivamente chegou ao médico
+     */
     @Query("""
             SELECT a FROM Alert a
             JOIN FETCH a.patient
             LEFT JOIN FETCH a.healthReading
             WHERE a.createdAt >= :start
               AND a.createdAt < :end
+              AND a.status IN :statuses
             ORDER BY a.createdAt ASC
             """)
     List<Alert> findForReport(@Param("start") LocalDateTime start,
-                              @Param("end") LocalDateTime end);
+                              @Param("end") LocalDateTime end,
+                              @Param("statuses") Collection<String> statuses);
 
     @Query("SELECT COUNT(a) FROM Alert a " +
            "JOIN a.patient p " +

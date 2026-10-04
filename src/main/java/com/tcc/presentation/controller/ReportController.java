@@ -1,27 +1,5 @@
 package com.tcc.presentation.controller;
 
-import com.tcc.application.dto.response.ApiResponse;
-import com.tcc.application.dto.response.DoctorsByHospitalResponse;
-import com.tcc.application.dto.response.PatientsByHospitalResponse;
-import com.tcc.application.dto.response.ProceduresByDoctorResponse;
-import com.tcc.application.dto.response.ProceduresByPeriodResponse;
-import com.tcc.application.service.ReportService;
-import com.tcc.exception.BusinessException;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.ContentDisposition;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.web.bind.annotation.*;
-
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -31,6 +9,33 @@ import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.WeekFields;
 import java.util.List;
 import java.util.UUID;
+
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.tcc.application.dto.response.ApiResponse;
+import com.tcc.application.dto.response.DoctorsByHospitalResponse;
+import com.tcc.application.dto.response.PatientsByHospitalResponse;
+import com.tcc.application.dto.response.ProceduresByDoctorResponse;
+import com.tcc.application.dto.response.ProceduresByPeriodResponse;
+import com.tcc.application.service.ReportService;
+import com.tcc.exception.BusinessException;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
 @RequestMapping("/api/reports")
@@ -186,6 +191,16 @@ public class ReportController {
 
     @GetMapping("/alerts/export")
     @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
+    @Operation(
+        summary = "Planilha de alertas do dia",
+        description = "Gera um XLSX com os alertas emitidos na data informada, dentro do escopo do usuário "
+                    + "autenticado: o médico vê os próprios, e o hospital vê os dos médicos dele. "
+                    + "Só entram alertas PENDING e RESOLVED, os dois estados em que o alerta efetivamente "
+                    + "chegou ao médico. UNCONFIRMED, AWAITING_PATIENT e NOT_CONFIRMED ficam de fora: os dois "
+                    + "primeiros são etapas em curso, que ainda podem terminar sem virar alerta, e o terceiro "
+                    + "é o desvio que não se repetiu. O filtro é aplicado na consulta, então essas linhas não "
+                    + "são nem carregadas."
+    )
     public ResponseEntity<byte[]> exportAlerts(
             Authentication authentication,
             @RequestParam String date,

@@ -1,15 +1,29 @@
 package com.tcc.application.service;
 
+import java.io.ByteArrayInputStream;
+import java.time.LocalDate;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import org.mockito.Mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.tcc.domain.model.AlertStatus;
+import com.tcc.domain.model.Checkin;
 import com.tcc.domain.model.Doctor;
 import com.tcc.domain.model.Hospital;
-import com.tcc.domain.model.Checkin;
 import com.tcc.domain.model.PatientProcedure;
 import com.tcc.domain.model.Procedure;
 import com.tcc.domain.model.Role;
@@ -23,16 +37,6 @@ import com.tcc.domain.repository.PatientRepository;
 import com.tcc.domain.repository.ProcedureRepository;
 import com.tcc.domain.repository.UserRepository;
 import com.tcc.exception.UnauthorizedException;
-import java.io.ByteArrayInputStream;
-import java.time.LocalDate;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class ReportServiceImplTest {
@@ -150,12 +154,45 @@ class ReportServiceImplTest {
         LocalDate date = LocalDate.of(2026, 8, 5);
 
         when(userRepository.findByEmailWithHospital(user.getEmail())).thenReturn(Optional.of(user));
-        when(alertRepository.findForReport(date.atStartOfDay(), date.plusDays(1).atStartOfDay()))
-                .thenReturn(List.of());
+        when(alertRepository.findForReport(eq(date.atStartOfDay()),
+                eq(date.plusDays(1).atStartOfDay()), any())).thenReturn(List.of());
 
         assertThat(service().exportAlerts(user.getEmail(), date, date, null, null, null)).isNotEmpty();
 
-        verify(alertRepository).findForReport(date.atStartOfDay(), date.plusDays(1).atStartOfDay());
+        verify(alertRepository).findForReport(eq(date.atStartOfDay()),
+                eq(date.plusDays(1).atStartOfDay()), any());
+    }
+
+    /**
+     * O recorte de status é da CONSULTA, não um descarte em memória depois.
+     *
+     * <p>A asserção é sobre o argumento que chega ao repository: só PENDING e
+     * RESOLVED. UNCONFIRMED, NOT_CONFIRMED e AWAITING_PATIENT nem são carregados —
+     * cada linha trazida a mais seria dado de saúde de paciente dentro do processo
+     * sem ir para a planilha.
+     */
+    @Test
+    void alertExportQueryAsksOnlyForPendingAndResolved() {
+        Hospital hospital = new Hospital();
+        hospital.setId(UUID.randomUUID());
+        hospital.setActive(true);
+        User user = new User("hospital@tcc.com", "hash", Role.HOSPITAL);
+        user.setHospital(hospital);
+        LocalDate date = LocalDate.of(2026, 8, 5);
+
+        when(userRepository.findByEmailWithHospital(user.getEmail())).thenReturn(Optional.of(user));
+        when(alertRepository.findForReport(any(), any(), any())).thenReturn(List.of());
+
+        service().exportAlerts(user.getEmail(), date, date, null, null, null);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Collection<String>> captor = ArgumentCaptor.forClass(Collection.class);
+        verify(alertRepository).findForReport(any(), any(), captor.capture());
+
+        assertThat(captor.getValue())
+                .containsExactlyInAnyOrder(AlertStatus.PENDING, AlertStatus.RESOLVED)
+                .doesNotContain(AlertStatus.UNCONFIRMED, AlertStatus.NOT_CONFIRMED,
+                        AlertStatus.AWAITING_PATIENT);
     }
 
     private Procedure procedure(Hospital hospital, String title) {

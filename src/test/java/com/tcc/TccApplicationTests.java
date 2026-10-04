@@ -1,15 +1,22 @@
 package com.tcc;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.UUID;
 
-import com.tcc.domain.repository.HospitalRepository;
-import com.tcc.domain.repository.PatientRepository;
+import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
+
+import com.tcc.domain.model.AlertStatus;
+import com.tcc.domain.repository.AlertRepository;
+import com.tcc.domain.repository.HospitalRepository;
+import com.tcc.domain.repository.PatientRepository;
 
 /**
  * Sobe o contexto completo no perfil {@code dev}.
@@ -57,9 +64,43 @@ class TccApplicationTests {
     @Autowired
     private HospitalRepository hospitalRepository;
 
+    @Autowired
+    private AlertRepository alertRepository;
+
 	@Test
 	void contextLoads() {
 	}
+
+    /**
+     * Executa de fato a consulta de alertas do médico, contra o H2 com as migrations
+     * aplicadas.
+     *
+     * <p>Subir o contexto já valida o JPQL, mas não a execução: esta consulta tem
+     * subconsulta EXISTS, JOIN FETCH e uma {@code countQuery} escrita à mão, e um erro
+     * em qualquer um dos três só aparece quando o SQL roda. Como a página é paginada,
+     * a chamada dispara as duas consultas, principal e de contagem.
+     */
+    @Test
+    void doctorAlertQueryRunsAgainstTheSchema() {
+        var result = alertRepository.findForDoctor(
+                UUID.randomUUID(),
+                List.of(AlertStatus.PENDING, AlertStatus.AWAITING_PATIENT, AlertStatus.RESOLVED),
+                PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt")));
+
+        assertThat(result.getContent()).isEmpty();
+        assertThat(result.getTotalElements()).isZero();
+    }
+
+    /** Mesma razão: valida a execução do filtro de status da planilha de alertas. */
+    @Test
+    void alertReportQueryRunsWithStatusFilter() {
+        var result = alertRepository.findForReport(
+                LocalDate.of(2026, 8, 5).atStartOfDay(),
+                LocalDate.of(2026, 8, 6).atStartOfDay(),
+                List.of(AlertStatus.PENDING, AlertStatus.RESOLVED));
+
+        assertThat(result).isEmpty();
+    }
 
     @Test
     void patientStatusFilterAcceptsInactiveStatusWithoutTextFilters() {

@@ -20,12 +20,20 @@
 ###   5. Decide o que fazer com o alerta (ver "CONFIRMAÇÃO" abaixo).
 ###
 ### VALOR GRAVE: PERGUNTA À PACIENTE ANTES DE AVISAR O MÉDICO
-### Quando o valor é GRAVE, o fluxo de duas leituras não se aplica: esperar a
-### segunda medição demoraria demais. Em vez disso o alerta nasce
-### AWAITING_PATIENT e a paciente é perguntada se está bem, por push.
+### Quando o valor é GRAVE e a leitura não confirmou nenhum UNCONFIRMED, o alerta
+### nasce AWAITING_PATIENT e a paciente é perguntada se está bem, por push —
+### esperar a segunda medição demoraria demais.
 ###
-###   leitura grave (e plausível)   -> cria alerta AWAITING_PATIENT com prazo de
+### A gravidade é o ÚLTIMO critério avaliado. A ordem completa está em "ORDEM DAS
+### DECISÕES" mais abaixo: janela de 4h, depois tentar confirmar um UNCONFIRMED
+### (grave ou não), e só então perguntar à paciente.
+###
+###   leitura grave (e plausível),
+###   que não confirmou nada       -> cria alerta AWAITING_PATIENT com prazo de
 ###                                    10 min. PUSH com a pergunta. Nenhum e-mail.
+###   leitura grave que CONFIRMA
+###   um UNCONFIRMED do tipo        -> alerta vira PENDING e o médico recebe e-mail
+###                                    na hora. A paciente não é perguntada.
 ###   já existe AWAITING_PATIENT
 ###   do mesmo paciente e tipo      -> só grava a leitura. Nenhum push repetido.
 ###   dentro da janela de 4h de um
@@ -33,8 +41,23 @@
 ###   UNCONFIRMED aberto do tipo    -> vira NOT_CONFIRMED: a pergunta substitui a
 ###                                    espera pela segunda leitura.
 ###
+### MOTIVO DA CONFIRMAÇÃO
+### Todo alerta que chega a PENDING grava POR QUE chegou, na coluna
+### confirmation_reason. É o mesmo motivo que define o texto do e-mail ao médico:
+###   DUAS_LEITURAS          -> duas leituras seguidas fora da faixa, em até 2h
+###   PACIENTE_NAO_ESTA_BEM  -> leitura grave e a paciente respondeu NOT_OK
+###   SEM_RESPOSTA           -> leitura grave e o prazo de 10 min venceu calado
+### Fica NULO em alerta que não foi confirmado (UNCONFIRMED, AWAITING_PATIENT,
+### NOT_CONFIRMED) e em alerta confirmado antes da V37, que não tem o dado
+### registrado. O campo aparece em GET /api/doctor/alerts.
+###
+### Nos caminhos da resposta e do agendador, o motivo é gravado no MESMO UPDATE
+### condicional que troca o status. Quem perde a corrida não grava nada: nem
+### status, nem motivo.
+
 ### RESPOSTA DA PACIENTE (POST /api/mobile/alerts/{alertId}/response)
-###   NOT_OK -> alerta vira PENDING, confirmed_at = measuredAt da leitura grave.
+###   NOT_OK -> alerta vira PENDING, confirmed_at = measuredAt da leitura grave,
+###             confirmation_reason = PACIENTE_NAO_ESTA_BEM.
 ###             E-MAIL ao médico na hora, com o motivo
 ###             "A paciente respondeu que não está bem".
 ###   OK     -> alerta vira UNCONFIRMED e volta ao fluxo comum. Nenhum e-mail.
@@ -43,8 +66,9 @@
 ###
 ### SEM RESPOSTA EM 10 MINUTOS
 ### Um agendador roda a cada 1 minuto. Alerta AWAITING_PATIENT com prazo vencido
-### vira PENDING, confirmed_at = measuredAt da leitura grave, e o médico recebe
-### e-mail com o motivo "A paciente não respondeu em 10 minutos".
+### vira PENDING, confirmed_at = measuredAt da leitura grave,
+### confirmation_reason = SEM_RESPOSTA, e o médico recebe e-mail com o motivo
+### "A paciente não respondeu em 10 minutos".
 ### Silêncio não é "está tudo bem".
 ###
 ### A resposta e o agendador nunca vencem os dois: a troca de status é um UPDATE
@@ -61,8 +85,34 @@
 ### Ou seja: 40 e 131 são graves, 41 e 130 não. 84 é grave, 85 não.
 ### Tipo sem faixa grave cadastrada segue só o fluxo comum.
 
+### ORDEM DAS DECISÕES PARA LEITURA FORA DA FAIXA NORMAL
+### Esta é a ordem exata em que o backend decide. Importa porque o resultado muda
+### conforme o passo que atender primeiro:
+###
+###   1. JANELA DE 4H — existe alerta PENDING do mesmo paciente e tipo confirmado
+###      há menos de 4h? Então a leitura é só gravada. Nada é criado, ninguém é
+###      avisado. Vale para leitura grave e não grave, igual.
+###
+###   2. TENTAR CONFIRMAR UM UNCONFIRMED — existe UNCONFIRMED aberto do tipo, a
+###      leitura do alerta é a imediatamente anterior, e as duas medições cabem em
+###      2h? Então o alerta passa a PENDING e o médico recebe e-mail.
+###      ATENÇÃO: este passo acontece ANTES de olhar a gravidade, e vale para
+###      leitura GRAVE também. Leitura grave que confirma um UNCONFIRMED avisa o
+###      médico direto, sem perguntar nada à paciente.
+###
+###   3. SÓ ENTÃO A GRAVIDADE — não confirmou nada no passo 2:
+###        valor grave     -> pergunta à paciente (alerta AWAITING_PATIENT)
+###        valor não grave -> novo alerta UNCONFIRMED
+###
+### Por que a confirmação vem antes da gravidade: a paciente que responde "estou
+### bem" devolve o alerta a UNCONFIRMED. Se a leitura grave seguinte abrisse uma
+### nova pergunta em vez de confirmar, uma sequência de leituras graves com "estou
+### bem" a cada vez nunca chegaria ao médico — cada pergunta nova descartaria o
+### UNCONFIRMED que a anterior tinha deixado. Confirmando primeiro, a segunda
+### leitura seguida fora da faixa avisa o médico, grave ou não.
+
 ### CONFIRMAÇÃO POR DUAS LEITURAS
-### Vale para leitura fora da faixa normal que NÃO é grave.
+### O passo 2 acima, em detalhe.
 ### O médico só é avisado depois que DUAS leituras seguidas confirmam o desvio.
 ### Status do alerta: UNCONFIRMED -> PENDING -> RESOLVED, ou UNCONFIRMED -> NOT_CONFIRMED.
 ###
@@ -659,27 +709,162 @@ X-Integration-Key: {{integrationKey}}
 
 
 ### ---------------------------------------------------------------------------
+### Listagem de alertas pelo médico (JWT, role DOCTOR)
+###
+### GET /api/doctor/alerts
+###
+### Só alertas de pacientes VINCULADOS ao médico autenticado. O médico vem do
+### token: não existe parâmetro de médico, e o recorte por paciente é feito na
+### consulta ao banco (vínculo em doctor_patients), não por filtro em memória.
+###
+### Status visíveis, e só estes três:
+###   PENDING          -> precisa ser tratado pelo médico
+###   AWAITING_PATIENT -> leitura grave em curso, aguardando a paciente responder
+###   RESOLVED         -> já tratado
+### UNCONFIRMED e NOT_CONFIRMED NUNCA aparecem, nem com filtro explícito: são
+### etapas internas do fluxo de confirmação. Pedir um deles no parâmetro status
+### devolve 400, igual a qualquer outro valor desconhecido.
+###
+### Paginado: page (base 0) e size (padrão 20). Sempre do mais recente para o
+### mais antigo — ordenação pedida pelo cliente é ignorada.
+###
+### measuredAt e confirmedAt saem em ISO 8601 UTC, com o sufixo "Z".
+### ---------------------------------------------------------------------------
+
+### 17. Primeira página, os três status visíveis -> 200
+GET {{baseUrl}}/doctor/alerts
+Authorization: Bearer {{doctorToken}}
+
+### Resposta (exemplo):
+### {
+###   "success": true,
+###   "data": {
+###     "content": [
+###       {
+###         "id": "11111111-1111-1111-1111-111111111111",
+###         "patientId": "550e8400-e29b-41d4-a716-446655440000",
+###         "patientName": "Maria Oliveira",
+###         "readingType": "HEART_RATE",
+###         "readingValue": "38.0",
+###         "unit": "bpm",
+###         "measuredAt": "2026-08-29T14:40:00Z",
+###         "severity": "CRITICAL",
+###         "title": "Leitura fora da faixa normal: HEART_RATE (Frequência cardíaca)",
+###         "status": "PENDING",
+###         "confirmedAt": "2026-08-29T14:40:00Z",
+###         "patientResponse": null,
+###         "confirmationReason": "DUAS_LEITURAS"
+###       },
+###       {
+###         "id": "22222222-2222-2222-2222-222222222222",
+###         "patientId": "550e8400-e29b-41d4-a716-446655440000",
+###         "patientName": "Maria Oliveira",
+###         "readingType": "SPO2",
+###         "readingValue": "83.0",
+###         "unit": "%",
+###         "measuredAt": "2026-08-30T13:00:00Z",
+###         "severity": "CRITICAL",
+###         "title": "Leitura fora da faixa normal: SPO2 (Saturação de oxigênio)",
+###         "status": "AWAITING_PATIENT",
+###         "confirmedAt": null,
+###         "patientResponse": null,
+###         "confirmationReason": null
+###       },
+###       {
+###         "id": "33333333-3333-3333-3333-333333333333",
+###         "patientId": "660e8400-e29b-41d4-a716-446655440001",
+###         "patientName": "Ana Souza",
+###         "readingType": "HEART_RATE",
+###         "readingValue": "35.0",
+###         "unit": "bpm",
+###         "measuredAt": "2026-08-30T08:00:00Z",
+###         "severity": "CRITICAL",
+###         "title": "Leitura fora da faixa normal: HEART_RATE (Frequência cardíaca)",
+###         "status": "RESOLVED",
+###         "confirmedAt": "2026-08-30T08:00:00Z",
+###         "patientResponse": "NOT_OK",
+###         "confirmationReason": "PACIENTE_NAO_ESTA_BEM"
+###       }
+###     ],
+###     "totalElements": 3,
+###     "totalPages": 1,
+###     "number": 0,
+###     "size": 20,
+###     "first": true,
+###     "last": true
+###   }
+### }
+
+### 17b. Só os que precisam ser tratados -> 200
+GET {{baseUrl}}/doctor/alerts?status=PENDING
+Authorization: Bearer {{doctorToken}}
+
+### 17c. Só os que aguardam resposta da paciente -> 200
+### confirmedAt e confirmationReason vêm nulos: ainda não foram confirmados.
+GET {{baseUrl}}/doctor/alerts?status=AWAITING_PATIENT
+Authorization: Bearer {{doctorToken}}
+
+### 17d. Histórico do que já foi tratado -> 200
+GET {{baseUrl}}/doctor/alerts?status=RESOLVED
+Authorization: Bearer {{doctorToken}}
+
+### 17e. Segunda página, 5 por página -> 200
+GET {{baseUrl}}/doctor/alerts?page=1&size=5
+Authorization: Bearer {{doctorToken}}
+
+### 17f. Status desconhecido -> 400
+### Mensagem: "Status inválido. Valores aceitos: PENDING, AWAITING_PATIENT, RESOLVED"
+GET {{baseUrl}}/doctor/alerts?status=ARQUIVADO
+Authorization: Bearer {{doctorToken}}
+
+### 17g. Pedir UNCONFIRMED -> 400
+### Não é "lista vazia": o status não é visível ao médico, então é filtro inválido.
+GET {{baseUrl}}/doctor/alerts?status=UNCONFIRMED
+Authorization: Bearer {{doctorToken}}
+
+### 17h. Pedir NOT_CONFIRMED -> 400, pela mesma razão
+GET {{baseUrl}}/doctor/alerts?status=NOT_CONFIRMED
+Authorization: Bearer {{doctorToken}}
+
+### 17i. Sem token -> 401
+GET {{baseUrl}}/doctor/alerts
+
+### 17j. Token de paciente em endpoint de médico -> 403
+GET {{baseUrl}}/doctor/alerts
+Authorization: Bearer {{patientToken}}
+
+### ---------------------------------------------------------------------------
 ### Resolução de alerta pelo médico (JWT, role DOCTOR)
 ###
 ### Alerta RESOLVED deixa de contar nos indicadores de alertas pendentes e
 ### deixa de bloquear a criação de um novo alerta para o mesmo paciente e tipo.
+###
+### Ciclo de status atual:
+###   fluxo comum:  UNCONFIRMED --(2ª leitura seguida fora, em até 2h)--> PENDING
+###                 UNCONFIRMED --(leitura volta ao normal)-------------> NOT_CONFIRMED
+###   valor grave:  AWAITING_PATIENT --(paciente: NOT_OK)--------------> PENDING
+###                 AWAITING_PATIENT --(prazo de 10 min vencido)-------> PENDING
+###                 AWAITING_PATIENT --(paciente: OK)----------------> UNCONFIRMED
+###   médico:       PENDING --(este endpoint)------------------------> RESOLVED
 ### ---------------------------------------------------------------------------
 
-### 17. Médico vinculado ao paciente resolve o alerta -> 200, status RESOLVED
+### 18. Médico vinculado ao paciente resolve o alerta -> 200, status RESOLVED
+### Use um id devolvido pela requisição 17b, que lista os PENDING.
 PATCH {{baseUrl}}/doctor/alerts/11111111-1111-1111-1111-111111111111/resolve
 Authorization: Bearer {{doctorToken}}
 
-### 18. Médico não vinculado ao paciente do alerta -> 401
+### 19. Médico não vinculado ao paciente do alerta -> 401
+### Alerta assim também não aparece na listagem da 17: o recorte é o mesmo.
 PATCH {{baseUrl}}/doctor/alerts/22222222-2222-2222-2222-222222222222/resolve
 Authorization: Bearer {{doctorToken}}
 
-### 19. Repita a requisição 17: alerta já RESOLVED -> 200, mesmo alerta, sem nova gravação
+### 20. Repita a requisição 18: alerta já RESOLVED -> 200, mesmo alerta, sem nova gravação
 PATCH {{baseUrl}}/doctor/alerts/11111111-1111-1111-1111-111111111111/resolve
 Authorization: Bearer {{doctorToken}}
 
-### 20. Alerta inexistente -> 404
+### 21. Alerta inexistente -> 404
 PATCH {{baseUrl}}/doctor/alerts/00000000-0000-0000-0000-000000000000/resolve
 Authorization: Bearer {{doctorToken}}
 
-### 21. Sem token -> 401
+### 22. Sem token -> 401
 PATCH {{baseUrl}}/doctor/alerts/11111111-1111-1111-1111-111111111111/resolve

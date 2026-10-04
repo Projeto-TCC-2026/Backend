@@ -9,6 +9,7 @@ import org.springframework.data.domain.Pageable;
 import com.tcc.application.dto.request.AlertEvaluationRequest;
 import com.tcc.application.dto.response.AlertEvaluationResponse;
 import com.tcc.application.dto.response.AlertResponse;
+import com.tcc.application.dto.response.DoctorAlertResponse;
 import com.tcc.application.dto.response.PatientAlertAnswerResponse;
 import com.tcc.domain.model.PatientAlertAnswer;
 
@@ -66,6 +67,27 @@ public interface AlertService {
      * médico autenticado.
      */
     AlertResponse resolveAlert(String email, UUID alertId);
+
+    /**
+     * Alertas dos pacientes vinculados ao médico autenticado, dos mais recentes aos
+     * mais antigos.
+     *
+     * <p>O escopo é aplicado na consulta ao banco, por vínculo em
+     * {@code doctor_patients}: alerta de paciente de outro médico não é carregado.
+     * A identidade do médico vem do token, nunca de parâmetro.
+     *
+     * <p>Só três status aparecem: {@code PENDING}, {@code AWAITING_PATIENT} e
+     * {@code RESOLVED}. {@code UNCONFIRMED} e {@code NOT_CONFIRMED} são etapas
+     * internas do fluxo de confirmação — mostrar leitura isolada que ainda não se
+     * confirmou, ou que se desconfirmou, pediria ao médico uma decisão sobre dado
+     * que o sistema deliberadamente não considerou acionável.
+     *
+     * @param status um dos três status visíveis, para filtrar a lista, ou nulo para
+     *               trazer os três
+     * @throws com.tcc.exception.BusinessException quando {@code status} não é um dos
+     *         três visíveis ao médico
+     */
+    Page<DoctorAlertResponse> listForDoctor(String email, String status, Pageable pageable);
 
     /**
      * Registra a resposta da paciente à pergunta disparada por uma leitura grave.

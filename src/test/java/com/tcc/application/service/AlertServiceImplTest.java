@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,13 +28,16 @@ import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import com.tcc.application.dto.request.AlertEvaluationRequest;
 import com.tcc.application.dto.response.AlertEvaluationResponse;
 import com.tcc.application.dto.response.AlertResponse;
+import com.tcc.application.dto.response.DoctorAlertResponse;
 import com.tcc.application.dto.response.PatientAlertAnswerResponse;
 import com.tcc.application.mapper.AlertMapper;
 import com.tcc.domain.event.AlertConfirmationReason;
@@ -56,6 +60,7 @@ import com.tcc.domain.repository.HealthReadingRepository;
 import com.tcc.domain.repository.PatientRepository;
 import com.tcc.domain.repository.ReadingThresholdRepository;
 import com.tcc.domain.repository.UserRepository;
+import com.tcc.exception.BusinessException;
 import com.tcc.exception.ResourceNotFoundException;
 import com.tcc.exception.UnauthorizedException;
 
@@ -828,6 +833,10 @@ class AlertServiceImplTest {
 
             assertThat(unconfirmed.getStatus()).isEqualTo(AlertStatus.PENDING);
             assertThat(unconfirmed.getConfirmedAt()).isEqualTo(MEASURED_AT_STORED);
+            // O motivo é gravado no mesmo momento da troca de status, e é o mesmo
+            // valor que vai no evento abaixo.
+            assertThat(unconfirmed.getConfirmationReason())
+                    .isEqualTo(AlertConfirmationReason.DUAS_LEITURAS);
 
             ArgumentCaptor<AlertConfirmedEvent> captor =
                     ArgumentCaptor.forClass(AlertConfirmedEvent.class);
@@ -865,6 +874,8 @@ class AlertServiceImplTest {
             // O antigo não fica UNCONFIRMED para sempre: sem confirmação, ele é fechado.
             assertThat(unconfirmed.getStatus()).isEqualTo(AlertStatus.NOT_CONFIRMED);
             assertThat(unconfirmed.getConfirmedAt()).isNull();
+            // NOT_CONFIRMED não é confirmação, então não há motivo a registrar.
+            assertThat(unconfirmed.getConfirmationReason()).isNull();
 
             verify(eventPublisher).publishEvent(any(AlertCreatedEvent.class));
             verify(eventPublisher, never()).publishEvent(any(AlertConfirmedEvent.class));
@@ -1358,7 +1369,7 @@ class AlertServiceImplTest {
         /** O UPDATE condicional encontrou a linha ainda em AWAITING_PATIENT. */
         private void stubTransitionWon(String targetStatus) {
             when(alertRepository.leaveAwaitingPatient(
-                    eq(ALERT_ID), eq(targetStatus), any(), any(), any())).thenReturn(1);
+                    eq(ALERT_ID), eq(targetStatus), any(), any(), any(), any())).thenReturn(1);
         }
 
         @Test
@@ -1374,9 +1385,13 @@ class AlertServiceImplTest {
 
             // confirmed_at é o horário da MEDIÇÃO grave, não o da resposta: é a
             // referência clínica e é de onde a janela de 4h é contada.
+            //
+            // O motivo vai neste mesmo UPDATE condicional, e não em uma segunda
+            // escrita: é o que garante que só quem venceu a corrida grave motivo.
             verify(alertRepository).leaveAwaitingPatient(
                     ALERT_ID, AlertStatus.PENDING, SEVERE_MEASURED_AT,
-                    PatientAlertAnswer.NOT_OK, NOW);
+                    PatientAlertAnswer.NOT_OK, NOW,
+                    AlertConfirmationReason.PACIENTE_NAO_ESTA_BEM);
 
             ArgumentCaptor<AlertConfirmedEvent> captor =
                     ArgumentCaptor.forClass(AlertConfirmedEvent.class);
@@ -1406,9 +1421,10 @@ class AlertServiceImplTest {
                     PATIENT_EMAIL, ALERT_ID, PatientAlertAnswer.OK);
 
             // confirmed_at fica nulo: o alerta volta a não confirmado, e um valor ali
-            // faria a janela de 4h silenciar as leituras seguintes.
+            // faria a janela de 4h silenciar as leituras seguintes. O motivo também
+            // fica nulo, pela mesma razão: não houve confirmação a descrever.
             verify(alertRepository).leaveAwaitingPatient(
-                    ALERT_ID, AlertStatus.UNCONFIRMED, null, PatientAlertAnswer.OK, NOW);
+                    ALERT_ID, AlertStatus.UNCONFIRMED, null, PatientAlertAnswer.OK, NOW, null);
 
             // Nenhum e-mail: o evento de confirmação não é publicado.
             verifyNoInteractions(eventPublisher);
@@ -1471,7 +1487,8 @@ class AlertServiceImplTest {
                     .isInstanceOf(UnauthorizedException.class);
 
             // Nada é gravado e nenhum médico é avisado.
-            verify(alertRepository, never()).leaveAwaitingPatient(any(), any(), any(), any(), any());
+            verify(alertRepository, never())
+                    .leaveAwaitingPatient(any(), any(), any(), any(), any(), any());
             verifyNoInteractions(eventPublisher);
         }
 
@@ -1494,7 +1511,8 @@ class AlertServiceImplTest {
                     .hasMessageContaining("prazo")
                     .hasMessageContaining("médico foi avisado");
 
-            verify(alertRepository, never()).leaveAwaitingPatient(any(), any(), any(), any(), any());
+            verify(alertRepository, never())
+                    .leaveAwaitingPatient(any(), any(), any(), any(), any(), any());
             verifyNoInteractions(eventPublisher);
         }
 
@@ -1564,15 +1582,18 @@ class AlertServiceImplTest {
             Alert alert = expiredAlert();
             when(alertRepository.findById(ALERT_ID)).thenReturn(Optional.of(alert));
             when(alertRepository.leaveAwaitingPatient(
-                    ALERT_ID, AlertStatus.PENDING, SEVERE_MEASURED_AT, null, null)).thenReturn(1);
+                    ALERT_ID, AlertStatus.PENDING, SEVERE_MEASURED_AT, null, null,
+                    AlertConfirmationReason.SEM_RESPOSTA)).thenReturn(1);
 
             boolean confirmed = alertService.confirmAlertWithoutPatientResponse(ALERT_ID);
 
             assertThat(confirmed).isTrue();
 
-            // Sem resposta: patient_response e patient_responded_at ficam nulos.
+            // Sem resposta: patient_response e patient_responded_at ficam nulos. O
+            // motivo entra no mesmo UPDATE condicional da troca de status.
             verify(alertRepository).leaveAwaitingPatient(
-                    ALERT_ID, AlertStatus.PENDING, SEVERE_MEASURED_AT, null, null);
+                    ALERT_ID, AlertStatus.PENDING, SEVERE_MEASURED_AT, null, null,
+                    AlertConfirmationReason.SEM_RESPOSTA);
 
             ArgumentCaptor<AlertConfirmedEvent> captor =
                     ArgumentCaptor.forClass(AlertConfirmedEvent.class);
@@ -1597,7 +1618,8 @@ class AlertServiceImplTest {
 
             assertThat(alertService.confirmAlertWithoutPatientResponse(ALERT_ID)).isFalse();
 
-            verify(alertRepository, never()).leaveAwaitingPatient(any(), any(), any(), any(), any());
+            verify(alertRepository, never())
+                    .leaveAwaitingPatient(any(), any(), any(), any(), any(), any());
             verifyNoInteractions(eventPublisher);
         }
 
@@ -1666,7 +1688,8 @@ class AlertServiceImplTest {
 
             // UPDATE devolve 0: outra transação já tirou a linha de AWAITING_PATIENT.
             when(alertRepository.leaveAwaitingPatient(
-                    eq(ALERT_ID), eq(AlertStatus.PENDING), any(), any(), any())).thenReturn(0);
+                    eq(ALERT_ID), eq(AlertStatus.PENDING), any(), any(), any(), any()))
+                    .thenReturn(0);
 
             assertThatThrownBy(() -> alertService.registerPatientResponse(
                     PATIENT_EMAIL, ALERT_ID, PatientAlertAnswer.NOT_OK))
@@ -1682,7 +1705,8 @@ class AlertServiceImplTest {
             Alert alert = awaiting();
             when(alertRepository.findById(ALERT_ID)).thenReturn(Optional.of(alert));
             when(alertRepository.leaveAwaitingPatient(
-                    ALERT_ID, AlertStatus.PENDING, SEVERE_MEASURED_AT, null, null)).thenReturn(0);
+                    ALERT_ID, AlertStatus.PENDING, SEVERE_MEASURED_AT, null, null,
+                    AlertConfirmationReason.SEM_RESPOSTA)).thenReturn(0);
 
             assertThat(alertService.confirmAlertWithoutPatientResponse(ALERT_ID)).isFalse();
 
@@ -1703,7 +1727,7 @@ class AlertServiceImplTest {
 
             // Primeira chamada vence, segunda perde: é o lock da linha decidindo.
             when(alertRepository.leaveAwaitingPatient(
-                    eq(ALERT_ID), eq(AlertStatus.PENDING), any(), any(), any()))
+                    eq(ALERT_ID), eq(AlertStatus.PENDING), any(), any(), any(), any()))
                     .thenReturn(1, 0);
 
             PatientAlertAnswerResponse answered = alertService.registerPatientResponse(
@@ -1808,6 +1832,215 @@ class AlertServiceImplTest {
                     .hasMessageContaining("Alerta");
 
             verify(alertRepository, never()).save(any());
+        }
+    }
+
+    /**
+     * Listagem de alertas do médico.
+     *
+     * <p>O ponto central é o que chega à CONSULTA: o id do médico autenticado e os
+     * status permitidos. É ali que o escopo por paciente vinculado e o recorte de
+     * status acontecem — e é isso que estes testes verificam, capturando os
+     * argumentos em vez de olhar a lista devolvida. Uma asserção sobre a lista
+     * passaria igual se o filtro estivesse em memória, ou se não estivesse em
+     * lugar nenhum e o repository mockado só devolvesse pouca coisa.
+     */
+    @Nested
+    @DisplayName("listagem de alertas do médico")
+    class DoctorListing {
+
+        private static final String DOCTOR_EMAIL = "doctor@tcc.com";
+        private static final Pageable FIRST_PAGE = PageRequest.of(0, 20);
+
+        private void stubAuthenticatedDoctor() {
+            User user = new User(DOCTOR_EMAIL, "hash", Role.DOCTOR);
+            user.setId(UUID.randomUUID());
+
+            Doctor doctor = new Doctor();
+            doctor.setId(DOCTOR_ID);
+            doctor.setUser(user);
+            doctor.setHospital(new Hospital());
+
+            when(userRepository.findByEmailAndActiveTrue(DOCTOR_EMAIL)).thenReturn(Optional.of(user));
+            when(doctorRepository.findByUserId(user.getId())).thenReturn(Optional.of(doctor));
+        }
+
+        private void stubEmptyPage() {
+            when(alertRepository.findForDoctor(any(), any(), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of()));
+        }
+
+        @SuppressWarnings("unchecked")
+        private Collection<String> capturedStatuses() {
+            ArgumentCaptor<Collection<String>> captor = ArgumentCaptor.forClass(Collection.class);
+            verify(alertRepository).findForDoctor(any(), captor.capture(), any(Pageable.class));
+            return captor.getValue();
+        }
+
+        @Test
+        @DisplayName("deve consultar com o id do medico autenticado, nao com parametro")
+        void shouldScopeQueryToAuthenticatedDoctor() {
+            stubAuthenticatedDoctor();
+            stubEmptyPage();
+
+            alertService.listForDoctor(DOCTOR_EMAIL, null, FIRST_PAGE);
+
+            // O escopo por paciente vinculado está no WHERE da consulta, e o médico
+            // que ela recebe é o do token.
+            verify(alertRepository).findForDoctor(eq(DOCTOR_ID), any(), any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("sem filtro deve pedir os tres status visiveis ao medico")
+        void shouldAskForTheThreeVisibleStatuses() {
+            stubAuthenticatedDoctor();
+            stubEmptyPage();
+
+            alertService.listForDoctor(DOCTOR_EMAIL, null, FIRST_PAGE);
+
+            assertThat(capturedStatuses()).containsExactlyInAnyOrder(
+                    AlertStatus.PENDING, AlertStatus.AWAITING_PATIENT, AlertStatus.RESOLVED);
+        }
+
+        /**
+         * UNCONFIRMED e NOT_CONFIRMED são etapas internas do fluxo de confirmação.
+         * Mostrá-los desfaria, por outro caminho, a decisão de não levar ao médico
+         * leitura isolada que não se confirmou.
+         */
+        @Test
+        @DisplayName("UNCONFIRMED e NOT_CONFIRMED nunca entram na consulta")
+        void shouldNeverQueryInternalStatuses() {
+            stubAuthenticatedDoctor();
+            stubEmptyPage();
+
+            alertService.listForDoctor(DOCTOR_EMAIL, null, FIRST_PAGE);
+
+            assertThat(capturedStatuses())
+                    .doesNotContain(AlertStatus.UNCONFIRMED, AlertStatus.NOT_CONFIRMED);
+        }
+
+        @Test
+        @DisplayName("filtro por status deve restringir a consulta aquele status")
+        void shouldNarrowQueryToRequestedStatus() {
+            stubAuthenticatedDoctor();
+            stubEmptyPage();
+
+            alertService.listForDoctor(DOCTOR_EMAIL, AlertStatus.PENDING, FIRST_PAGE);
+
+            assertThat(capturedStatuses()).containsExactly(AlertStatus.PENDING);
+        }
+
+        @Test
+        @DisplayName("filtro em minusculas deve ser aceito")
+        void shouldAcceptLowercaseStatus() {
+            stubAuthenticatedDoctor();
+            stubEmptyPage();
+
+            alertService.listForDoctor(DOCTOR_EMAIL, "resolved", FIRST_PAGE);
+
+            assertThat(capturedStatuses()).containsExactly(AlertStatus.RESOLVED);
+        }
+
+        @Test
+        @DisplayName("filtro vazio deve valer como ausente")
+        void shouldTreatBlankStatusAsAbsent() {
+            stubAuthenticatedDoctor();
+            stubEmptyPage();
+
+            alertService.listForDoctor(DOCTOR_EMAIL, "   ", FIRST_PAGE);
+
+            assertThat(capturedStatuses()).hasSize(3);
+        }
+
+        @Test
+        @DisplayName("status desconhecido deve lancar BusinessException e nao consultar")
+        void shouldRejectUnknownStatus() {
+            stubAuthenticatedDoctor();
+
+            assertThatThrownBy(() -> alertService.listForDoctor(DOCTOR_EMAIL, "ARQUIVADO", FIRST_PAGE))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("Status inválido");
+
+            verify(alertRepository, never()).findForDoctor(any(), any(), any(Pageable.class));
+        }
+
+        /**
+         * O médico não contorna o recorte do endpoint pedindo um status interno por
+         * parâmetro: a validação usa a mesma lista de status visíveis.
+         */
+        @Test
+        @DisplayName("pedir UNCONFIRMED por parametro deve ser recusado como status invalido")
+        void shouldRejectInternalStatusAsFilter() {
+            stubAuthenticatedDoctor();
+
+            assertThatThrownBy(() -> alertService.listForDoctor(
+                    DOCTOR_EMAIL, AlertStatus.UNCONFIRMED, FIRST_PAGE))
+                    .isInstanceOf(BusinessException.class);
+
+            verify(alertRepository, never()).findForDoctor(any(), any(), any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("deve ordenar por createdAt desc, independente do que o cliente pedir")
+        void shouldAlwaysSortByNewestFirst() {
+            stubAuthenticatedDoctor();
+            stubEmptyPage();
+
+            // Cliente pede ordenação ascendente por severidade; o contrato do
+            // endpoint é "mais recentes primeiro", então ela é descartada.
+            alertService.listForDoctor(DOCTOR_EMAIL, null,
+                    PageRequest.of(2, 5, Sort.by(Sort.Direction.ASC, "severity")));
+
+            ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+            verify(alertRepository).findForDoctor(any(), any(), captor.capture());
+
+            assertThat(captor.getValue().getSort())
+                    .isEqualTo(Sort.by(Sort.Direction.DESC, "createdAt"));
+            // Página e tamanho pedidos são preservados.
+            assertThat(captor.getValue().getPageNumber()).isEqualTo(2);
+            assertThat(captor.getValue().getPageSize()).isEqualTo(5);
+        }
+
+        @Test
+        @DisplayName("deve mapear cada alerta para DoctorAlertResponse")
+        void shouldMapEachAlertToDoctorResponse() {
+            stubAuthenticatedDoctor();
+
+            HealthReading reading = readingOf(READING_ID, HEART_RATE, "38.0", MEASURED_AT_STORED, false);
+            Alert alert = alertOf(ALERT_ID, AlertStatus.PENDING, reading, MEASURED_AT_STORED);
+            alert.setConfirmationReason(AlertConfirmationReason.DUAS_LEITURAS);
+
+            DoctorAlertResponse mapped = new DoctorAlertResponse(
+                    ALERT_ID, PATIENT_ID, "Paciente de Teste", HEART_RATE, "38.0", "bpm",
+                    MEASURED_AT_STORED.atOffset(ZoneOffset.UTC), "CRITICAL", "Alerta",
+                    AlertStatus.PENDING, MEASURED_AT_STORED.atOffset(ZoneOffset.UTC),
+                    null, AlertConfirmationReason.DUAS_LEITURAS);
+
+            when(alertRepository.findForDoctor(any(), any(), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(alert)));
+            when(alertMapper.toDoctorResponse(alert)).thenReturn(mapped);
+
+            Page<DoctorAlertResponse> result =
+                    alertService.listForDoctor(DOCTOR_EMAIL, null, FIRST_PAGE);
+
+            assertThat(result.getContent()).containsExactly(mapped);
+            assertThat(result.getContent().get(0).confirmationReason())
+                    .isEqualTo(AlertConfirmationReason.DUAS_LEITURAS);
+        }
+
+        @Test
+        @DisplayName("usuario sem perfil de medico nao deve conseguir listar")
+        void shouldRejectUserWithoutDoctorProfile() {
+            User user = new User(DOCTOR_EMAIL, "hash", Role.DOCTOR);
+            user.setId(UUID.randomUUID());
+
+            when(userRepository.findByEmailAndActiveTrue(DOCTOR_EMAIL)).thenReturn(Optional.of(user));
+            when(doctorRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> alertService.listForDoctor(DOCTOR_EMAIL, null, FIRST_PAGE))
+                    .isInstanceOf(UnauthorizedException.class);
+
+            verify(alertRepository, never()).findForDoctor(any(), any(), any(Pageable.class));
         }
     }
 }

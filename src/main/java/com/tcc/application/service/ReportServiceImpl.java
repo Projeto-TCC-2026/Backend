@@ -24,6 +24,7 @@ import com.tcc.application.dto.response.PatientsByHospitalResponse;
 import com.tcc.application.dto.response.ProceduresByDoctorResponse;
 import com.tcc.application.dto.response.ProceduresByPeriodResponse;
 import com.tcc.domain.model.Alert;
+import com.tcc.domain.model.AlertStatus;
 import com.tcc.domain.model.Checkin;
 import com.tcc.domain.model.CheckinFieldValue;
 import com.tcc.domain.model.Doctor;
@@ -44,6 +45,21 @@ import com.tcc.exception.UnauthorizedException;
 
 @Service
 public class ReportServiceImpl implements ReportService {
+
+    /**
+     * Status de alerta que entram na planilha.
+     *
+     * <p>São os dois estados em que o alerta efetivamente chegou ao médico:
+     * {@code PENDING}, que ele precisa tratar, e {@code RESOLVED}, que ele já tratou.
+     *
+     * <p>Os outros três ficam de fora: {@code UNCONFIRMED} e {@code AWAITING_PATIENT}
+     * são etapas em curso, que podem ainda terminar sem nunca virar um alerta de
+     * verdade, e {@code NOT_CONFIRMED} é justamente o desvio que não se repetiu.
+     * Listar os três em uma planilha que se lê como registro de alertas emitidos
+     * inflaria a contagem com leitura que o sistema decidiu não acionar.
+     */
+    private static final List<String> REPORTABLE_ALERT_STATUSES =
+            List.of(AlertStatus.PENDING, AlertStatus.RESOLVED);
 
     private final PatientRepository patientRepository;
     private final DoctorRepository doctorRepository;
@@ -199,7 +215,7 @@ public class ReportServiceImpl implements ReportService {
         ExportFilters filters = validateFilters(email, procedureId, patientId, doctorId);
         LocalDateTime start = startDate == null ? null : startDate.atStartOfDay();
         LocalDateTime end = endDate == null ? null : endDate.plusDays(1).atStartOfDay();
-        List<Alert> alerts = alertRepository.findForReport(start, end);
+        List<Alert> alerts = alertRepository.findForReport(start, end, REPORTABLE_ALERT_STATUSES);
 
         try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("Alertas");

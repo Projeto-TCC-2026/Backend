@@ -5,7 +5,9 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -16,6 +18,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +27,7 @@ import com.tcc.application.dto.request.AlertEvaluationRequest;
 import com.tcc.application.dto.request.AlertRequest;
 import com.tcc.application.dto.response.AlertEvaluationResponse;
 import com.tcc.application.dto.response.AlertResponse;
+import com.tcc.application.dto.response.DoctorAlertResponse;
 import com.tcc.application.dto.response.PatientAlertAnswerResponse;
 import com.tcc.application.mapper.AlertMapper;
 import com.tcc.domain.event.AlertConfirmationReason;
@@ -44,6 +48,7 @@ import com.tcc.domain.repository.HealthReadingRepository;
 import com.tcc.domain.repository.PatientRepository;
 import com.tcc.domain.repository.ReadingThresholdRepository;
 import com.tcc.domain.repository.UserRepository;
+import com.tcc.exception.BusinessException;
 import com.tcc.exception.ErrorMessages;
 import com.tcc.exception.ResourceNotFoundException;
 import com.tcc.exception.UnauthorizedException;
@@ -75,6 +80,24 @@ public class AlertServiceImpl implements AlertService {
 
     /** Só a leitura anterior e o alerta mais recente interessam. */
     private static final Pageable LATEST_ONE = PageRequest.of(0, 1);
+
+    /**
+     * Status de alerta que o médico vê na listagem.
+     *
+     * <p>{@code PENDING} é o que ele precisa tratar, {@code AWAITING_PATIENT} mostra
+     * que uma leitura grave está em curso e {@code RESOLVED} é o histórico do que ele
+     * já tratou.
+     *
+     * <p>{@code UNCONFIRMED} e {@code NOT_CONFIRMED} ficam de fora de propósito: são
+     * etapas internas do fluxo de confirmação, e é justamente a decisão do produto de
+     * não avisar o médico sobre leitura isolada que não se confirmou. Expor os dois na
+     * lista desfaria isso por outro caminho.
+     *
+     * <p>Lista, e não conjunto: são três valores distintos e fixos, e a ordem é a que
+     * aparece na mensagem de erro de status inválido.
+     */
+    private static final List<String> DOCTOR_VISIBLE_STATUSES = List.of(
+            AlertStatus.PENDING, AlertStatus.AWAITING_PATIENT, AlertStatus.RESOLVED);
 
     /**
      * Teto de alertas vencidos tratados por varredura. O agendador roda a cada
@@ -436,6 +459,9 @@ public class AlertServiceImpl implements AlertService {
 
         alert.setStatus(AlertStatus.PENDING);
         alert.setConfirmedAt(reading.getMeasuredAt());
+        // Mesmo motivo que vai no evento abaixo e define o texto do e-mail: o que o
+        // médico lê e o que fica gravado na linha são o mesmo valor.
+        alert.setConfirmationReason(AlertConfirmationReason.DUAS_LEITURAS);
         Alert saved = alertRepository.save(alert);
 
         // Este é o evento que dispara o e-mail ao médico. Carrega as duas leituras
@@ -547,8 +573,17 @@ public class AlertServiceImpl implements AlertService {
         LocalDateTime confirmedAt =
                 notOk && severeReading != null ? severeReading.getMeasuredAt() : null;
 
+        // Só o caminho que confirma grava motivo. Em OK o alerta volta a não
+        // confirmado, e um motivo ali descreveria uma confirmação que não houve.
+        AlertConfirmationReason confirmationReason =
+                notOk ? AlertConfirmationReason.PACIENTE_NAO_ESTA_BEM : null;
+
+        // O motivo vai no mesmo UPDATE condicional da troca de status, e não em uma
+        // segunda escrita: assim quem perde a corrida não grava nada — nem status,
+        // nem motivo. Uma escrita separada depois sobrescreveria o motivo do
+        // vencedor com o do perdedor.
         int changed = alertRepository.leaveAwaitingPatient(
-                alertId, targetStatus, confirmedAt, answer, respondedAt);
+                alertId, targetStatus, confirmedAt, answer, respondedAt, confirmationReason);
 
         if (changed == 0) {
             log.info("Resposta do paciente {} ao alerta {} perdeu a corrida com o agendador.",
@@ -621,9 +656,12 @@ public class AlertServiceImpl implements AlertService {
                 severeReading == null ? null : severeReading.getMeasuredAt();
 
         // A paciente não respondeu, então patient_response e patient_responded_at
-        // continuam nulos: eles registram resposta, e não houve resposta.
+        // continuam nulos: eles registram resposta, e não houve resposta. O motivo
+        // entra no mesmo UPDATE condicional, então o perdedor da corrida com a
+        // resposta da paciente não grava motivo nenhum.
         int changed = alertRepository.leaveAwaitingPatient(
-                alertId, AlertStatus.PENDING, confirmedAt, null, null);
+                alertId, AlertStatus.PENDING, confirmedAt, null, null,
+                AlertConfirmationReason.SEM_RESPOSTA);
 
         if (changed == 0) {
             log.info("Alerta {} saiu de {} antes da varredura. Nenhum aviso duplicado.",
@@ -700,6 +738,60 @@ public class AlertServiceImpl implements AlertService {
                 alertId, AlertStatus.RESOLVED, doctor.getId());
 
         return alertMapper.toResponse(saved);
+    }
+
+    /**
+     * Alertas dos pacientes vinculados ao médico autenticado.
+     *
+     * <p>O escopo está na consulta, em {@code findForDoctor}: o vínculo em
+     * {@code doctor_patients} faz parte do WHERE, então alerta de paciente de outro
+     * médico não chega à aplicação. Role sozinha não basta, e descarte em memória
+     * depois seria pior — traria dado de saúde fora do escopo para dentro do
+     * processo antes de jogá-lo fora.
+     *
+     * <p>A ordenação é fixada aqui, e não vem do {@code Pageable}: "mais recentes
+     * primeiro" é parte do contrato do endpoint, e uma ordenação arbitrária do
+     * cliente poderia pedir ordenação por propriedade que a consulta não projeta.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Page<DoctorAlertResponse> listForDoctor(String email, String status, Pageable pageable) {
+        Doctor doctor = resolveDoctor(email);
+        Collection<String> statuses = resolveDoctorVisibleStatuses(status);
+
+        Pageable newestFirst = PageRequest.of(
+                pageable.getPageNumber(), pageable.getPageSize(),
+                Sort.by(Sort.Direction.DESC, "createdAt"));
+
+        return alertRepository.findForDoctor(doctor.getId(), statuses, newestFirst)
+                .map(alertMapper::toDoctorResponse);
+    }
+
+    /**
+     * Traduz o filtro de status recebido na lista de status que a consulta usa.
+     *
+     * <p>Filtro ausente devolve os três visíveis. Filtro informado devolve apenas
+     * ele — depois de validado contra a mesma lista, que é o que impede o médico de
+     * pedir {@code UNCONFIRMED} ou {@code NOT_CONFIRMED} por parâmetro e contornar o
+     * recorte do endpoint.
+     *
+     * <p>{@link BusinessException} em vez de lista vazia: status desconhecido é erro
+     * de quem chama, e o 400 do handler global diz isso. Uma página vazia faria
+     * passar por "nenhum alerta" o que na verdade é um filtro inválido.
+     */
+    private Collection<String> resolveDoctorVisibleStatuses(String status) {
+        if (status == null || status.isBlank()) {
+            return DOCTOR_VISIBLE_STATUSES;
+        }
+
+        String normalized = status.trim().toUpperCase(Locale.ROOT);
+
+        if (!DOCTOR_VISIBLE_STATUSES.contains(normalized)) {
+            throw new BusinessException("Status inválido. Valores aceitos: "
+                    + String.join(", ", DOCTOR_VISIBLE_STATUSES));
+        }
+
+        return List.of(normalized);
     }
 
     /**

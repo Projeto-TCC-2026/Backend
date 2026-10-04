@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.tcc.domain.event.AlertConfirmationReason;
+
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -76,6 +78,25 @@ public class Alert {
     /** Momento em que a resposta da paciente foi gravada. */
     @Column(name = "patient_responded_at")
     private LocalDateTime patientRespondedAt;
+
+    /**
+     * Por que este alerta foi confirmado, ou seja, qual evidência levou o status a
+     * PENDING. Gravado no mesmo momento da troca de status, pelos três caminhos que
+     * confirmam: duas leituras seguidas, a paciente respondendo que não está bem, e
+     * o prazo vencendo sem resposta.
+     *
+     * <p>Nulo em alerta que não foi confirmado — UNCONFIRMED, AWAITING_PATIENT e
+     * NOT_CONFIRMED — e também em alerta confirmado antes da V37, que não tem o dado
+     * registrado em lugar nenhum. Nulo significa "não se sabe", e não "nenhum
+     * motivo".
+     *
+     * <p>Mesmo enum que viaja em {@code AlertConfirmedEvent} e define o texto do
+     * e-mail ao médico, agora persistido como texto: o motivo exibido ao médico e o
+     * motivo gravado na linha são o mesmo valor, por construção.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "confirmation_reason", length = 30)
+    private AlertConfirmationReason confirmationReason;
 
     @OneToMany(mappedBy = "alert", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Notification> notifications = new ArrayList<>();
@@ -191,6 +212,14 @@ public class Alert {
 
     public void setPatientRespondedAt(LocalDateTime patientRespondedAt) {
         this.patientRespondedAt = patientRespondedAt;
+    }
+
+    public AlertConfirmationReason getConfirmationReason() {
+        return confirmationReason;
+    }
+
+    public void setConfirmationReason(AlertConfirmationReason confirmationReason) {
+        this.confirmationReason = confirmationReason;
     }
 
     public List<Notification> getNotifications() {
