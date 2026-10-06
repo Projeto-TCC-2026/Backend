@@ -1,10 +1,12 @@
 package com.tcc.infrastructure.security;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -33,15 +35,50 @@ public class SecurityConfig {
     private final ServiceKeyAuthFilter serviceKeyAuthFilter;
     private final UserDetailsServiceImpl userDetailsService;
     private final PasswordEncoder passwordEncoder;
+    private final List<String> allowedOriginPatterns;
 
     public SecurityConfig(JwtAuthFilter jwtAuthFilter,
                           ServiceKeyAuthFilter serviceKeyAuthFilter,
                           UserDetailsServiceImpl userDetailsService,
-                          PasswordEncoder passwordEncoder) {
+                          PasswordEncoder passwordEncoder,
+                          @Value("${app.cors.allowed-origins}") String allowedOrigins) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.serviceKeyAuthFilter = serviceKeyAuthFilter;
         this.userDetailsService = userDetailsService;
         this.passwordEncoder = passwordEncoder;
+        this.allowedOriginPatterns = resolveAllowedOriginPatterns(allowedOrigins);
+    }
+
+    /**
+     * Converte o valor de {@code app.cors.allowed-origins} na lista de padrões de
+     * origem do CORS. Espaço em volta do item é ignorado e item vazio é descartado,
+     * para a variável de ambiente tolerar {@code "a, b"} e vírgula sobrando.
+     *
+     * <p>O curinga {@code "*"} é recusado na inicialização: o CORS deste projeto
+     * usa {@code allowCredentials=true}, e liberar qualquer origem com credencial
+     * exporia dado de paciente a qualquer site. Restringir um padrão amplo é
+     * decisão de configuração; aceitar {@code "*"} não é.
+     */
+    static List<String> resolveAllowedOriginPatterns(String allowedOrigins) {
+        List<String> patterns = allowedOrigins == null
+                ? List.of()
+                : Arrays.stream(allowedOrigins.split(","))
+                        .map(String::trim)
+                        .filter(origin -> !origin.isEmpty())
+                        .toList();
+
+        if (patterns.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "app.cors.allowed-origins não pode estar vazio: informe ao menos uma origem permitida.");
+        }
+
+        if (patterns.contains("*")) {
+            throw new IllegalArgumentException(
+                    "app.cors.allowed-origins não aceita \"*\": a API envia credenciais no CORS, "
+                            + "então toda origem deve ser explícita (ex.: https://app.exemplo.com).");
+        }
+
+        return patterns;
     }
 
     @Bean
@@ -52,7 +89,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(request -> {
                     CorsConfiguration config = new CorsConfiguration();
-                    config.setAllowedOriginPatterns(List.of("http://localhost:*", "http://127.0.0.1:*"));
+                    config.setAllowedOriginPatterns(allowedOriginPatterns);
                     config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
                     config.setAllowedHeaders(List.of("*"));
                     config.setAllowCredentials(true);
