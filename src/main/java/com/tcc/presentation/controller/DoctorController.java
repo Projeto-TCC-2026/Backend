@@ -66,7 +66,8 @@ public class DoctorController {
             @Valid @RequestBody DoctorRegistrationRequest request) {
 
         DoctorRegistrationResponse doctor = doctorService.registerDoctor(request);
-        ApiResponse<DoctorRegistrationResponse> response = ApiResponse.success(doctor, "Doutor cadastrado. E-mail de boas-vindas enviado.");
+        ApiResponse<DoctorRegistrationResponse> response = ApiResponse.success(
+                doctor, "Doutor cadastrado. Solicitação de e-mail de ativação encaminhada.");
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }

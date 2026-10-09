@@ -118,7 +118,7 @@ public class HospitalPortalController {
         String email = extractEmail(authentication);
         DoctorRegistrationResponse doctor = hospitalPortalService.registerDoctor(email, request);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success(doctor, "Médico cadastrado. E-mail de boas-vindas enviado."));
+                .body(ApiResponse.success(doctor, "Médico cadastrado. Solicitação de e-mail de ativação encaminhada."));
     }
 
     @GetMapping("/doctors/{id}")

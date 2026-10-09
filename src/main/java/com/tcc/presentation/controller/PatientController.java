@@ -73,7 +73,7 @@ public class PatientController {
         String email = extractEmail(authentication);
         PatientRegistrationResponse patient = patientService.createPatient(email, request);
         ApiResponse<PatientRegistrationResponse> response =
-                ApiResponse.success(patient, "Paciente cadastrado. E-mail de boas-vindas enviado.");
+                ApiResponse.success(patient, "Paciente cadastrado. Solicitação de e-mail de ativação encaminhada.");
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }

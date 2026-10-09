@@ -12,6 +12,7 @@ import com.tcc.application.port.out.AccountActivationPublisher;
 
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
+import software.amazon.awssdk.services.sqs.model.SendMessageResponse;
 
 @Service
 @ConditionalOnProperty(name = "app.account-activation.sqs-enabled", havingValue = "true")
@@ -54,16 +55,16 @@ public class AwsSqsAccountActivationPublisher implements AccountActivationPublis
                     .messageBody(payload)
                     .build();
 
-            sqsClient.sendMessage(request);
+            SendMessageResponse response = sqsClient.sendMessage(request);
 
-            log.info("Mensagem de boas-vindas (ativação de conta) publicada na SQS.");
+            log.info("Mensagem de ativação aceita pela SQS. messageId={}", response.messageId());
 
         } catch (JsonProcessingException e) {
             log.error("Erro ao serializar mensagem de ativação de conta.", e);
             throw new IllegalStateException("Falha ao serializar mensagem de ativação de conta.", e);
 
         } catch (Exception e) {
-            log.error("Erro ao publicar mensagem de ativação de conta na SQS. QueueUrl={}", queueUrl, e);
+            log.error("Erro ao publicar mensagem de ativação de conta na SQS.", e);
             throw new IllegalStateException("Falha ao publicar mensagem na SQS.", e);
         }
     }
