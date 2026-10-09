@@ -243,7 +243,8 @@ public class AuthServiceImpl implements AuthService {
 
             return new UserProfileResponse(
                     user.getId(), user.getEmail(), user.getRole().name(), doctor.getFullName(),
-                    doctor.getId(), doctor.getCrm(), doctor.getSpecialty(), hospitalName
+                    doctor.getId(), doctor.getCrm(), doctor.getSpecialty(), hospitalName,
+                    doctor.getPhone()
             );
         }
 
@@ -253,7 +254,9 @@ public class AuthServiceImpl implements AuthService {
             }
             return new UserProfileResponse(
                     user.getId(), user.getEmail(), user.getRole().name(),
-                    user.getHospital().getId(), user.getHospital().getName()
+                    user.getHospital().getId(), user.getHospital().getName(),
+                    user.getHospital().getPhone(), user.getHospital().getAddress(),
+                    user.getHospital().getCity(), user.getHospital().getState()
             );
         }
 

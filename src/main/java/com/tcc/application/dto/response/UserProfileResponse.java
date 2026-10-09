@@ -16,9 +16,14 @@ public class UserProfileResponse {
     private String crm;
     private String specialty;
     private String hospitalName;
+    private String doctorPhone;
 
     // Hospital-specific fields
     private UUID hospitalId;
+    private String phone;
+    private String address;
+    private String city;
+    private String state;
 
     // Patient-specific fields
     private UUID patientId;
@@ -34,7 +39,8 @@ public class UserProfileResponse {
 
     // Constructor for DOCTOR
     public UserProfileResponse(UUID id, String email, String role, String fullName,
-                               UUID doctorId, String crm, String specialty, String hospitalName) {
+                               UUID doctorId, String crm, String specialty, String hospitalName,
+                               String doctorPhone) {
         this.id = id;
         this.email = email;
         this.role = role;
@@ -43,16 +49,22 @@ public class UserProfileResponse {
         this.crm = crm;
         this.specialty = specialty;
         this.hospitalName = hospitalName;
+        this.doctorPhone = doctorPhone;
     }
 
     // Constructor for HOSPITAL
     public UserProfileResponse(UUID id, String email, String role,
-                               UUID hospitalId, String hospitalName) {
+                               UUID hospitalId, String hospitalName,
+                               String phone, String address, String city, String state) {
         this.id = id;
         this.email = email;
         this.role = role;
         this.hospitalId = hospitalId;
         this.hospitalName = hospitalName;
+        this.phone = phone;
+        this.address = address;
+        this.city = city;
+        this.state = state;
     }
 
     // Constructor for PATIENT
@@ -89,8 +101,23 @@ public class UserProfileResponse {
     public String getHospitalName() { return hospitalName; }
     public void setHospitalName(String hospitalName) { this.hospitalName = hospitalName; }
 
+    public String getDoctorPhone() { return doctorPhone; }
+    public void setDoctorPhone(String doctorPhone) { this.doctorPhone = doctorPhone; }
+
     public UUID getHospitalId() { return hospitalId; }
     public void setHospitalId(UUID hospitalId) { this.hospitalId = hospitalId; }
+
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+
+    public String getAddress() { return address; }
+    public void setAddress(String address) { this.address = address; }
+
+    public String getCity() { return city; }
+    public void setCity(String city) { this.city = city; }
+
+    public String getState() { return state; }
+    public void setState(String state) { this.state = state; }
 
     public UUID getPatientId() { return patientId; }
     public void setPatientId(UUID patientId) { this.patientId = patientId; }

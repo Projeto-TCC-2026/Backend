@@ -271,7 +271,8 @@ public class DoctorServiceImpl implements DoctorService {
         String hospitalName = doctor.getHospital() != null ? doctor.getHospital().getName() : null;
         return new UserProfileResponse(
                 user.getId(), user.getEmail(), user.getRole().name(), doctor.getFullName(),
-                doctor.getId(), doctor.getCrm(), doctor.getSpecialty(), hospitalName
+                doctor.getId(), doctor.getCrm(), doctor.getSpecialty(), hospitalName,
+                doctor.getPhone()
         );
     }
 }

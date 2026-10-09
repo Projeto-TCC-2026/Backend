@@ -218,7 +218,9 @@ public class HospitalServiceImpl implements HospitalService {
 
         return new UserProfileResponse(
                 user.getId(), user.getEmail(), user.getRole().name(),
-                hospital.getId(), hospital.getName()
+                hospital.getId(), hospital.getName(),
+                hospital.getPhone(), hospital.getAddress(),
+                hospital.getCity(), hospital.getState()
         );
     }
 }
