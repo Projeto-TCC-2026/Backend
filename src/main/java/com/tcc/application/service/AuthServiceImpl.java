@@ -51,6 +51,7 @@ public class AuthServiceImpl implements AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final AccountAccessService accountAccessService;
 
     public AuthServiceImpl(UserRepository userRepository,
                            DoctorRepository doctorRepository,
@@ -59,7 +60,8 @@ public class AuthServiceImpl implements AuthService {
                            HospitalMapper hospitalMapper,
                            RefreshTokenRepository refreshTokenRepository,
                            PasswordEncoder passwordEncoder,
-                           JwtService jwtService) {
+                           JwtService jwtService,
+                           AccountAccessService accountAccessService) {
         this.userRepository = userRepository;
         this.doctorRepository = doctorRepository;
         this.patientRepository = patientRepository;
@@ -68,6 +70,7 @@ public class AuthServiceImpl implements AuthService {
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.accountAccessService = accountAccessService;
     }
 
     @Override
@@ -204,7 +207,7 @@ public class AuthServiceImpl implements AuthService {
 
         // /auth/refresh é público e não passa por findAndValidateUser: sem esta checagem,
         // uma conta inativada continuaria renovando o access token indefinidamente.
-        if (!Boolean.TRUE.equals(refreshToken.getUser().getActive())) {
+        if (!accountAccessService.isAccountActive(refreshToken.getUser())) {
             throw new UnauthorizedException(ErrorMessages.inactiveUserAccount());
         }
 
@@ -273,7 +276,7 @@ public class AuthServiceImpl implements AuthService {
             throw new UnauthorizedException("Credenciais inválidas");
         }
 
-        if (!Boolean.TRUE.equals(user.getActive())) {
+        if (!accountAccessService.isAccountActive(user)) {
             throw new UnauthorizedException(ErrorMessages.inactiveUserAccount());
         }
 

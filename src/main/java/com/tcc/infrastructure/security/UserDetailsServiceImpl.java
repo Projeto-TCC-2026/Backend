@@ -7,7 +7,9 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import com.tcc.application.service.AccountAccessService;
 import com.tcc.domain.model.User;
 import com.tcc.domain.repository.UserRepository;
 
@@ -15,18 +17,22 @@ import com.tcc.domain.repository.UserRepository;
 public class UserDetailsServiceImpl implements UserDetailsService {
 
     private final UserRepository userRepository;
+    private final AccountAccessService accountAccessService;
 
-    public UserDetailsServiceImpl(UserRepository userRepository) {
+    public UserDetailsServiceImpl(UserRepository userRepository, AccountAccessService accountAccessService) {
         this.userRepository = userRepository;
+        this.accountAccessService = accountAccessService;
     }
 
     @Override
+    @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        // Filtra por active: este método roda a cada requisição autenticada, via
-        // JwtAuthFilter. Sem o filtro, um usuário inativado continuaria autenticado
-        // com o token emitido antes da inativação até ele expirar.
-        User user = userRepository.findByEmailAndActiveTrue(email)
+        User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado: " + email));
+
+        if (!accountAccessService.isAccountActive(user)) {
+            throw new UsernameNotFoundException("Usuário inativo: " + email);
+        }
 
         return org.springframework.security.core.userdetails.User.builder()
                 .username(user.getEmail())

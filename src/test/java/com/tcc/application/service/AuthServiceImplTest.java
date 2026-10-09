@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import static org.mockito.Mockito.never;
@@ -73,6 +74,9 @@ class AuthServiceImplTest {
     @Mock
     private JwtService jwtService;
 
+    @Mock
+    private AccountAccessService accountAccessService;
+
     @InjectMocks
     private AuthServiceImpl authService;
 
@@ -91,6 +95,8 @@ class AuthServiceImplTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(authService, "refreshExpiration", 604800000L);
+        lenient().when(accountAccessService.isAccountActive(any())).thenAnswer(invocation ->
+                Boolean.TRUE.equals(((User) invocation.getArgument(0)).getActive()));
 
         doctorUser = new User("doctor@test.com", "encodedPassword", Role.DOCTOR);
         doctorUser.setId(DOCTOR_USER_ID);
@@ -273,6 +279,29 @@ class AuthServiceImplTest {
             assertThatThrownBy(() -> authService.login(request))
                     .isInstanceOf(UnauthorizedException.class)
                     .hasMessageContaining("Conta inativa");
+        }
+
+        @Test
+        @DisplayName("hospital inativo nao autentica pelo login generico")
+        void inactiveHospitalCannotLoginGenerically() {
+            Hospital inactiveHospital = new Hospital("Hospital Central", "12345678000100");
+            inactiveHospital.setId(HOSPITAL_ID);
+            inactiveHospital.setActive(false);
+            User hospitalUser = new User("hospital@test.com", "encodedPassword", Role.HOSPITAL);
+            hospitalUser.setId(HOSPITAL_USER_ID);
+            hospitalUser.setHospital(inactiveHospital);
+
+            LoginRequest request = new LoginRequest("hospital@test.com", "senha123");
+            when(userRepository.findByEmail("hospital@test.com")).thenReturn(Optional.of(hospitalUser));
+            when(passwordEncoder.matches("senha123", "encodedPassword")).thenReturn(true);
+            when(accountAccessService.isAccountActive(hospitalUser)).thenReturn(false);
+
+            assertThatThrownBy(() -> authService.login(request))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessageContaining("Conta inativa");
+
+            verify(jwtService, never()).generateToken(any());
+            verify(refreshTokenRepository, never()).save(any());
         }
 
         @Test

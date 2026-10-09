@@ -36,6 +36,7 @@ import org.springframework.web.context.WebApplicationContext;
 
 import com.tcc.application.dto.request.PatientUpdateRequest;
 import com.tcc.application.dto.response.PatientResponse;
+import com.tcc.application.service.AccountAccessService;
 import com.tcc.application.service.PatientService;
 import com.tcc.domain.model.Role;
 import com.tcc.domain.model.User;
@@ -100,6 +101,10 @@ class PatientControllerSecurityTest {
     @MockitoBean
     private UserRepository userRepository;
 
+    /** Mockado: os tokens representam perfis ativos; a matriz não testa status da conta. */
+    @MockitoBean
+    private AccountAccessService accountAccessService;
+
     /** Mockado para que o token opaco do teste dispense assinatura real. */
     @MockitoBean
     private JwtService jwtService;
@@ -114,6 +119,7 @@ class PatientControllerSecurityTest {
                 .build();
 
         when(jwtService.isTokenValid(anyString())).thenReturn(true);
+        when(accountAccessService.isAccountActive(any())).thenReturn(true);
         stubToken(TOKEN_ADMIN, "admin@tcc.local", Role.ADMIN);
         stubToken(TOKEN_DOCTOR, "doctor@tcc.local", Role.DOCTOR);
         stubToken(TOKEN_PATIENT, "patient@tcc.local", Role.PATIENT);
@@ -137,7 +143,7 @@ class PatientControllerSecurityTest {
         user.setRole(role);
         user.setActive(true);
 
-        when(userRepository.findByEmailAndActiveTrue(email)).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
     }
 
     private static String bearer(String token) {
