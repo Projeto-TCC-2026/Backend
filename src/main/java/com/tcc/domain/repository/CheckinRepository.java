@@ -18,6 +18,17 @@ public interface CheckinRepository extends JpaRepository<Checkin, UUID> {
                         UUID patientProcedureId, CheckinSource source, LocalDate manualDate);
 
         @Query("""
+                        SELECT CASE WHEN COUNT(c) > 0 THEN TRUE ELSE FALSE END FROM Checkin c
+                        JOIN c.patientProcedure pp
+                        WHERE pp.patient.id = :patientId
+                          AND c.submittedAt >= :start
+                          AND c.submittedAt < :end
+                        """)
+        boolean existsCheckinByPatientAndDate(@Param("patientId") UUID patientId,
+                        @Param("start") LocalDateTime start,
+                        @Param("end") LocalDateTime end);
+
+        @Query("""
                         SELECT DISTINCT c FROM Checkin c
                         JOIN FETCH c.patientProcedure pp
                         JOIN FETCH pp.patient

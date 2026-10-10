@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.tcc.application.dto.response.ApiResponse;
 import com.tcc.application.dto.response.DoctorsByHospitalResponse;
+import com.tcc.application.dto.response.PatientCheckinStatusResponse;
 import com.tcc.application.dto.response.PatientsByHospitalResponse;
 import com.tcc.application.dto.response.ProceduresByDoctorResponse;
 import com.tcc.application.dto.response.ProceduresByPeriodResponse;
@@ -155,6 +156,25 @@ public class ReportController {
         LocalDate reportDate = parseDate(date, "data");
         return xlsx(reportService.exportCheckins(email(authentication), reportDate, reportDate,
                 procedureId, patientId, doctorId), "checkins-daily-" + reportDate + ".xlsx");
+    }
+
+    @GetMapping("/checkins/daily/status")
+    @PreAuthorize("hasAnyRole('HOSPITAL', 'DOCTOR')")
+    @Operation(
+        summary = "Status de check-in diário do paciente",
+        description = "Verifica se o paciente realizou pelo menos um check-in no dia informado. " +
+                      "Usado pelo frontend para habilitar ou desabilitar o botão de exportar relatório."
+    )
+    public ResponseEntity<ApiResponse<PatientCheckinStatusResponse>> getDailyCheckinStatus(
+            Authentication authentication,
+            @Parameter(description = "Data a consultar (formato: yyyy-MM-dd)", example = "2026-10-10", required = true)
+            @RequestParam String date,
+            @Parameter(description = "ID do paciente", required = true)
+            @RequestParam UUID patientId) {
+        LocalDate reportDate = parseDate(date, "data");
+        PatientCheckinStatusResponse status =
+                reportService.getDailyCheckinStatus(email(authentication), reportDate, patientId);
+        return ResponseEntity.ok(ApiResponse.success(status));
     }
 
     @GetMapping("/checkins/weekly/export")

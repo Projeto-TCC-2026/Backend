@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.tcc.application.dto.response.DoctorsByHospitalResponse;
+import com.tcc.application.dto.response.PatientCheckinStatusResponse;
 import com.tcc.application.dto.response.PatientsByHospitalResponse;
 import com.tcc.application.dto.response.ProceduresByDoctorResponse;
 import com.tcc.application.dto.response.ProceduresByPeriodResponse;
@@ -28,6 +29,7 @@ import com.tcc.domain.model.AlertStatus;
 import com.tcc.domain.model.Checkin;
 import com.tcc.domain.model.CheckinFieldValue;
 import com.tcc.domain.model.Doctor;
+import com.tcc.domain.model.Patient;
 import com.tcc.domain.model.PatientProcedure;
 import com.tcc.domain.model.Procedure;
 import com.tcc.domain.model.Role;
@@ -251,6 +253,22 @@ public class ReportServiceImpl implements ReportService {
         } catch (IOException ex) {
             throw new IllegalStateException("Não foi possível gerar o arquivo XLSX", ex);
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PatientCheckinStatusResponse getDailyCheckinStatus(String email, LocalDate date, UUID patientId) {
+        ExportFilters filters = validateFilters(email, null, patientId, null);
+
+        Patient patient = patientRepository.findByIdAndActiveTrue(patientId)
+                .orElseThrow(() -> new ResourceNotFoundException("Paciente não encontrado"));
+
+        LocalDateTime start = date.atStartOfDay();
+        LocalDateTime end = date.plusDays(1).atStartOfDay();
+        boolean checkedIn = checkinRepository.existsCheckinByPatientAndDate(
+                filters.patientId(), start, end);
+
+        return new PatientCheckinStatusResponse(patient.getId(), patient.getFullName(), checkedIn);
     }
 
     private ExportFilters validateFilters(String email, UUID procedureId, UUID patientId, UUID requestedDoctorId) {
