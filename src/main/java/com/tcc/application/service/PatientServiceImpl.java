@@ -296,27 +296,28 @@ public class PatientServiceImpl implements PatientService {
         Patient patient = patientRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Perfil de paciente não encontrado"));
 
+        // Valida unicidade do novo e-mail se foi alterado
+        if (!request.email().equalsIgnoreCase(patient.getEmail()) &&
+                patientRepository.existsByEmailAndActiveTrue(request.email())) {
+            throw new BusinessException("Já existe um paciente ativo com este e-mail");
+        }
+        if (!request.email().equalsIgnoreCase(user.getEmail()) &&
+                userRepository.existsByEmail(request.email())) {
+            throw new BusinessException("Já existe uma conta com este e-mail");
+        }
+
         patient.setFullName(request.fullName());
-        if (request.birthDate() != null) {
-            patient.setBirthDate(request.birthDate());
-        }
-        patient.setGender(request.gender());
         patient.setPhone(request.phone());
-        patient.setAddress(request.address());
-        patient.setCity(request.city());
-        patient.setState(request.state());
-        patient.setZipCode(request.zipCode());
-        if (request.weight() != null) {
-            patient.setWeight(request.weight());
-        }
-        if (request.height() != null) {
-            patient.setHeight(request.height());
-        }
+        patient.setEmail(request.email());
         patientRepository.save(patient);
+
+        // Atualiza o e-mail da conta de acesso também
+        user.setEmail(request.email());
+        userRepository.save(user);
 
         return new UserProfileResponse(
                 user.getId(), user.getEmail(), user.getRole().name(),
-                patient.getId(), patient.getFullName(), true
+                patient.getId(), patient.getFullName(), patient.getPhone()
         );
     }
 

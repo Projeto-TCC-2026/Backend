@@ -69,12 +69,13 @@ public class UserProfileResponse {
 
     // Constructor for PATIENT
     public UserProfileResponse(UUID id, String email, String role,
-                               UUID patientId, String fullName, boolean isPatient) {
+                               UUID patientId, String fullName, String phone) {
         this.id = id;
         this.email = email;
         this.role = role;
         this.patientId = patientId;
         this.fullName = fullName;
+        this.phone = phone;
     }
 
     public UUID getId() { return id; }

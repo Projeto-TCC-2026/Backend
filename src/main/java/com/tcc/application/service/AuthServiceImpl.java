@@ -260,6 +260,17 @@ public class AuthServiceImpl implements AuthService {
             );
         }
 
+        if (user.getRole() == Role.PATIENT) {
+            Patient patient = patientRepository.findByUserId(user.getId()).orElse(null);
+            if (patient == null) {
+                return new UserProfileResponse(user.getId(), user.getEmail(), user.getRole().name());
+            }
+            return new UserProfileResponse(
+                    user.getId(), user.getEmail(), user.getRole().name(),
+                    patient.getId(), patient.getFullName(), patient.getPhone()
+            );
+        }
+
         // ADMIN or other roles — base fields only
         return new UserProfileResponse(user.getId(), user.getEmail(), user.getRole().name());
     }
