@@ -11,6 +11,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.tcc.application.dto.request.ResetPasswordRequest;
+import com.tcc.application.dto.response.UserRoleResponse;
 import com.tcc.application.port.out.PasswordResetPublisher;
 import com.tcc.domain.model.PasswordResetToken;
 import com.tcc.domain.model.User;
@@ -93,7 +94,7 @@ public class ForgotPasswordServiceImpl implements ForgotPasswordService {
 
         @Override
         @Transactional
-        public void resetPassword(ResetPasswordRequest request) {
+        public UserRoleResponse resetPassword(ResetPasswordRequest request) {
 
                 String tokenOrCode = request.codeOrToken();
                 if (tokenOrCode.isBlank()) {
@@ -136,6 +137,8 @@ public class ForgotPasswordServiceImpl implements ForgotPasswordService {
                 resetToken.setUsed(true);
 
                 passwordResetTokenRepository.save(resetToken);
+
+                return new UserRoleResponse(user.getRole().name());
         }
 
         private String hashToken(String token) {

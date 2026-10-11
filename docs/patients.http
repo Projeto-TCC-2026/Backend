@@ -255,6 +255,8 @@ Authorization: Bearer {{token}}
 
 ### 15.1 - Definir a primeira senha com o token recebido
 ### (endpoint público do fluxo de boas-vindas, não exige token JWT)
+### Sucesso: { "success": true, "data": { "role": "PATIENT" }, "message": "Conta ativada com sucesso." }
+### Erro (token inválido/expirado/usado, senhas diferentes): resposta de erro padrão, sem "data".
 POST {{baseUrl}}/account-activation/activate
 Content-Type: application/json
 

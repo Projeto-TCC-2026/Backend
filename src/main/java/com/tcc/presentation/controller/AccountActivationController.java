@@ -2,6 +2,7 @@ package com.tcc.presentation.controller;
 
 import com.tcc.application.dto.request.AccountActivationRequest;
 import com.tcc.application.dto.response.ApiResponse;
+import com.tcc.application.dto.response.UserRoleResponse;
 import com.tcc.application.service.AccountActivationService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -27,10 +28,11 @@ public class AccountActivationController {
     @PostMapping("/activate")
     @Operation(
         summary = "Definir a primeira senha da conta",
-        description = "Valida o token recebido por e-mail de boas-vindas e define a senha da conta recém-criada."
+        description = "Valida o token recebido por e-mail de boas-vindas, define a senha da conta recém-criada "
+                + "e devolve o perfil do usuário ativado."
     )
-    public ResponseEntity<ApiResponse<Void>> activate(@Valid @RequestBody AccountActivationRequest request) {
-        accountActivationService.activateAccount(request);
-        return ResponseEntity.ok(ApiResponse.success(null, "Conta ativada com sucesso."));
+    public ResponseEntity<ApiResponse<UserRoleResponse>> activate(@Valid @RequestBody AccountActivationRequest request) {
+        UserRoleResponse role = accountActivationService.activateAccount(request);
+        return ResponseEntity.ok(ApiResponse.success(role, "Conta ativada com sucesso."));
     }
 }

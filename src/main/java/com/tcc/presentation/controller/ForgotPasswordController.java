@@ -3,6 +3,7 @@ package com.tcc.presentation.controller;
 import com.tcc.application.dto.request.PasswordResetRequest;
 import com.tcc.application.dto.request.ResetPasswordRequest;
 import com.tcc.application.dto.response.ApiResponse;
+import com.tcc.application.dto.response.UserRoleResponse;
 import com.tcc.application.service.ForgotPasswordService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,10 +34,10 @@ public class ForgotPasswordController {
     }
 
     @PostMapping("/reset")
-    @Operation(summary = "Criar nova senha", description = "Atualiza a senha a partir do token recebido por e-mail")
-    public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
-        forgotPasswordService.resetPassword(request);
-        return ResponseEntity.ok(ApiResponse.success(null, "Senha atualizada com sucesso."));
+    @Operation(summary = "Criar nova senha", description = "Atualiza a senha a partir do token recebido por e-mail e devolve o perfil do usuário")
+    public ResponseEntity<ApiResponse<UserRoleResponse>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        UserRoleResponse role = forgotPasswordService.resetPassword(request);
+        return ResponseEntity.ok(ApiResponse.success(role, "Senha atualizada com sucesso."));
     }
 
 }

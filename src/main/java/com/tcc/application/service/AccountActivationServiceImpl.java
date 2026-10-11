@@ -12,6 +12,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.tcc.application.dto.request.AccountActivationRequest;
+import com.tcc.application.dto.response.UserRoleResponse;
 import com.tcc.application.port.out.AccountActivationPublisher;
 import com.tcc.domain.model.AccountActivationToken;
 import com.tcc.domain.model.User;
@@ -79,7 +80,7 @@ public class AccountActivationServiceImpl implements AccountActivationService {
 
     @Override
     @Transactional
-    public void activateAccount(AccountActivationRequest request) {
+    public UserRoleResponse activateAccount(AccountActivationRequest request) {
         AccountActivationToken activationToken = accountActivationTokenRepository
                 .findByTokenHash(hashToken(request.token()))
                 .orElseThrow(() -> new InvalidTokenException("Token de ativação inválido"));
@@ -102,6 +103,8 @@ public class AccountActivationServiceImpl implements AccountActivationService {
 
         activationToken.setUsed(true);
         accountActivationTokenRepository.save(activationToken);
+
+        return new UserRoleResponse(user.getRole().name());
     }
 
     private String hashToken(String token) {

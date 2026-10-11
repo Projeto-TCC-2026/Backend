@@ -25,6 +25,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.tcc.application.dto.request.AccountActivationRequest;
+import com.tcc.application.dto.response.UserRoleResponse;
 import com.tcc.application.port.out.AccountActivationPublisher;
 import com.tcc.domain.model.AccountActivationToken;
 import com.tcc.domain.model.Role;
@@ -118,13 +119,31 @@ class AccountActivationServiceImplTest {
             when(accountActivationTokenRepository.findByTokenHash(any())).thenReturn(Optional.of(token));
             when(passwordEncoder.encode("novaSenha123")).thenReturn(ENCODED_PASSWORD);
 
-            accountActivationService.activateAccount(
+            UserRoleResponse response = accountActivationService.activateAccount(
                     new AccountActivationRequest("token-cru", "novaSenha123", "novaSenha123"));
 
+            assertThat(response.role()).isEqualTo("PATIENT");
             assertThat(user.getPasswordHash()).isEqualTo(ENCODED_PASSWORD);
             assertThat(token.isUsed()).isTrue();
             verify(userRepository).save(user);
             verify(accountActivationTokenRepository).save(token);
+        }
+
+        @Test
+        @DisplayName("deve devolver o perfil do usuario do token, nao um perfil fixo")
+        void shouldReturnRoleOfTokenOwner() {
+            User doctorUser = new User("doctor@test.com", "encoded", Role.DOCTOR);
+            doctorUser.setId(UUID.randomUUID());
+
+            AccountActivationToken token = validToken();
+            token.setUser(doctorUser);
+            when(accountActivationTokenRepository.findByTokenHash(any())).thenReturn(Optional.of(token));
+            when(passwordEncoder.encode("novaSenha123")).thenReturn(ENCODED_PASSWORD);
+
+            UserRoleResponse response = accountActivationService.activateAccount(
+                    new AccountActivationRequest("token-cru", "novaSenha123", "novaSenha123"));
+
+            assertThat(response.role()).isEqualTo("DOCTOR");
         }
 
         @Test
