@@ -145,22 +145,22 @@ class AlertResolutionControllerTest {
             assertThat(captor.getValue().getPageSize()).isEqualTo(5);
         }
 
+        /**
+         * AWAITING_PATIENT não é visível ao médico: o filtro sobe como
+         * {@link BusinessException} do service, igual a UNCONFIRMED e NOT_CONFIRMED.
+         */
         @Test
-        @DisplayName("alerta AWAITING_PATIENT vem sem motivo de confirmacao")
-        void shouldExposeNullReasonForAwaitingPatient() {
-            DoctorAlertResponse awaiting = alertOf(AlertStatus.AWAITING_PATIENT, null);
+        @DisplayName("filtro AWAITING_PATIENT deve subir BusinessException, que o handler traduz em 400")
+        void shouldPropagateBusinessExceptionForAwaitingPatientFilter() {
+            when(alertService.listForDoctor(
+                    eq(DOCTOR_EMAIL), eq(AlertStatus.AWAITING_PATIENT), any(Pageable.class)))
+                    .thenThrow(new BusinessException("Status inválido. Valores aceitos: "
+                            + "PENDING, RESOLVED"));
 
-            when(alertService.listForDoctor(eq(DOCTOR_EMAIL), isNull(), any(Pageable.class)))
-                    .thenReturn(new PageImpl<>(List.of(awaiting)));
-
-            ResponseEntity<ApiResponse<Page<DoctorAlertResponse>>> response =
-                    controller.listAlerts(authentication, null, FIRST_PAGE);
-
-            DoctorAlertResponse item = bodyOf(response).getData().getContent().get(0);
-
-            assertThat(item.status()).isEqualTo(AlertStatus.AWAITING_PATIENT);
-            assertThat(item.confirmationReason()).isNull();
-            assertThat(item.confirmedAt()).isNull();
+            assertThatThrownBy(() -> controller.listAlerts(
+                    authentication, AlertStatus.AWAITING_PATIENT, FIRST_PAGE))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("Status inválido");
         }
 
         /**
@@ -173,7 +173,7 @@ class AlertResolutionControllerTest {
         void shouldPropagateBusinessExceptionForInvalidStatus() {
             when(alertService.listForDoctor(eq(DOCTOR_EMAIL), eq("ARQUIVADO"), any(Pageable.class)))
                     .thenThrow(new BusinessException("Status inválido. Valores aceitos: "
-                            + "PENDING, AWAITING_PATIENT, RESOLVED"));
+                            + "PENDING, RESOLVED"));
 
             assertThatThrownBy(() -> controller.listAlerts(authentication, "ARQUIVADO", FIRST_PAGE))
                     .isInstanceOf(BusinessException.class)

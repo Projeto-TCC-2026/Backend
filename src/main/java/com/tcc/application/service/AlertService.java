@@ -65,6 +65,16 @@ public interface AlertService {
     /**
      * Marca um alerta como RESOLVED. Restrito a alerta de paciente vinculado ao
      * médico autenticado.
+     *
+     * <p>Só alerta {@code PENDING} é resolvido. Alerta já {@code RESOLVED} é
+     * devolvido como está, sem nova gravação. O vínculo é verificado antes do status.
+     *
+     * @throws com.tcc.exception.ResourceNotFoundException quando o alerta não existe
+     * @throws com.tcc.exception.UnauthorizedException quando o paciente do alerta não
+     *         é vinculado ao médico
+     * @throws com.tcc.exception.BusinessException quando o alerta ainda não foi
+     *         confirmado: {@code UNCONFIRMED}, {@code NOT_CONFIRMED} ou
+     *         {@code AWAITING_PATIENT}
      */
     AlertResponse resolveAlert(String email, UUID alertId);
 
@@ -76,16 +86,16 @@ public interface AlertService {
      * {@code doctor_patients}: alerta de paciente de outro médico não é carregado.
      * A identidade do médico vem do token, nunca de parâmetro.
      *
-     * <p>Só três status aparecem: {@code PENDING}, {@code AWAITING_PATIENT} e
-     * {@code RESOLVED}. {@code UNCONFIRMED} e {@code NOT_CONFIRMED} são etapas
-     * internas do fluxo de confirmação — mostrar leitura isolada que ainda não se
-     * confirmou, ou que se desconfirmou, pediria ao médico uma decisão sobre dado
-     * que o sistema deliberadamente não considerou acionável.
+     * <p>Só alerta confirmado aparece: {@code PENDING} e {@code RESOLVED}.
+     * {@code UNCONFIRMED}, {@code NOT_CONFIRMED} e {@code AWAITING_PATIENT} são
+     * etapas anteriores à confirmação — mostrar leitura que ainda não se confirmou,
+     * que se desconfirmou ou que aguarda a resposta da paciente pediria ao médico
+     * uma decisão sobre dado que o sistema deliberadamente não considerou acionável.
      *
-     * @param status um dos três status visíveis, para filtrar a lista, ou nulo para
-     *               trazer os três
+     * @param status um dos dois status visíveis, para filtrar a lista, ou nulo para
+     *               trazer os dois
      * @throws com.tcc.exception.BusinessException quando {@code status} não é um dos
-     *         três visíveis ao médico
+     *         dois visíveis ao médico
      */
     Page<DoctorAlertResponse> listForDoctor(String email, String status, Pageable pageable);
 

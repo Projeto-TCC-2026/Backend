@@ -84,20 +84,23 @@ public class AlertServiceImpl implements AlertService {
     /**
      * Status de alerta que o médico vê na listagem.
      *
-     * <p>{@code PENDING} é o que ele precisa tratar, {@code AWAITING_PATIENT} mostra
-     * que uma leitura grave está em curso e {@code RESOLVED} é o histórico do que ele
-     * já tratou.
+     * <p>Só alerta confirmado: {@code PENDING} é o que ele precisa tratar e
+     * {@code RESOLVED} é o histórico do que ele já tratou.
      *
-     * <p>{@code UNCONFIRMED} e {@code NOT_CONFIRMED} ficam de fora de propósito: são
-     * etapas internas do fluxo de confirmação, e é justamente a decisão do produto de
-     * não avisar o médico sobre leitura isolada que não se confirmou. Expor os dois na
-     * lista desfaria isso por outro caminho.
+     * <p>{@code UNCONFIRMED}, {@code NOT_CONFIRMED} e {@code AWAITING_PATIENT} ficam
+     * de fora de propósito: são etapas anteriores à confirmação, e é justamente a
+     * decisão do produto de não levar ao médico o que ainda não se confirmou. Expor
+     * qualquer um deles na lista desfaria isso por outro caminho.
      *
-     * <p>Lista, e não conjunto: são três valores distintos e fixos, e a ordem é a que
+     * <p>Lista, e não conjunto: são valores distintos e fixos, e a ordem é a que
      * aparece na mensagem de erro de status inválido.
      */
     private static final List<String> DOCTOR_VISIBLE_STATUSES = List.of(
-            AlertStatus.PENDING, AlertStatus.AWAITING_PATIENT, AlertStatus.RESOLVED);
+            AlertStatus.PENDING, AlertStatus.RESOLVED);
+
+    /** Recusa de resolve para alerta que ainda não chegou a {@code PENDING}. */
+    private static final String ALERT_NOT_CONFIRMED_FOR_RESOLUTION =
+            "Este alerta ainda não foi confirmado e não pode ser resolvido";
 
     /**
      * Teto de alertas vencidos tratados por varredura. O agendador roda a cada
@@ -709,7 +712,14 @@ public class AlertServiceImpl implements AlertService {
      * Marca o alerta como RESOLVED.
      *
      * <p>O escopo é aplicado na consulta de vínculo, não só pela role: o médico
-     * alcança apenas alerta de paciente vinculado a ele.
+     * alcança apenas alerta de paciente vinculado a ele. O vínculo é checado antes
+     * do status, para que médico não vinculado não descubra o status de um alerta
+     * pela mensagem de erro.
+     *
+     * <p>Só {@code PENDING} vira {@code RESOLVED}. {@code RESOLVED} é idempotente.
+     * Os demais — {@code UNCONFIRMED}, {@code NOT_CONFIRMED} e
+     * {@code AWAITING_PATIENT} — ainda não foram confirmados, não aparecem para o
+     * médico e são recusados com {@link BusinessException}.
      */
     @Override
     @Transactional
@@ -729,6 +739,14 @@ public class AlertServiceImpl implements AlertService {
         if (AlertStatus.RESOLVED.equals(alert.getStatus())) {
             log.info("Alerta {} ja estava {}. Nada alterado.", alertId, AlertStatus.RESOLVED);
             return alertMapper.toResponse(alert);
+        }
+
+        // Alerta não confirmado: resolver aqui tiraria do fluxo de confirmação (ou
+        // da pergunta à paciente) um alerta que o médico nem pode ver.
+        if (!AlertStatus.PENDING.equals(alert.getStatus())) {
+            log.warn("Resolucao recusada para o alerta {}: status {} nao confirmado.",
+                    alertId, alert.getStatus());
+            throw new BusinessException(ALERT_NOT_CONFIRMED_FOR_RESOLUTION);
         }
 
         alert.setStatus(AlertStatus.RESOLVED);
@@ -770,10 +788,10 @@ public class AlertServiceImpl implements AlertService {
     /**
      * Traduz o filtro de status recebido na lista de status que a consulta usa.
      *
-     * <p>Filtro ausente devolve os três visíveis. Filtro informado devolve apenas
+     * <p>Filtro ausente devolve os dois visíveis. Filtro informado devolve apenas
      * ele — depois de validado contra a mesma lista, que é o que impede o médico de
-     * pedir {@code UNCONFIRMED} ou {@code NOT_CONFIRMED} por parâmetro e contornar o
-     * recorte do endpoint.
+     * pedir {@code UNCONFIRMED}, {@code NOT_CONFIRMED} ou {@code AWAITING_PATIENT}
+     * por parâmetro e contornar o recorte do endpoint.
      *
      * <p>{@link BusinessException} em vez de lista vazia: status desconhecido é erro
      * de quem chama, e o 400 do handler global diz isso. Uma página vazia faria

@@ -55,20 +55,21 @@ public class AlertResolutionController {
         description = "Devolve os alertas dos pacientes vinculados ao médico autenticado, dos mais recentes "
                     + "aos mais antigos. O médico vem do token: não há parâmetro de médico, e o escopo por "
                     + "paciente é aplicado na consulta pelo vínculo em doctor_patients, não apenas pela role. "
-                    + "Status visíveis: PENDING (precisa ser tratado), AWAITING_PATIENT (leitura grave em "
-                    + "curso, aguardando a paciente responder) e RESOLVED (já tratado). UNCONFIRMED e "
-                    + "NOT_CONFIRMED nunca aparecem: são etapas internas do fluxo de confirmação, e leitura "
-                    + "isolada que não se confirmou não é levada ao médico. "
-                    + "O parâmetro status é opcional e aceita apenas um dos três visíveis; qualquer outro "
-                    + "valor resulta em 400. Sem o parâmetro, os três vêm juntos. "
+                    + "Só alertas confirmados são visíveis: PENDING (precisa ser tratado) e RESOLVED (já "
+                    + "tratado). UNCONFIRMED, NOT_CONFIRMED e AWAITING_PATIENT nunca aparecem: são etapas "
+                    + "anteriores à confirmação, e alerta que não se confirmou ou que ainda aguarda a "
+                    + "resposta da paciente não é levado ao médico. "
+                    + "O parâmetro status é opcional e aceita apenas PENDING ou RESOLVED; qualquer outro "
+                    + "valor, inclusive UNCONFIRMED, NOT_CONFIRMED e AWAITING_PATIENT, resulta em 400. "
+                    + "Sem o parâmetro, os dois vêm juntos. "
                     + "Ciclo de status do fluxo comum: UNCONFIRMED vira PENDING quando uma segunda leitura "
                     + "seguida confirma o desvio em até 2h, ou NOT_CONFIRMED quando a leitura seguinte volta "
                     + "ao normal. Ciclo do valor grave: AWAITING_PATIENT vira PENDING quando a paciente "
                     + "responde que não está bem ou quando o prazo de 10 minutos vence sem resposta, e vira "
                     + "UNCONFIRMED quando ela responde que está bem. PENDING vira RESOLVED pelo médico. "
                     + "confirmationReason diz qual evidência confirmou o alerta — DUAS_LEITURAS, "
-                    + "PACIENTE_NAO_ESTA_BEM ou SEM_RESPOSTA. Vem nulo em alerta AWAITING_PATIENT, que ainda "
-                    + "não foi confirmado, e em alerta confirmado antes da V37, que não tem o motivo gravado. "
+                    + "PACIENTE_NAO_ESTA_BEM ou SEM_RESPOSTA. Vem nulo em alerta confirmado antes da V37, "
+                    + "que não tem o motivo gravado. "
                     + "measuredAt e confirmedAt saem em UTC, com o sufixo Z."
     )
     @ApiResponses(value = {
@@ -88,8 +89,8 @@ public class AlertResolutionController {
     public ResponseEntity<ApiResponse<Page<DoctorAlertResponse>>> listAlerts(
             Authentication authentication,
 
-            @Parameter(description = "Filtra por um único status. Omitido, traz os três visíveis",
-                       schema = @Schema(allowableValues = {"PENDING", "AWAITING_PATIENT", "RESOLVED"}))
+            @Parameter(description = "Filtra por um único status. Omitido, traz os dois visíveis",
+                       schema = @Schema(allowableValues = {"PENDING", "RESOLVED"}))
             @RequestParam(required = false) String status,
 
             @PageableDefault(size = 20) Pageable pageable) {
@@ -113,12 +114,18 @@ public class AlertResolutionController {
                     + "volta ao normal. No fluxo de valor grave, AWAITING_PATIENT vira PENDING quando a "
                     + "paciente responde que não está bem ou quando o prazo de 10 minutos vence sem resposta, "
                     + "e vira UNCONFIRMED quando ela responde que está bem. Só PENDING chega a RESOLVED por "
-                    + "este endpoint; alerta já RESOLVED é devolvido como está, sem nova gravação."
+                    + "este endpoint; alerta já RESOLVED é devolvido como está, sem nova gravação. Alerta "
+                    + "UNCONFIRMED, NOT_CONFIRMED ou AWAITING_PATIENT ainda não foi confirmado e é recusado "
+                    + "com 400. O vínculo com o paciente é verificado antes do status."
     )
     @ApiResponses(value = {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "Alerta marcado como RESOLVED"),
+                description = "Alerta marcado como RESOLVED, ou já RESOLVED e devolvido sem alteração"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "Alerta ainda não confirmado (UNCONFIRMED, NOT_CONFIRMED ou "
+                            + "AWAITING_PATIENT) e não pode ser resolvido"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "Token ausente, inválido ou expirado, ou paciente não vinculado ao médico"),

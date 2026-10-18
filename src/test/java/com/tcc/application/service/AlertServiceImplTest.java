@@ -1833,6 +1833,64 @@ class AlertServiceImplTest {
 
             verify(alertRepository, never()).save(any());
         }
+
+        /**
+         * Alerta não confirmado, de paciente vinculado: passa pela checagem de
+         * vínculo e é recusado pelo status, sem gravar e sem mudar o status.
+         */
+        private void assertResolutionRejectedFor(String status) {
+            Alert alert = alertOf(ALERT_ID, status, null, null);
+            stubAuthenticatedDoctor();
+            when(alertRepository.findById(ALERT_ID)).thenReturn(Optional.of(alert));
+            when(doctorPatientRepository.existsByDoctorIdAndPatientId(DOCTOR_ID, PATIENT_ID))
+                    .thenReturn(true);
+
+            assertThatThrownBy(() -> alertService.resolveAlert(DOCTOR_EMAIL, ALERT_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("Este alerta ainda não foi confirmado e não pode ser resolvido");
+
+            // O vínculo continua sendo checado antes do status.
+            verify(doctorPatientRepository).existsByDoctorIdAndPatientId(DOCTOR_ID, PATIENT_ID);
+            assertThat(alert.getStatus()).isEqualTo(status);
+            verify(alertRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("alerta UNCONFIRMED deve ser recusado com BusinessException")
+        void shouldRejectResolutionOfUnconfirmedAlert() {
+            assertResolutionRejectedFor(AlertStatus.UNCONFIRMED);
+        }
+
+        @Test
+        @DisplayName("alerta NOT_CONFIRMED deve ser recusado com BusinessException")
+        void shouldRejectResolutionOfNotConfirmedAlert() {
+            assertResolutionRejectedFor(AlertStatus.NOT_CONFIRMED);
+        }
+
+        @Test
+        @DisplayName("alerta AWAITING_PATIENT deve ser recusado com BusinessException")
+        void shouldRejectResolutionOfAwaitingPatientAlert() {
+            assertResolutionRejectedFor(AlertStatus.AWAITING_PATIENT);
+        }
+
+        /**
+         * Médico não vinculado recebe o erro de vínculo mesmo com alerta não
+         * confirmado: a checagem de status vem depois e não vaza o status.
+         */
+        @Test
+        @DisplayName("medico nao vinculado recebe erro de vinculo mesmo com alerta nao confirmado")
+        void shouldCheckLinkBeforeStatus() {
+            Alert alert = alertOf(ALERT_ID, AlertStatus.AWAITING_PATIENT, null, null);
+            stubAuthenticatedDoctor();
+            when(alertRepository.findById(ALERT_ID)).thenReturn(Optional.of(alert));
+            when(doctorPatientRepository.existsByDoctorIdAndPatientId(DOCTOR_ID, PATIENT_ID))
+                    .thenReturn(false);
+
+            assertThatThrownBy(() -> alertService.resolveAlert(DOCTOR_EMAIL, ALERT_ID))
+                    .isInstanceOf(UnauthorizedException.class);
+
+            verify(alertRepository, never()).save(any());
+        }
     }
 
     /**
@@ -1891,15 +1949,30 @@ class AlertServiceImplTest {
         }
 
         @Test
-        @DisplayName("sem filtro deve pedir os tres status visiveis ao medico")
-        void shouldAskForTheThreeVisibleStatuses() {
+        @DisplayName("sem filtro deve pedir os dois status visiveis ao medico")
+        void shouldAskForTheTwoVisibleStatuses() {
             stubAuthenticatedDoctor();
             stubEmptyPage();
 
             alertService.listForDoctor(DOCTOR_EMAIL, null, FIRST_PAGE);
 
             assertThat(capturedStatuses()).containsExactlyInAnyOrder(
-                    AlertStatus.PENDING, AlertStatus.AWAITING_PATIENT, AlertStatus.RESOLVED);
+                    AlertStatus.PENDING, AlertStatus.RESOLVED);
+        }
+
+        /**
+         * AWAITING_PATIENT ainda não foi confirmado: a paciente não respondeu e o
+         * prazo não venceu. O médico só vê o alerta depois que ele chega a PENDING.
+         */
+        @Test
+        @DisplayName("sem filtro AWAITING_PATIENT nao entra na consulta")
+        void shouldNotQueryAwaitingPatientWithoutFilter() {
+            stubAuthenticatedDoctor();
+            stubEmptyPage();
+
+            alertService.listForDoctor(DOCTOR_EMAIL, null, FIRST_PAGE);
+
+            assertThat(capturedStatuses()).doesNotContain(AlertStatus.AWAITING_PATIENT);
         }
 
         /**
@@ -1949,7 +2022,8 @@ class AlertServiceImplTest {
 
             alertService.listForDoctor(DOCTOR_EMAIL, "   ", FIRST_PAGE);
 
-            assertThat(capturedStatuses()).hasSize(3);
+            assertThat(capturedStatuses()).containsExactlyInAnyOrder(
+                    AlertStatus.PENDING, AlertStatus.RESOLVED);
         }
 
         @Test
@@ -1976,6 +2050,23 @@ class AlertServiceImplTest {
             assertThatThrownBy(() -> alertService.listForDoctor(
                     DOCTOR_EMAIL, AlertStatus.UNCONFIRMED, FIRST_PAGE))
                     .isInstanceOf(BusinessException.class);
+
+            verify(alertRepository, never()).findForDoctor(any(), any(), any(Pageable.class));
+        }
+
+        /**
+         * Mesmo tratamento de UNCONFIRMED e NOT_CONFIRMED: BusinessException, que o
+         * GlobalExceptionHandler traduz em 400, e nenhuma consulta ao banco.
+         */
+        @Test
+        @DisplayName("pedir AWAITING_PATIENT por parametro deve ser recusado como status invalido")
+        void shouldRejectAwaitingPatientAsFilter() {
+            stubAuthenticatedDoctor();
+
+            assertThatThrownBy(() -> alertService.listForDoctor(
+                    DOCTOR_EMAIL, AlertStatus.AWAITING_PATIENT, FIRST_PAGE))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("Status inválido. Valores aceitos: PENDING, RESOLVED");
 
             verify(alertRepository, never()).findForDoctor(any(), any(), any(Pageable.class));
         }
