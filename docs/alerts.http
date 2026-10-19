@@ -134,10 +134,10 @@
 ### uma nova leitura fora da faixa cria outro UNCONFIRMED.
 ###
 ### Faixas cadastradas (limites INCLUSIVOS em ambas):
-###   tipo         normal (V26)        plausível (V35)
+###   tipo         normal (V26/V39)    plausível (V35)
 ###   HEART_RATE   50 a 120            25 a 250
-###   SPO2         mínimo 90           50 a 100
-###   TEMPERATURE  35.5 a 38.0         30 a 45
+###   SPO2         mínimo 91           50 a 100
+###   TEMPERATURE  36.2 a 38.0         30 a 45
 ### Tipo sem faixa plausível cadastrada não sofre o filtro de implausibilidade.
 ###
 ### Campo unit é opcional e vai no corpo do e-mail junto com o valor.
@@ -404,7 +404,7 @@ X-Integration-Key: {{integrationKey}}
   "unit": "%"
 }
 
-### 4n. SPO2 85 NÃO é grave, mas está abaixo do normal (90)
+### 4n. SPO2 85 NÃO é grave, mas está abaixo do normal (91)
 ### -> 201, alertStatus=UNCONFIRMED
 POST {{baseUrl}}/integration/alerts/evaluate
 Content-Type: application/json
