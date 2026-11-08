@@ -93,11 +93,11 @@ public enum Role {
 
 | Requisito | Status | Implementação |
 |---|---|---|
-| Login como paciente | ✅ Implementado | Login genérico retorna token com role `PATIENT` |
-| Bloqueado de endpoints de gestão | ✅ Correto | `/api/patients/**` exige `DOCTOR`, paciente não acessa |
-| Endpoints para o app mobile | ❌ Não existe | Nenhum controller com `hasRole('PATIENT')` |
+| Login como paciente |  Implementado | Login genérico retorna token com role `PATIENT` |
+| Bloqueado de endpoints de gestão |  Correto | `/api/patients/**` exige `DOCTOR`, paciente não acessa |
+| Endpoints para o app mobile |  Não existe | Nenhum controller com `hasRole('PATIENT')` |
 
-**Resultado: PARCIAL** ⚠️
+Resultado: PARCIAL
 
 ### O que precisa ser feito (quando o app mobile for desenvolvido)
 
@@ -115,10 +115,10 @@ public enum Role {
 
 | Perfil | Status | Prioridade de Implementação |
 |---|---|---|
-| ADMIN | ✅ Funcional | — |
-| HOSPITAL | ❌ Não existe | **Alta** — precisa de nova role + controller + escopo |
-| DOCTOR | ⚠️ Parcial | **Média** — falta escopo por hospital e dashboard individual |
-| PATIENT | ⚠️ Só bloqueio | **Baixa** — endpoints mobile vêm quando o app for desenvolvido |
+| ADMIN |  Funcional | — |
+| HOSPITAL |  Não existe | **Alta** — precisa de nova role + controller + escopo |
+| DOCTOR |  Parcial | **Média** — falta escopo por hospital e dashboard individual |
+| PATIENT |  Só bloqueio | **Baixa** — endpoints mobile vêm quando o app for desenvolvido |
 
 ---
 
