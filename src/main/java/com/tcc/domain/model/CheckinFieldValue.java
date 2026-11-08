@@ -30,9 +30,6 @@ public class CheckinFieldValue {
     @Column(name = "raw_value", columnDefinition = "TEXT")
     private String rawValue;
 
-    @Column(name = "photo_url", length = 2048)
-    private String photoUrl;
-
     public UUID getId() {
         return id;
     }
@@ -63,13 +60,5 @@ public class CheckinFieldValue {
 
     public void setRawValue(String rawValue) {
         this.rawValue = rawValue;
-    }
-
-    public String getPhotoUrl() {
-        return photoUrl;
-    }
-
-    public void setPhotoUrl(String photoUrl) {
-        this.photoUrl = photoUrl;
     }
 }

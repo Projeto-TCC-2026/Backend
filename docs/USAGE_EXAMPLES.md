@@ -362,41 +362,6 @@ public class ProcedureService {
 }
 ```
 
-### 8. Upload de Fotos de Procedimentos
-
-```java
-// ProcedurePhotoService.java
-@Service
-public class ProcedurePhotoService {
-    
-    @Autowired
-    private ProcedurePhotoRepository photoRepository;
-    
-    @Autowired
-    private ProcedureExecutionRepository executionRepository;
-    
-    @Transactional
-    public ProcedurePhoto uploadPhoto(Long executionId, MultipartFile file) {
-        ProcedureExecution execution = executionRepository.findById(executionId)
-            .orElseThrow(() -> new ResourceNotFoundException("Execução não encontrada"));
-        
-        // Upload do arquivo (implementar upload para S3, Azure Storage, etc.)
-        String imageUrl = uploadFileToStorage(file);
-        
-        ProcedurePhoto photo = new ProcedurePhoto();
-        photo.setProcedureExecution(execution);
-        photo.setImageUrl(imageUrl);
-        photo.setFileName(file.getOriginalFilename());
-        
-        return photoRepository.save(photo);
-    }
-    
-    public List<ProcedurePhoto> getPhotosByExecution(Long executionId) {
-        return photoRepository.findByProcedureExecutionId(executionId);
-    }
-}
-```
-
 ## Queries Úteis
 
 ### Buscar Notificações Não Lidas de um Médico

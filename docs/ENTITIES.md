@@ -202,24 +202,6 @@ Entidade que representa execuções específicas de procedimentos.
 - N:1 com Procedure
 - N:1 com Doctor
 - N:1 com Patient
-- 1:N com ProcedurePhoto
-
----
-
-### 10. ProcedurePhoto
-**Localização:** `src/main/java/com/tcc/domain/model/ProcedurePhoto.java`
-
-Entidade que armazena fotos de procedimentos médicos.
-
-**Campos:**
-- `id` (PK) - Long
-- `procedureExecutionId` (FK) - Long
-- `imageUrl` - String (required)
-- `fileName` - String (required)
-- `uploadedAt` - LocalDateTime (auto)
-
-**Relacionamentos:**
-- N:1 com ProcedureExecution
 
 ---
 
@@ -327,7 +309,6 @@ Todos os repositories estão localizados em `src/main/java/com/tcc/domain/reposi
 7. **ProcedureRepository** - Operações para Procedure
 8. **PatientProcedureRepository** - Operações para PatientProcedure
 9. **ProcedureExecutionRepository** - Operações para ProcedureExecution
-10. **ProcedurePhotoRepository** - Operações para ProcedurePhoto
 11. **ReadingImportRepository** - Operações para ReadingImport
 12. **HealthReadingRepository** - Operações para HealthReading
 13. **AlertRepository** - Operações para Alert

@@ -202,7 +202,7 @@ public class ReportServiceImpl implements ReportService {
                 set(row, 2, assignment.getDoctor().getFullName());
                 set(row, 3, assignment.getProcedure().getTitle());
                 set(row, 4, fieldValue.getField().getName());
-                set(row, 5, fieldValue.getRawValue() == null ? fieldValue.getPhotoUrl() : fieldValue.getRawValue());
+                set(row, 5, fieldValue.getRawValue());
                 set(row, 6, fieldValue.getField().getUnit());
                 set(row, 7, checkin.getSource().name());
             }

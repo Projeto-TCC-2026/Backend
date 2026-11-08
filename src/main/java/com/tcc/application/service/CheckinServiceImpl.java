@@ -25,7 +25,6 @@ import com.tcc.domain.model.CheckinSource;
 import com.tcc.domain.model.CheckinSubmission;
 import com.tcc.domain.model.DoctorProcedure;
 import com.tcc.domain.model.DoctorProcedureField;
-import com.tcc.domain.model.FieldDataType;
 import com.tcc.domain.model.Patient;
 import com.tcc.domain.model.PatientProcedure;
 import com.tcc.domain.repository.CheckinRepository;
@@ -198,7 +197,6 @@ public class CheckinServiceImpl implements CheckinService {
             fieldValue.setCheckin(checkin);
             fieldValue.setField(fieldsById.get(submittedValue.fieldId()));
             fieldValue.setRawValue(normalize(submittedValue.value()));
-            fieldValue.setPhotoUrl(normalize(submittedValue.photoUrl()));
             checkin.getFieldValues().add(fieldValue);
         }
 
@@ -237,22 +235,9 @@ public class CheckinServiceImpl implements CheckinService {
 
     private void validateValue(DoctorProcedureField field, ManualCheckinRequest.FieldValue submittedValue) {
         String value = normalize(submittedValue.value());
-        String photoUrl = normalize(submittedValue.photoUrl());
 
-        if (field.getDataType() == FieldDataType.PHOTO) {
-            if (photoUrl == null) {
-                throw new BusinessException("O campo de foto exige uma URL: " + field.getName());
-            }
-            if (value != null) {
-                throw new BusinessException("O campo de foto não aceita valor textual: " + field.getName());
-            }
-            return;
-        }
         if (value == null) {
             throw new BusinessException("O campo exige um valor: " + field.getName());
-        }
-        if (photoUrl != null) {
-            throw new BusinessException("URL de foto só é aceita para campos de foto: " + field.getName());
         }
 
         switch (field.getDataType()) {
@@ -266,7 +251,6 @@ public class CheckinServiceImpl implements CheckinService {
             case TEXT -> {
                 // A presença de texto não vazio já é garantida pela normalização.
             }
-            case PHOTO -> throw new IllegalStateException("Campo de foto já foi validado");
         }
     }
 

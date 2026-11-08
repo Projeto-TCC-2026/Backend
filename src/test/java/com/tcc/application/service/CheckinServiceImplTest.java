@@ -112,7 +112,7 @@ class CheckinServiceImplTest {
         });
 
         CheckinResponse response = service.submitManual(EMAIL, PATIENT_PROCEDURE_ID,
-                new ManualCheckinRequest(List.of(new ManualCheckinRequest.FieldValue(FIELD_ID, "36.5", null))));
+                new ManualCheckinRequest(List.of(new ManualCheckinRequest.FieldValue(FIELD_ID, "36.5"))));
 
         assertThat(response.id()).isNotNull();
         ArgumentCaptor<Checkin> saved = ArgumentCaptor.forClass(Checkin.class);
@@ -141,7 +141,7 @@ class CheckinServiceImplTest {
 
         assertThatThrownBy(() -> service.submitManual(EMAIL, PATIENT_PROCEDURE_ID,
                 new ManualCheckinRequest(List.of(
-                        new ManualCheckinRequest.FieldValue(UUID.randomUUID(), "36.5", null)))))
+                        new ManualCheckinRequest.FieldValue(UUID.randomUUID(), "36.5")))))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("não está ativo");
     }

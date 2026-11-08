@@ -135,19 +135,6 @@
 │ status                │
 │ observations          │
 └───────────────────────┘
-       │
-       │ 1:N (fotos do procedimento)
-       │
-       ▼
-┌───────────────────┐
-│ ProcedurePhoto    │
-│───────────────────│
-│ id (PK)           │
-│ executionId (FK)  │
-│ imageUrl          │
-│ fileName          │
-│ uploadedAt        │
-└───────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────┐
 │                    FLUXO DE LEITURAS DE SAÚDE                        │
@@ -249,7 +236,6 @@
 - **Procedure** define templates de procedimentos
 - **PatientProcedure** vincula procedimentos a pacientes
 - **ProcedureExecution** registra cada execução
-- **ProcedurePhoto** armazena evidências fotográficas
 
 ### Importação de Dados
 - **ReadingImport** rastreia arquivos de leitura importados

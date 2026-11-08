@@ -5,6 +5,5 @@ public enum FieldDataType {
   DECIMAL,
   BOOLEAN,
   TEXT,
-  SCALE,
-  PHOTO
+  SCALE
 }

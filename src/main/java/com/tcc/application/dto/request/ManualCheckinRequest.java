@@ -14,8 +14,6 @@ public record ManualCheckinRequest(
             @NotNull(message = "ID do campo é obrigatório")
             UUID fieldId,
             @Size(max = 10000, message = "Valor deve ter no máximo 10000 caracteres")
-            String value,
-            @Size(max = 2048, message = "URL da foto deve ter no máximo 2048 caracteres")
-            String photoUrl) {
+            String value) {
     }
 }

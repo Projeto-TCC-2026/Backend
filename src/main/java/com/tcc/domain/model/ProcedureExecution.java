@@ -2,8 +2,6 @@ package com.tcc.domain.model;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -38,9 +36,6 @@ public class ProcedureExecution {
 
     @Column(columnDefinition = "TEXT")
     private String observations;
-
-    @OneToMany(mappedBy = "procedureExecution", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<ProcedurePhoto> procedurePhotos = new ArrayList<>();
 
     // Constructors
     public ProcedureExecution() {
@@ -118,13 +113,5 @@ public class ProcedureExecution {
 
     public void setObservations(String observations) {
         this.observations = observations;
-    }
-
-    public List<ProcedurePhoto> getProcedurePhotos() {
-        return procedurePhotos;
-    }
-
-    public void setProcedurePhotos(List<ProcedurePhoto> procedurePhotos) {
-        this.procedurePhotos = procedurePhotos;
     }
 }
