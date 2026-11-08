@@ -1,13 +1,8 @@
-### ============================================
-### API de Pacientes - Testes Completos
-### ============================================
 ### Pré-requisito: ter um token JWT válido de um usuário com role DOCTOR
-### Total de Endpoints: 14 (8 CRUD + 2 Procedimentos + 4 Buscas)
 
 @baseUrl = http://localhost:8080
 @token = seu_jwt_token_aqui
 
-### ============================================
 ### 1. POST - Criar novo paciente (com conta de acesso)
 ### Não se informa "userId": o backend cria a conta (role PATIENT) a partir do "email",
 ### com senha temporária aleatória que ninguém conhece. O paciente recebe um e-mail de
@@ -25,7 +20,6 @@
 ### Aceita apenas DOCTOR e HOSPITAL. ADMIN não cadastra paciente.
 ### Para consultar os procedimentos disponíveis e gerenciar os vínculos depois,
 ### ver docs/patient-procedures.http
-### ============================================
 
 ### 1.a - Cadastro por DOCTOR
 ### Assume {{token}} de um usuário com role DOCTOR.
@@ -110,9 +104,7 @@ Content-Type: application/json
   "procedures": []
 }
 
-### ============================================
 ### 2. GET - Listar todos os pacientes ativos (paginado)
-### ============================================
 GET {{baseUrl}}/api/patients?page=0&size=10&sort=fullName,asc
 Authorization: Bearer {{token}}
 
@@ -128,21 +120,17 @@ Authorization: ******
 GET {{baseUrl}}/api/patients?page=0&size=5&sort=birthDate,desc
 Authorization: Bearer {{token}}
 
-### ============================================
 ### 3. GET - Buscar paciente por ID
 ### A resposta inclui responsibleDoctor, com o médico do vínculo mais recente.
 ### O vínculo é informativo e não pode ser alterado pelo endpoint de atualização.
-### ============================================
 GET {{baseUrl}}/api/patients/550e8400-e29b-41d4-a716-446655440001
 Authorization: Bearer {{token}}
 
-### ============================================
 ### 4. PUT - Atualizar paciente
 ### Não aceita "procedures": o vínculo com procedimento é gerenciado pelos endpoints
 ### de /api/patients/{patientId}/assigned-procedures — ver docs/patient-procedures.http
 ### Também não aceita "userId": a conta de acesso é definida no cadastro e não é
 ### repontada pela atualização.
-### ============================================
 PUT {{baseUrl}}/api/patients/550e8400-e29b-41d4-a716-446655440001
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -163,15 +151,11 @@ Content-Type: application/json
   "height": 1.78
 }
 
-### ============================================
 ### 6. PATCH - Inativar paciente (soft delete)
-### ============================================
 PATCH {{baseUrl}}/api/patients/550e8400-e29b-41d4-a716-446655440001/inactive
 Authorization: Bearer {{token}}
 
-### ============================================
 ### 7. GET - Buscar pacientes por nome (paginado)
-### ============================================
 GET {{baseUrl}}/api/patients/search/name?name=João&page=0&size=10
 Authorization: Bearer {{token}}
 
@@ -179,9 +163,7 @@ Authorization: Bearer {{token}}
 GET {{baseUrl}}/api/patients/search/name?name=Silva&page=0&size=10&sort=fullName,asc
 Authorization: Bearer {{token}}
 
-### ============================================
 ### 8. GET - Buscar pacientes por CPF (paginado)
-### ============================================
 GET {{baseUrl}}/api/patients/search/cpf?cpf=123&page=0&size=10
 Authorization: Bearer {{token}}
 
@@ -189,9 +171,7 @@ Authorization: Bearer {{token}}
 GET {{baseUrl}}/api/patients/search/cpf?cpf=12345678901&page=0&size=10
 Authorization: Bearer {{token}}
 
-### ============================================
 ### 9. GET - Buscar pacientes por e-mail (paginado)
-### ============================================
 GET {{baseUrl}}/api/patients/search/email?email=joao&page=0&size=10
 Authorization: Bearer {{token}}
 
@@ -199,9 +179,7 @@ Authorization: Bearer {{token}}
 GET {{baseUrl}}/api/patients/search/email?email=joao@email.com&page=0&size=10
 Authorization: Bearer {{token}}
 
-### ============================================
 ### 10. GET - Buscar pacientes por telefone (paginado)
-### ============================================
 GET {{baseUrl}}/api/patients/search/phone?phone=119&page=0&size=10
 Authorization: Bearer {{token}}
 
@@ -209,9 +187,7 @@ Authorization: Bearer {{token}}
 GET {{baseUrl}}/api/patients/search/phone?phone=11987654321&page=0&size=10
 Authorization: Bearer {{token}}
 
-### ============================================
 ### 11. GET - Filtrar pacientes (múltiplos critérios)
-### ============================================
 GET {{baseUrl}}/api/patients/filter?name=João&gender=MALE&city=São Paulo&state=SP&page=0&size=10
 Authorization: Bearer {{token}}
 
@@ -227,9 +203,7 @@ Authorization: Bearer {{token}}
 GET {{baseUrl}}/api/patients/filter?city=Rio de Janeiro&state=RJ&page=0&size=10
 Authorization: Bearer {{token}}
 
-### ============================================
 ### 12. GET - Listar procedimentos realizados de um paciente
-### ============================================
 GET {{baseUrl}}/api/patients/550e8400-e29b-41d4-a716-446655440001/procedures?page=0&size=10&sort=executionDate,desc
 Authorization: Bearer {{token}}
 
@@ -237,19 +211,15 @@ Authorization: Bearer {{token}}
 GET {{baseUrl}}/api/patients/1/procedures?page=0&size=5
 Authorization: Bearer {{token}}
 
-### ============================================
 ### 13. GET - Contar procedimentos realizados de um paciente
-### ============================================
 GET {{baseUrl}}/api/patients/1/procedures/count
 Authorization: Bearer {{token}}
 
-### ============================================
 ### 15. POST - Reemitir link de primeiro acesso do paciente
 ### Invalida o link pendente, gera um novo e reenvia o e-mail de boas-vindas.
 ### DOCTOR só reemite para paciente vinculado a ele; HOSPITAL, apenas para paciente
 ### de um médico do próprio hospital — o escopo é aplicado na consulta.
 ### Resposta: { "success": true, "data": { "activationLink": "..." } }
-### ============================================
 POST {{baseUrl}}/api/patients/550e8400-e29b-41d4-a716-446655440001/access-link
 Authorization: Bearer {{token}}
 
@@ -266,11 +236,9 @@ Content-Type: application/json
   "passwordConfirmation": "senhaDoPaciente123"
 }
 
-### ============================================
 ### EXEMPLOS DE RESPOSTAS
-### ============================================
 
-### ✅ Sucesso - Criar paciente (201 Created)
+### Sucesso - Criar paciente (201 Created)
 # O corpo de "data" tem duas chaves: "patient" (abaixo) e "activationLink".
 # {
 #   "success": true,
@@ -305,7 +273,7 @@ Content-Type: application/json
 #   }
 # }
 
-### ✅ Sucesso - Listar pacientes (200 OK) - Paginado
+### Sucesso - Listar pacientes (200 OK) - Paginado
 # {
 #   "success": true,
 #   "data": {
@@ -342,7 +310,7 @@ Content-Type: application/json
 #   }
 # }
 
-### ✅ Sucesso - Buscar por ID (200 OK)
+### Sucesso - Buscar por ID (200 OK)
 # {
 #   "success": true,
 #   "data": {
@@ -362,7 +330,7 @@ Content-Type: application/json
 #   }
 # }
 
-### ✅ Sucesso - Atualizar paciente (200 OK)
+### Sucesso - Atualizar paciente (200 OK)
 # {
 #   "success": true,
 #   "data": {
@@ -374,19 +342,19 @@ Content-Type: application/json
 #   }
 # }
 
-### ✅ Sucesso - Excluir paciente (200 OK)
+### Sucesso - Excluir paciente (200 OK)
 # {
 #   "success": true,
 #   "data": null
 # }
 
-### ✅ Sucesso - Inativar paciente (200 OK)
+### Sucesso - Inativar paciente (200 OK)
 # {
 #   "success": true,
 #   "data": null
 # }
 
-### ✅ Sucesso - Buscar por nome (200 OK)
+### Sucesso - Buscar por nome (200 OK)
 # {
 #   "success": true,
 #   "data": {
@@ -408,7 +376,7 @@ Content-Type: application/json
 #   }
 # }
 
-### ✅ Sucesso - Buscar por e-mail (200 OK)
+### Sucesso - Buscar por e-mail (200 OK)
 # {
 #   "success": true,
 #   "data": {
@@ -426,7 +394,7 @@ Content-Type: application/json
 #   }
 # }
 
-### ✅ Sucesso - Buscar por telefone (200 OK)
+### Sucesso - Buscar por telefone (200 OK)
 # {
 #   "success": true,
 #   "data": {
@@ -444,7 +412,7 @@ Content-Type: application/json
 #   }
 # }
 
-### ✅ Sucesso - Filtrar pacientes (200 OK)
+### Sucesso - Filtrar pacientes (200 OK)
 # {
 #   "success": true,
 #   "data": {
@@ -472,7 +440,7 @@ Content-Type: application/json
 #   }
 # }
 
-### ✅ Sucesso - Listar procedimentos do paciente (200 OK)
+### Sucesso - Listar procedimentos do paciente (200 OK)
 # {
 #   "success": true,
 #   "data": {
@@ -494,7 +462,7 @@ Content-Type: application/json
 #   }
 # }
 
-### ✅ Sucesso - Listar procedimentos do paciente (200 OK)
+### Sucesso - Listar procedimentos do paciente (200 OK)
 # {
 #   "success": true,
 #   "data": {
@@ -530,53 +498,51 @@ Content-Type: application/json
 #   }
 # }
 
-### ✅ Sucesso - Contar procedimentos (200 OK)
+### Sucesso - Contar procedimentos (200 OK)
 # {
 #   "success": true,
 #   "data": 25
 # }
 
-### ============================================
 ### EXEMPLOS DE ERROS
-### ============================================
 
-### ❌ Erro - CPF já cadastrado (422 Unprocessable Entity)
+### Erro - CPF já cadastrado (422 Unprocessable Entity)
 # {
 #   "success": false,
 #   "message": "Já existe um paciente ativo cadastrado com o CPF: 12345678901"
 # }
 
-### ❌ Erro - Usuário já associado (422 Unprocessable Entity)
+### Erro - Usuário já associado (422 Unprocessable Entity)
 # {
 #   "success": false,
 #   "message": "Usuário já está associado a um paciente"
 # }
 
-### ❌ Erro - Paciente não encontrado (404 Not Found)
+### Erro - Paciente não encontrado (404 Not Found)
 # {
 #   "success": false,
 #   "message": "Paciente não encontrado com ID: 999"
 # }
 
-### ❌ Erro - Usuário não encontrado (404 Not Found)
+### Erro - Usuário não encontrado (404 Not Found)
 # {
 #   "success": false,
 #   "message": "Usuário não encontrado com ID: 999"
 # }
 
-### ❌ Erro - Acesso negado (403 Forbidden)
+### Erro - Acesso negado (403 Forbidden)
 # {
 #   "error": "Access Denied",
 #   "message": "Você não tem permissão para acessar este recurso"
 # }
 
-### ❌ Erro - Token inválido (401 Unauthorized)
+### Erro - Token inválido (401 Unauthorized)
 # {
 #   "error": "Unauthorized",
 #   "message": "Token JWT inválido ou expirado"
 # }
 
-### ❌ Erro - Validação de campos (400 Bad Request)
+### Erro - Validação de campos (400 Bad Request)
 # {
 #   "success": false,
 #   "message": "Erro de validação",
@@ -587,9 +553,7 @@ Content-Type: application/json
 #   }
 # }
 
-### ============================================
 ### CENÁRIOS DE TESTE
-### ============================================
 
 ### Teste 1: Fluxo completo de sucesso
 # 1. Criar paciente (POST)
@@ -634,9 +598,7 @@ Content-Type: application/json
 # 2. Tentar acessar com token de PATIENT (deve retornar 403)
 # 3. Acessar com token de DOCTOR (deve funcionar)
 
-### ============================================
 ### NOTAS IMPORTANTES
-### ============================================
 # 
 # 1. Todos os endpoints requerem autenticação JWT, exceto /account-activation/activate
 # 2. Apenas usuários com role DOCTOR podem acessar
@@ -655,4 +617,3 @@ Content-Type: application/json
 # 13. Filtros combinados: todos opcionais, combinados com AND
 # 14. Buscas por e-mail e telefone são case-insensitive e parciais
 # 
-### ============================================

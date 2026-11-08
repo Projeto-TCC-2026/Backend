@@ -1,15 +1,11 @@
-### ===========================================
-### DASHBOARD ADMINISTRATIVO - TESTES
-### ===========================================
+### Dashboard administrativo
 
 ### Variables
 @host = http://localhost:8080
 @adminEmail = admin@sistema.com
 @adminPassword = admin123
 
-### ===========================================
 ### 1. AUTENTICAÇÃO
-### ===========================================
 
 ### Login como administrador
 POST {{host}}/auth/admin/login
@@ -27,9 +23,7 @@ client.test("Admin Login Success", function() {
 });
 %}
 
-### ===========================================
 ### 2. DASHBOARD PRINCIPAL
-### ===========================================
 
 ### Dashboard completo (endpoint principal)
 GET {{host}}/api/dashboard
@@ -51,9 +45,7 @@ client.test("Dashboard Loaded", function() {
 GET {{host}}/api/admin/dashboard
 Authorization: Bearer {{admin_token}}
 
-### ===========================================
 ### 3. MÉTRICAS DETALHADAS
-### ===========================================
 
 ### Métricas com breakdown detalhado
 GET {{host}}/api/dashboard/metrics
@@ -71,9 +63,7 @@ client.test("Detailed Metrics", function() {
 });
 %}
 
-### ===========================================
 ### 4. ESTATÍSTICAS ESPECÍFICAS
-### ===========================================
 
 ### Estatísticas de Hospitais
 GET {{host}}/api/dashboard/stats/hospitals
@@ -118,9 +108,7 @@ client.test("Patient Stats", function() {
 });
 %}
 
-### ===========================================
 ### 5. RESUMO EXECUTIVO
-### ===========================================
 
 ### Resumo para widgets/cards
 GET {{host}}/api/dashboard/summary
@@ -144,9 +132,7 @@ client.test("Executive Summary", function() {
 });
 %}
 
-### ===========================================
 ### 6. SAÚDE DO SISTEMA
-### ===========================================
 
 ### Verificar saúde dos serviços
 GET {{host}}/api/dashboard/health
@@ -163,9 +149,7 @@ client.test("System Health", function() {
 });
 %}
 
-### ===========================================
 ### 7. TENDÊNCIAS E CRESCIMENTO
-### ===========================================
 
 ### Dados de tendências (placeholder)
 GET {{host}}/api/dashboard/trends
@@ -182,9 +166,7 @@ client.test("Growth Trends", function() {
 });
 %}
 
-### ===========================================
 ### 8. TESTES DE SEGURANÇA
-### ===========================================
 
 ### Tentar acessar dashboard sem token (deve retornar 401)
 GET {{host}}/api/dashboard
@@ -201,9 +183,7 @@ GET {{host}}/api/dashboard/metrics
 ### Tentar acessar resumo sem token (deve retornar 401)
 GET {{host}}/api/dashboard/summary
 
-### ===========================================
 ### 9. COMPARAÇÃO DE ENDPOINTS
-### ===========================================
 
 ### Dashboard principal (DashboardController)
 GET {{host}}/api/dashboard
@@ -217,9 +197,7 @@ Authorization: Bearer {{admin_token}}
 GET {{host}}/api/admin/profile
 Authorization: Bearer {{admin_token}}
 
-### ===========================================
 ### 10. TESTES DE PERFORMANCE
-### ===========================================
 
 ### Múltiplas chamadas simultâneas
 GET {{host}}/api/dashboard
@@ -237,9 +215,7 @@ Authorization: Bearer {{admin_token}}
 GET {{host}}/api/dashboard/health
 Authorization: Bearer {{admin_token}}
 
-### ===========================================
 ### 11. VALIDAÇÃO DOS DADOS
-### ===========================================
 
 ### Verificar consistência dos números
 GET {{host}}/api/admin/dashboard
@@ -302,9 +278,7 @@ client.test("Summary Consistency", function() {
 });
 %}
 
-### ===========================================
 ### 12. CENÁRIOS DE USO REAL
-### ===========================================
 
 ### Simular carregamento de dashboard completo (como frontend faria)
 GET {{host}}/api/dashboard/summary
@@ -322,9 +296,7 @@ Authorization: Bearer {{admin_token}}
 GET {{host}}/api/dashboard
 Authorization: Bearer {{admin_token}}
 
-### ===========================================
 ### 13. DOCUMENTAÇÃO E METADATA
-### ===========================================
 
 ### Verificar metadados nos responses
 GET {{host}}/api/dashboard
