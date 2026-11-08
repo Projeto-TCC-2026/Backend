@@ -55,8 +55,6 @@ public class AdminController {
         return ResponseEntity.ok(response);
     }
 
-    // ======================= GERENCIAMENTO DE HOSPITAIS =======================
-
     @PostMapping("/hospitals")
     @Operation(
         summary = "Cadastrar hospital (Admin)",
@@ -178,8 +176,6 @@ public class AdminController {
         
         return ResponseEntity.ok(response);
     }
-
-    // ======================= GERENCIAMENTO DE USUÁRIOS =======================
 
     @PostMapping("/users")
     @Operation(

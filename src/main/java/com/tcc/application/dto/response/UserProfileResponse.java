@@ -11,33 +11,33 @@ public class UserProfileResponse {
     private String role;
     private String fullName;
 
-    // Doctor-specific fields
+    // Campos de DOCTOR
     private UUID doctorId;
     private String crm;
     private String specialty;
     private String hospitalName;
     private String doctorPhone;
 
-    // Hospital-specific fields
+    // Campos de HOSPITAL
     private UUID hospitalId;
     private String phone;
     private String address;
     private String city;
     private String state;
 
-    // Patient-specific fields
+    // Campos de PATIENT
     private UUID patientId;
 
     public UserProfileResponse() {}
 
-    // Constructor for ADMIN
+    // ADMIN: só campos base. Campos de outros perfis ficam nulos e não saem no JSON (NON_NULL).
     public UserProfileResponse(UUID id, String email, String role) {
         this.id = id;
         this.email = email;
         this.role = role;
     }
 
-    // Constructor for DOCTOR
+    // DOCTOR
     public UserProfileResponse(UUID id, String email, String role, String fullName,
                                UUID doctorId, String crm, String specialty, String hospitalName,
                                String doctorPhone) {
@@ -52,7 +52,7 @@ public class UserProfileResponse {
         this.doctorPhone = doctorPhone;
     }
 
-    // Constructor for HOSPITAL
+    // HOSPITAL
     public UserProfileResponse(UUID id, String email, String role,
                                UUID hospitalId, String hospitalName,
                                String phone, String address, String city, String state) {
@@ -67,7 +67,7 @@ public class UserProfileResponse {
         this.state = state;
     }
 
-    // Constructor for PATIENT
+    // PATIENT
     public UserProfileResponse(UUID id, String email, String role,
                                UUID patientId, String fullName, String phone) {
         this.id = id;

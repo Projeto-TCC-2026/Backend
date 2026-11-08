@@ -31,7 +31,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         final String authHeader = request.getHeader("Authorization");
 
-        // Ignora requisições sem token ou com formato inválido
+        // Sem Bearer segue sem autenticar; o Security decide se a rota exige login.
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
@@ -42,7 +42,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         try {
             final String email = jwtService.extractUsername(token);
 
-            // Só autentica se ainda não há autenticação no contexto
+            // Não sobrescreve autenticação feita por um filtro anterior.
             if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
 
                 UserDetails userDetails = userDetailsService.loadUserByUsername(email);

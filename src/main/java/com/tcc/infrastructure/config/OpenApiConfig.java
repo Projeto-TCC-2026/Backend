@@ -47,7 +47,6 @@ public class OpenApiConfig {
                            "copie o accessToken e clique em 'Authorize' inserindo: Bearer {token}")
                 .license(mitLicense);
 
-        // Configuração do esquema de segurança JWT
         SecurityScheme securityScheme = new SecurityScheme()
                 .name("Bearer Authentication")
                 .type(SecurityScheme.Type.HTTP)
@@ -64,7 +63,6 @@ public class OpenApiConfig {
                 .addSecurityItem(securityRequirement)
                 .schemaRequirement("Bearer Authentication", securityScheme);
 
-        // Adiciona servidor de produção como opção extra se configurado via propriedade
         if (prodUrl != null && !prodUrl.isEmpty()) {
             Server prodServer = new Server();
             prodServer.setUrl(prodUrl);

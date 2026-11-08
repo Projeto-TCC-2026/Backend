@@ -45,8 +45,6 @@ public class HospitalManagementController {
         this.hospitalService = hospitalService;
     }
 
-    // ======================= LISTAGEM E VISUALIZAÇÃO =======================
-
     @GetMapping
     @Operation(
         summary = "Listar todos os hospitais",
@@ -125,8 +123,6 @@ public class HospitalManagementController {
         return ResponseEntity.ok(response);
     }
 
-    // ======================= CADASTRO E EDIÇÃO =======================
-
     @PostMapping
     @Operation(
         summary = "Cadastrar novo hospital",
@@ -161,8 +157,6 @@ public class HospitalManagementController {
         
         return ResponseEntity.ok(response);
     }
-
-    // ======================= ATIVAÇÃO E INATIVAÇÃO =======================
 
     @PatchMapping("/{id}/activate")
     @Operation(
@@ -229,8 +223,6 @@ public class HospitalManagementController {
         
         return ResponseEntity.ok(response);
     }
-
-    // ======================= BUSCA E FILTROS =======================
 
     @GetMapping("/search")
     @Operation(

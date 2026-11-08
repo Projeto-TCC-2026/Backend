@@ -56,10 +56,9 @@ public class ForgotPasswordServiceImpl implements ForgotPasswordService {
                                         String rawToken = String.format("%06d", java.util.concurrent.ThreadLocalRandom.current().nextInt(1000000));
                                         String tokenHash = hashToken(rawToken);
 
-                                        // Invalida tokens anteriores do usuário
+                                        // Só o código mais recente vale.
                                         passwordResetTokenRepository.invalidateAllByUserId(user.getId());
 
-                                        // Cria novo token de recuperação
                                         PasswordResetToken resetToken = new PasswordResetToken();
 
                                         resetToken.setTokenHash(tokenHash);
@@ -107,25 +106,21 @@ public class ForgotPasswordServiceImpl implements ForgotPasswordService {
                                                 () -> new InvalidTokenException(
                                                                 "Código de verificação inválido"));
 
-                // Token já utilizado
                 if (resetToken.isUsed()) {
                         throw new InvalidTokenException(
                                         "Código de verificação já foi usado");
                 }
 
-                // Token expirado
                 if (resetToken.getExpiresAt().isBefore(LocalDateTime.now())) {
                         throw new InvalidTokenException(
                                         "Código de verificação expirado");
                 }
 
-                // Senhas diferentes
                 if (!request.password().equals(request.passwordConfirmation())) {
                         throw new InvalidTokenException(
                                         "As senhas não conferem");
                 }
 
-                // Atualiza senha
                 User user = resetToken.getUser();
 
                 user.setPasswordHash(
@@ -133,7 +128,7 @@ public class ForgotPasswordServiceImpl implements ForgotPasswordService {
 
                 userRepository.save(user);
 
-                // Marca token como utilizado
+                // O código é de uso único.
                 resetToken.setUsed(true);
 
                 passwordResetTokenRepository.save(resetToken);
