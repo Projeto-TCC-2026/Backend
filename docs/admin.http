@@ -1,15 +1,11 @@
-### ===========================================
-### MÓDULO ADMINISTRATIVO - ENDPOINTS
-### ===========================================
+### Módulo administrativo
 
 ### Variables
 @host = http://localhost:8080
 @adminEmail = admin@sistema.com
 @adminPassword = admin123
 
-### ===========================================
 ### 1. AUTENTICAÇÃO ADMINISTRATIVA
-### ===========================================
 
 ### Login específico para administrador
 POST {{host}}/auth/admin/login
@@ -49,9 +45,7 @@ Content-Type: application/json
   "refreshToken": "{{admin_refresh_token}}"
 }
 
-### ===========================================
 ### 2. DASHBOARD ADMINISTRATIVO
-### ===========================================
 
 ### Dashboard com estatísticas gerais
 GET {{host}}/api/admin/dashboard
@@ -61,9 +55,7 @@ Authorization: Bearer {{admin_access_token}}
 GET {{host}}/api/admin/profile
 Authorization: Bearer {{admin_access_token}}
 
-### ===========================================
 ### 3. GERENCIAMENTO DE HOSPITAIS (ADMIN)
-### ===========================================
 
 ### Listar todos os hospitais
 GET {{host}}/api/admin/hospitals?page=0&size=10&sort=name,asc
@@ -119,9 +111,7 @@ Authorization: Bearer {{admin_access_token}}
 GET {{host}}/api/admin/hospitals/summary?page=0&size=10
 Authorization: Bearer {{admin_access_token}}
 
-### ===========================================
 ### 4. GERENCIAMENTO DE USUÁRIOS (ADMIN)
-### ===========================================
 
 ### Listar todos os usuários
 GET {{host}}/api/admin/users?page=0&size=10&sort=email,asc
@@ -191,9 +181,7 @@ Authorization: Bearer {{admin_access_token}}
 PATCH {{host}}/api/admin/users/2/deactivate
 Authorization: Bearer {{admin_access_token}}
 
-### ===========================================
 ### 5. TESTES DE SEGURANÇA
-### ===========================================
 
 ### Tentar acessar endpoint admin sem token (deve retornar 401)
 GET {{host}}/api/admin/dashboard
@@ -203,9 +191,7 @@ GET {{host}}/api/admin/dashboard
 GET {{host}}/api/admin/dashboard
 Authorization: Bearer TOKEN_DE_DOCTOR_AQUI
 
-### ===========================================
 ### 6. ENDPOINTS EXISTENTES (Para comparação)
-### ===========================================
 
 ### Hospitais (endpoints gerais - ADMIN ou DOCTOR)
 GET {{host}}/api/hospitals

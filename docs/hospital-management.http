@@ -1,15 +1,11 @@
-### ===========================================
-### GESTÃO DE HOSPITAIS - TESTE COMPLETO
-### ===========================================
+### Gestão de hospitais
 
 ### Variables
 @host = http://localhost:8080
 @adminEmail = admin@sistema.com
 @adminPassword = admin123
 
-### ===========================================
 ### 1. AUTENTICAÇÃO
-### ===========================================
 
 ### Login como administrador
 POST {{host}}/auth/admin/login
@@ -27,9 +23,7 @@ client.test("Login Admin Success", function() {
 });
 %}
 
-### ===========================================
 ### 2. LISTAR HOSPITAIS
-### ===========================================
 
 ### Listar todos os hospitais (endpoint principal)
 GET {{host}}/api/admin/hospital-management
@@ -63,9 +57,7 @@ Authorization: Bearer {{admin_token}}
 GET {{host}}/api/admin/hospital-management/search?query=Santa Casa
 Authorization: Bearer {{admin_token}}
 
-### ===========================================
 ### 3. CADASTRAR HOSPITAL
-### ===========================================
 
 ### Cadastrar novo hospital completo
 POST {{host}}/api/admin/hospital-management
@@ -124,9 +116,7 @@ Content-Type: application/json
   "phone": "(11) 9999-8888"
 }
 
-### ===========================================
 ### 4. VISUALIZAR INFORMAÇÕES
-### ===========================================
 
 ### Visualizar hospital específico
 GET {{host}}/api/admin/hospital-management/{{hospital_id}}
@@ -144,9 +134,7 @@ Authorization: Bearer {{admin_token}}
 GET {{host}}/api/admin/hospital-management/stats
 Authorization: Bearer {{admin_token}}
 
-### ===========================================
 ### 5. EDITAR HOSPITAL
-### ===========================================
 
 ### Atualizar informações completas do hospital
 PUT {{host}}/api/admin/hospital-management/{{hospital_id}}
@@ -190,9 +178,7 @@ Content-Type: application/json
   "state": "TS"
 }
 
-### ===========================================
 ### 6. ATIVAR/INATIVAR HOSPITAL
-### ===========================================
 
 ### Verificar status atual do hospital
 GET {{host}}/api/admin/hospital-management/{{hospital_id}}
@@ -226,9 +212,7 @@ Authorization: Bearer {{admin_token}}
 PATCH {{host}}/api/admin/hospital-management/{{hospital_id}}/toggle-status
 Authorization: Bearer {{admin_token}}
 
-### ===========================================
 ### 7. ENDPOINTS ALTERNATIVOS (AdminController)
-### ===========================================
 
 ### Listar hospitais (endpoint alternativo)
 GET {{host}}/api/admin/hospitals
@@ -257,9 +241,7 @@ Content-Type: application/json
   "state": "SP"
 }
 
-### ===========================================
 ### 8. TESTES DE SEGURANÇA
-### ===========================================
 
 ### Tentar acessar sem token (deve retornar 401)
 GET {{host}}/api/admin/hospital-management
@@ -278,9 +260,7 @@ Content-Type: application/json
 ### TODO: Testar com token de DOCTOR (deve retornar 403)
 ### (Primeiro fazer login como doctor e usar o token aqui)
 
-### ===========================================
 ### 9. TESTES DE PERFORMANCE E LIMITES
-### ===========================================
 
 ### Listar com paginação grande
 GET {{host}}/api/admin/hospital-management?page=0&size=100
@@ -294,9 +274,7 @@ Authorization: Bearer {{admin_token}}
 GET {{host}}/api/admin/hospital-management?city=CidadeInexistente&state=XX
 Authorization: Bearer {{admin_token}}
 
-### ===========================================
 ### 10. VALIDAÇÕES DE DADOS
-### ===========================================
 
 ### CNPJ inválido
 POST {{host}}/api/admin/hospital-management
