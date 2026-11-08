@@ -211,7 +211,7 @@ public class AuthServiceImpl implements AuthService {
             throw new UnauthorizedException(ErrorMessages.inactiveUserAccount());
         }
 
-        // Rotaciona — invalida o atual e gera um novo
+        // Refresh token é de uso único: revoga o atual e emite outro.
         refreshToken.setRevoked(true);
         refreshTokenRepository.save(refreshToken);
 

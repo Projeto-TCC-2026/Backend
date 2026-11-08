@@ -1,149 +1,114 @@
-# TCC Saúde - Backend
+# TCC Saúde – Backend
 
-Backend do projeto de extensão TCC Saúde, desenvolvido com Spring Boot em uma arquitetura em camadas, inspirada em princípios de separação de responsabilidades e DDD simplificado.
-
-## Tecnologias
-
-| Tecnologia | Versão |
-|---|---|
-| Java | 17 |
-| Spring Boot | 4.0.6 |
-| Spring Data JPA | incluso no starter |
-| H2 Database | runtime (dev) |
-| Maven Wrapper | incluso |
-
-### Planejadas
-
-- Spring Security + JWT
-- PostgreSQL (produção)
-- Flyway (versionamento de banco)
-- MapStruct (mapeamento DTO ↔ Entity)
-- Swagger/OpenAPI (documentação)
-- Docker
+API REST em Spring Boot que atende o painel web (admin, hospital, médico) e o app mobile do paciente. Cuida de hospitais, médicos, pacientes, procedimentos, check-ins, leituras de saúde e alertas.
 
 ## Pré-requisitos
 
-- Java 17+ instalado
-- `JAVA_HOME` configurado
+- Java 17 (`java.version` no `pom.xml`). Não precisa instalar o Maven: use o wrapper (`./mvnw`, ou `.\mvnw.cmd` no Windows).
+- Docker, se for subir com o `docker-compose.yml` (PostgreSQL 17).
+
+Stack: Spring Boot 4.1.1, Spring Security + JJWT, Spring Data JPA, Flyway, springdoc-openapi, Actuator, PostgreSQL (prod) e H2 (dev).
+
+## Variáveis de ambiente
+
+O `spring-boot:run` não lê o `.env`, que só é usado pelo Docker Compose. Rodando direto pelo Maven, defina as variáveis no terminal.
+
+Obrigatórias em qualquer perfil (sem elas a aplicação não sobe):
+
+| Variável | Para quê |
+|---|---|
+| `JWT_SECRET` | assinatura dos tokens. Precisa de 32+ caracteres (o JJWT recusa chave menor para HMAC-SHA) |
+| `FRONTEND_BASE_URL` | links de reset de senha e de ativação de conta |
+| `AWS_REGION` | clientes de SQS e S3 |
+| `APP_PASSWORD_RESET_SQS_QUEUE_URL` | fila de recuperação de senha |
+
+Só no perfil `prod`: `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` e `DASHBOARD_CACHE_S3_BUCKET` (no `dev` o bucket é fixo em `dev-local-sem-cache`).
+
+Para subir localmente, qualquer valor serve nas variáveis da AWS. A aplicação sobe sem credenciais da AWS. Exemplo no PowerShell:
+
+```powershell
+$env:JWT_SECRET = "uma-chave-local-com-pelo-menos-32-caracteres"
+$env:FRONTEND_BASE_URL = "http://localhost:4200"
+$env:AWS_REGION = "us-east-1"
+$env:APP_PASSWORD_RESET_SQS_QUEUE_URL = "https://sqs.us-east-1.amazonaws.com/000000000000/fila-teste"
+```
+
+Opcionais (padrão entre parênteses):
+
+- `APP_CORS_ALLOWED_ORIGINS` (`http://localhost:*,http://127.0.0.1:*`). O curinga `*` é recusado.
+- `APP_ACCOUNT_ACTIVATION_SQS_ENABLED` (`false`) e `APP_ACCOUNT_ACTIVATION_SQS_QUEUE_URL`
+- `APP_PUSH_ENABLED` (`false`)
+- `APP_ALERT_EMAIL_ENABLED` (`false`) e `APP_ALERT_EMAIL_SENDER`
+- `APP_INTEGRATION_SERVICE_KEY` (vazio): chave esperada no header `X-Integration-Key`. Sem ela, `/api/integration/**` recusa todas as requisições.
 
 ## Como rodar
 
+### Perfil `dev`
+
+```powershell
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=dev"
+```
+
+Sobe na porta `8080` com um H2 em memória (`jdbc:h2:mem:<uuid>`), e o Flyway aplica todas as migrations nele. O banco é zerado a cada reinício.
+
+### Perfil `prod`
+
+Exige `SPRING_PROFILES_ACTIVE=prod` e as variáveis `DB_*` apontando para um PostgreSQL. Na EC2 os valores vêm de `/etc/tccapp/app.env`.
+
+### Docker Compose
+
 ```bash
-# Na raiz do projeto
-.\mvnw.cmd spring-boot:run
+docker compose up --build
 ```
 
-A aplicação sobe em `http://localhost:8080`.
+Sobe o `postgres:17` (porta `5434` no host) e a aplicação no perfil `prod` (porta `8080`). As variáveis vêm do `.env`, que não é versionado: `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `JWT_SECRET`, as da AWS etc.
 
-### Compilar sem rodar
+Para debugar, use o `docker-compose.debug.yml` junto com o principal. Sozinho ele não funciona: só define o serviço `app` e aponta para o host `postgres`, que existe apenas no `docker-compose.yml`.
 
 ```bash
-.\mvnw.cmd clean package
+docker compose -f docker-compose.yml -f docker-compose.debug.yml up --build
 ```
 
-### Rodar o JAR gerado
+Assim a aplicação roda com o `Dockerfile.dev` no perfil `dev`, usando o Postgres do compose, com `./src` montado no container e o debugger na porta `5005`.
+
+### Testes e build
 
 ```bash
-java -jar target\tcc-0.0.1-SNAPSHOT.jar
+./mvnw test
+./mvnw clean package      # gera target/tcc-0.0.1-SNAPSHOT.jar
 ```
 
-## Documentação Adicional
+O deploy roda a cada push na `main` pelo `.github/workflows/deploy-backend.yml` (EC2, via S3 e SSM). Também dá para disparar manualmente pela aba Actions.
 
-A documentação detalhada do projeto está organizada na pasta [`docs/`](docs/):
+## Swagger e health check
 
-- [`docs/ENTITIES.md`](docs/ENTITIES.md) — Documentação das entidades
-- [`docs/ENTITY_DIAGRAM.md`](docs/ENTITY_DIAGRAM.md) — Diagrama de relacionamentos
-- [`docs/PROJECT_STRUCTURE.md`](docs/PROJECT_STRUCTURE.md) — Estrutura detalhada do projeto
-- [`docs/DOCTOR_CRUD_IMPLEMENTATION.md`](docs/DOCTOR_CRUD_IMPLEMENTATION.md) — Implementação do CRUD de Doctors
-- [`docs/IMPLEMENTATION_SUMMARY.md`](docs/IMPLEMENTATION_SUMMARY.md) — Resumo da implementação
-- [`docs/USAGE_EXAMPLES.md`](docs/USAGE_EXAMPLES.md) — Exemplos de uso das entidades
-- [`docs/doctors.http`](docs/doctors.http) — Casos de teste HTTP
+- Swagger UI: `http://localhost:8080/swagger-ui.html`
+- OpenAPI JSON: `http://localhost:8080/api-docs`
+- Health: `http://localhost:8080/actuator/health`. É público, mas os detalhes (banco, disco) só aparecem para `ADMIN`.
 
-## Estrutura do Projeto
+Nos endpoints protegidos, faça login, copie o `accessToken` e use `Authorize` no Swagger com `Bearer <token>`.
 
-```
-src/main/java/com/tcc
-├── presentation
-│   └── controller        # Endpoints REST, validação e autorização
-│
-├── application
-│   ├── dto
-│   │   ├── request       # DTOs de entrada
-│   │   └── response      # DTOs de saída (inclui ApiResponse)
-│   ├── mapper            # Componentes de conversão Entity ↔ DTO
-│   └── service           # Casos de uso e regras de negócio
-│
-├── domain
-│   ├── model             # Entidades JPA
-│   └── repository        # Repositories Spring Data JPA
-│
-├── infrastructure
-│   ├── security          # JWT, filtros e SecurityConfig
-│   └── config            # Configurações técnicas, como OpenAPI
-│
-├── exception             # Exceções customizadas e GlobalExceptionHandler
-└── TccApplication.java
+## Endpoints principais
 
-src/main/resources
-├── application.properties
-├── application-dev.properties
-├── application-prod.properties
-└── db/migration          # Scripts Flyway
-```
+Os perfis abaixo vêm do `SecurityConfig` e dos `@PreAuthorize`.
 
-## Padrão de Resposta da API
+| Caminho | Quem acessa | O que tem |
+|---|---|---|
+| `/auth/login`, `/auth/{doctor,patient,admin,hospital}/login`, `/auth/refresh`, `/auth/logout`, `/auth/register/hospital` | público | login, renovação de token, cadastro de hospital |
+| `/auth/me`, `/auth/change-password`, `/auth/profile/{doctor,hospital,patient}` | autenticado | perfil do usuário logado |
+| `/forgot-password/request`, `/forgot-password/reset` | público | recuperação de senha por código |
+| `/account-activation/activate` | público | primeiro acesso por link |
+| `/api/admin/**` (`hospitals`, `users`, `procedures`, `hospital-management`) | ADMIN | gestão de hospitais, usuários e procedimentos |
+| `/api/users` | ADMIN | CRUD de usuários |
+| `/api/dashboard/admin` | ADMIN | métricas da plataforma |
+| `/api/hospitals` | ADMIN, DOCTOR (exclusão só ADMIN) | CRUD e busca de hospitais |
+| `/api/doctors` | ADMIN, DOCTOR (parte só ADMIN) | CRUD e busca de médicos |
+| `/api/hospital/**` (`profile`, `dashboard`, `doctors`, `procedures`) | HOSPITAL | portal do hospital |
+| `/api/doctor/**` (`dashboard`, `procedures`, `my-procedures`, `alerts`) | DOCTOR | portal do médico e resolução de alertas |
+| `/api/patients/**` (inclui `/{patientId}/assigned-procedures`) | DOCTOR, HOSPITAL | CRUD de pacientes, cada um no seu escopo |
+| `/api/reports/**` | ADMIN ou HOSPITAL/DOCTOR, conforme o relatório | relatórios e exportação de check-ins e alertas |
+| `/api/mobile/**` (`patient-procedures`, `checkins`, `alerts`, `devices`) | PATIENT | app do paciente |
+| `/api/integration/alerts/evaluate` | integração (header `X-Integration-Key`) | avaliação de leituras e geração de alertas |
+| `GET /api/public/stats` | público | números da landing page |
 
-Todas as respostas seguem o formato padronizado via `ApiResponse<T>`:
-
-**Sucesso:**
-```json
-{
-  "success": true,
-  "data": {}
-}
-```
-
-**Erro:**
-```json
-{
-  "success": false,
-  "message": "Descrição do erro"
-}
-```
-
-## Tratamento de Exceções
-
-Centralizado no `GlobalExceptionHandler`:
-
-| Exceção | HTTP Status |
-|---|---|
-| `ResourceNotFoundException` | 404 Not Found |
-| `BusinessException` | 422 Unprocessable Entity |
-| `Exception` (genérica) | 500 Internal Server Error |
-
-## Camadas — Responsabilidades
-
-O fluxo principal é `Controller → Service → Repository → Entity JPA`.
-
-### Presentation
-- Recebe e valida requisições HTTP
-- Aplica as regras de autorização dos endpoints
-- Delega a execução aos services
-
-### Application
-- Implementa casos de uso, transações e regras de negócio
-- Mantém DTOs e mappers para não expor entidades pela API
-- Não contém consultas SQL nem detalhes de resposta de erro
-
-### Domain
-- Contém as entidades anotadas com JPA
-- Contém repositories que estendem interfaces do Spring Data, como `JpaRepository`
-- Possui, portanto, dependência explícita das tecnologias de persistência
-
-### Infrastructure
-- Reúne configurações técnicas de segurança, JWT e OpenAPI
-- Dá suporte transversal às demais camadas
-
-## Decisão Arquitetural
-
-A arquitetura em camadas foi escolhida conscientemente por pragmatismo, considerando o escopo do TCC, o prazo e a facilidade de implementação e manutenção. O projeto aplica separação de responsabilidades, mas não busca isolar o domínio dos frameworks de persistência.
+Exemplos de requisições prontas para rodar ficam em `docs/*.http`.

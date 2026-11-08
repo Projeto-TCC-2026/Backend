@@ -34,5 +34,3 @@ Write-Host "Usuarios de Teste:" -ForegroundColor Yellow
 Write-Host "   - ADMIN: admin@tcc.com / 123456" -ForegroundColor Cyan
 Write-Host "   - DOCTOR: doutor@tcc.com / 123456" -ForegroundColor Cyan
 Write-Host ""
-
-Write-Host "Consulte GUIA_TESTE_MANUAL.md para instrucoes completas" -ForegroundColor Green

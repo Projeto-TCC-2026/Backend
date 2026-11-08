@@ -296,7 +296,7 @@ public class PatientServiceImpl implements PatientService {
         Patient patient = patientRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Perfil de paciente não encontrado"));
 
-        // Valida unicidade do novo e-mail se foi alterado
+        // O e-mail é único no paciente e na conta de login.
         if (!request.email().equalsIgnoreCase(patient.getEmail()) &&
                 patientRepository.existsByEmailAndActiveTrue(request.email())) {
             throw new BusinessException("Já existe um paciente ativo com este e-mail");
@@ -311,7 +311,7 @@ public class PatientServiceImpl implements PatientService {
         patient.setEmail(request.email());
         patientRepository.save(patient);
 
-        // Atualiza o e-mail da conta de acesso também
+        // O login usa o e-mail do User, então os dois ficam iguais.
         user.setEmail(request.email());
         userRepository.save(user);
 
