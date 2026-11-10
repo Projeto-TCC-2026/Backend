@@ -122,8 +122,15 @@ public class PresentationMetricsServiceImpl implements PresentationMetricsServic
         if (!procedureRepository.existsById(procedureId)) {
             throw new ResourceNotFoundException("Procedimento não encontrado");
         }
-        if (scope.role() != Role.ADMIN && !doctorProcedureRepository.existsAccessibleProcedure(
-                procedureId, scope.doctorId(), scope.hospitalId())) {
+        boolean accessible = switch (scope.role()) {
+            case ADMIN -> true;
+            case DOCTOR -> doctorProcedureRepository.existsAccessibleProcedure(
+                    procedureId, scope.doctorId(), null);
+            case HOSPITAL -> procedureRepository.existsByIdAndHospitalId(
+                    procedureId, scope.hospitalId());
+            case PATIENT -> false;
+        };
+        if (!accessible) {
             throw new UnauthorizedException("Você não tem permissão para acessar as métricas deste procedimento");
         }
 

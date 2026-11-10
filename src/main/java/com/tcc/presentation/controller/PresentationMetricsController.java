@@ -65,7 +65,7 @@ public class PresentationMetricsController {
         }
 
         @GetMapping("/procedures/{procedureId}")
-        @Operation(summary = "Médias diárias dos campos numéricos de um procedimento", description = "A data inicial e final devem delimitar sete dias inclusivos. A resposta também inclui os sete dias anteriores.")
+        @Operation(summary = "Médias diárias dos campos numéricos de um procedimento", description = "A data inicial e final devem delimitar sete dias inclusivos. A resposta também inclui os sete dias anteriores. ADMIN pode consultar qualquer procedimento; HOSPITAL, os procedimentos do próprio hospital; DOCTOR, os procedimentos atribuídos ao próprio médico.")
         public ResponseEntity<ApiResponse<ProcedureMetricsResponse>> getProcedureMetrics(
                         Authentication authentication,
                         @PathVariable UUID procedureId,

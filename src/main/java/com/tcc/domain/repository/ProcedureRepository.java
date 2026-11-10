@@ -21,6 +21,8 @@ public interface ProcedureRepository extends JpaRepository<Procedure, UUID> {
 
     Optional<Procedure> findByIdAndHospitalId(UUID id, UUID hospitalId);
 
+    boolean existsByIdAndHospitalId(UUID id, UUID hospitalId);
+
     boolean existsByHospitalIdAndTitleIgnoreCase(UUID hospitalId, String title);
 
     List<Procedure> findByActive(Boolean active);

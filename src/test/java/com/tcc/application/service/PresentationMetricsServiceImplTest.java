@@ -2,6 +2,7 @@ package com.tcc.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.tcc.application.dto.response.DailyMetricResponse;
@@ -9,6 +10,7 @@ import com.tcc.application.dto.response.ProcedureMetricsResponse;
 import com.tcc.domain.model.Doctor;
 import com.tcc.domain.model.DoctorProcedureField;
 import com.tcc.domain.model.FieldDataType;
+import com.tcc.domain.model.Hospital;
 import com.tcc.domain.model.Role;
 import com.tcc.domain.model.User;
 import com.tcc.domain.repository.AlertRepository;
@@ -116,6 +118,42 @@ class PresentationMetricsServiceImplTest {
                 .isEqualByComparingTo("12.00");
         assertThat(result.fields().get(0).dailyAverages().get(0).sampleSize()).isEqualTo(2);
         assertThat(result.fields().get(0).dailyAverages().get(1).average()).isNull();
+    }
+
+    @Test
+    void hospitalCanAccessMetricsForAProcedureOwnedByItsHospital() {
+        UUID procedureId = UUID.randomUUID();
+        UUID hospitalId = UUID.randomUUID();
+        User hospitalUser = user(Role.HOSPITAL);
+        Hospital hospital = new Hospital();
+        hospital.setId(hospitalId);
+        hospitalUser.setHospital(hospital);
+        when(userRepository.findByEmailWithHospital(EMAIL)).thenReturn(Optional.of(hospitalUser));
+        when(procedureRepository.existsById(procedureId)).thenReturn(true);
+        when(procedureRepository.existsByIdAndHospitalId(procedureId, hospitalId)).thenReturn(true);
+        when(fieldRepository.findMetricsFields(procedureId, null, hospitalId)).thenReturn(List.of());
+
+        ProcedureMetricsResponse result = service.getProcedureMetrics(EMAIL, procedureId, START, END);
+
+        assertThat(result.procedureId()).isEqualTo(procedureId);
+        verify(fieldRepository).findMetricsFields(procedureId, null, hospitalId);
+    }
+
+    @Test
+    void hospitalCannotAccessMetricsForAnotherHospitalsProcedure() {
+        UUID procedureId = UUID.randomUUID();
+        UUID hospitalId = UUID.randomUUID();
+        User hospitalUser = user(Role.HOSPITAL);
+        Hospital hospital = new Hospital();
+        hospital.setId(hospitalId);
+        hospitalUser.setHospital(hospital);
+        when(userRepository.findByEmailWithHospital(EMAIL)).thenReturn(Optional.of(hospitalUser));
+        when(procedureRepository.existsById(procedureId)).thenReturn(true);
+        when(procedureRepository.existsByIdAndHospitalId(procedureId, hospitalId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getProcedureMetrics(EMAIL, procedureId, START, END))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessageContaining("permissão para acessar");
     }
 
     @Test
