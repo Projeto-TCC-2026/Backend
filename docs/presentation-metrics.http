@@ -1,0 +1,22 @@
+@host = http://localhost:8080
+@token = replace-with-access-token
+@startDate = 2026-06-08
+@endDate = 2026-06-14
+@procedureId = replace-with-procedure-uuid
+
+### Total de envios de questionário por dia
+GET {{host}}/api/presentation/metrics/daily-checkins?startDate={{startDate}}&endDate={{endDate}}
+Authorization: Bearer {{token}}
+
+### Pacientes com leitura de saúde (dado do smartwatch) por dia
+GET {{host}}/api/presentation/metrics/daily-smartwatch-patients?startDate={{startDate}}&endDate={{endDate}}
+Authorization: Bearer {{token}}
+
+### Alertas encaminhados ao médico por dia
+GET {{host}}/api/presentation/metrics/daily-alerts?startDate={{startDate}}&endDate={{endDate}}
+Authorization: Bearer {{token}}
+
+### Média diária dos campos numéricos do procedimento
+### startDate e endDate devem cobrir sete dias inclusivos; a resposta inclui os sete anteriores.
+GET {{host}}/api/presentation/metrics/procedures/{{procedureId}}?startDate={{startDate}}&endDate={{endDate}}
+Authorization: Bearer {{token}}

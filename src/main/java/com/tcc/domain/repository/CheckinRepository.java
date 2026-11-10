@@ -2,6 +2,7 @@ package com.tcc.domain.repository;
 
 import com.tcc.domain.model.Checkin;
 import com.tcc.domain.model.CheckinSource;
+import com.tcc.domain.model.FieldDataType;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -12,42 +13,62 @@ import org.springframework.data.repository.query.Param;
 
 public interface CheckinRepository extends JpaRepository<Checkin, UUID> {
 
-        List<Checkin> findBySubmissionId(UUID submissionId);
+  List<Checkin> findBySubmissionId(UUID submissionId);
 
-        boolean existsByPatientProcedureIdAndSourceAndManualDate(
-                        UUID patientProcedureId, CheckinSource source, LocalDate manualDate);
+  boolean existsByPatientProcedureIdAndSourceAndManualDate(
+      UUID patientProcedureId, CheckinSource source, LocalDate manualDate);
 
-        @Query("""
-                        SELECT CASE WHEN COUNT(c) > 0 THEN TRUE ELSE FALSE END FROM Checkin c
-                        JOIN c.patientProcedure pp
-                        WHERE pp.patient.id = :patientId
-                          AND c.submittedAt >= :start
-                          AND c.submittedAt < :end
-                        """)
-        boolean existsCheckinByPatientAndDate(@Param("patientId") UUID patientId,
-                        @Param("start") LocalDateTime start,
-                        @Param("end") LocalDateTime end);
+  @Query("""
+      SELECT CASE WHEN COUNT(c) > 0 THEN TRUE ELSE FALSE END FROM Checkin c
+      JOIN c.patientProcedure pp
+      WHERE pp.patient.id = :patientId
+        AND c.submittedAt >= :start
+        AND c.submittedAt < :end
+      """)
+  boolean existsCheckinByPatientAndDate(@Param("patientId") UUID patientId,
+      @Param("start") LocalDateTime start,
+      @Param("end") LocalDateTime end);
 
-        @Query("""
-                        SELECT DISTINCT c FROM Checkin c
-                        JOIN FETCH c.patientProcedure pp
-                        JOIN FETCH pp.patient
-                        JOIN FETCH pp.doctor
-                        JOIN FETCH pp.procedure
-                        LEFT JOIN FETCH c.fieldValues fv
-                        LEFT JOIN FETCH fv.field
-                        WHERE c.submittedAt >= :start
-                          AND c.submittedAt < :end
-                          AND (:procedureId IS NULL OR pp.procedure.id = :procedureId)
-                          AND (:patientId IS NULL OR pp.patient.id = :patientId)
-                          AND (:doctorId IS NULL OR pp.doctor.id = :doctorId)
-                          AND (:hospitalId IS NULL OR pp.doctor.hospital.id = :hospitalId)
-                        ORDER BY c.submittedAt ASC
-                        """)
-        List<Checkin> findForReport(@Param("start") LocalDateTime start,
-                        @Param("end") LocalDateTime end,
-                        @Param("procedureId") UUID procedureId,
-                        @Param("patientId") UUID patientId,
-                        @Param("doctorId") UUID doctorId,
-                        @Param("hospitalId") UUID hospitalId);
+  @Query("""
+      SELECT DISTINCT c FROM Checkin c
+      JOIN FETCH c.patientProcedure pp
+      JOIN FETCH pp.patient
+      JOIN FETCH pp.doctor
+      JOIN FETCH pp.procedure
+      LEFT JOIN FETCH c.fieldValues fv
+      LEFT JOIN FETCH fv.field
+      WHERE c.submittedAt >= :start
+        AND c.submittedAt < :end
+        AND (:procedureId IS NULL OR pp.procedure.id = :procedureId)
+        AND (:patientId IS NULL OR pp.patient.id = :patientId)
+        AND (:doctorId IS NULL OR pp.doctor.id = :doctorId)
+        AND (:hospitalId IS NULL OR pp.doctor.hospital.id = :hospitalId)
+      ORDER BY c.submittedAt ASC
+      """)
+  List<Checkin> findForReport(@Param("start") LocalDateTime start,
+      @Param("end") LocalDateTime end,
+      @Param("procedureId") UUID procedureId,
+      @Param("patientId") UUID patientId,
+      @Param("doctorId") UUID doctorId,
+      @Param("hospitalId") UUID hospitalId);
+
+  @Query("""
+      SELECT f.id, c.submittedAt, fv.rawValue
+      FROM CheckinFieldValue fv
+      JOIN fv.checkin c
+      JOIN fv.field f
+      JOIN c.patientProcedure pp
+      WHERE f.id IN :fieldIds
+        AND f.dataType IN :numericTypes
+        AND c.submittedAt >= :start
+        AND c.submittedAt < :end
+        AND (:doctorId IS NULL OR pp.doctor.id = :doctorId)
+        AND (:hospitalId IS NULL OR pp.doctor.hospital.id = :hospitalId)
+      """)
+  List<Object[]> findNumericFieldValues(@Param("fieldIds") List<UUID> fieldIds,
+      @Param("numericTypes") List<FieldDataType> numericTypes,
+      @Param("start") LocalDateTime start,
+      @Param("end") LocalDateTime end,
+      @Param("doctorId") UUID doctorId,
+      @Param("hospitalId") UUID hospitalId);
 }

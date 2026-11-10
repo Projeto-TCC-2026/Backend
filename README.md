@@ -101,6 +101,7 @@ Os perfis abaixo vêm do `SecurityConfig` e dos `@PreAuthorize`.
 | `/api/admin/**` (`hospitals`, `users`, `procedures`, `hospital-management`) | ADMIN | gestão de hospitais, usuários e procedimentos |
 | `/api/users` | ADMIN | CRUD de usuários |
 | `/api/dashboard/admin` | ADMIN | métricas da plataforma |
+| `/api/presentation/metrics/**` | ADMIN, HOSPITAL, DOCTOR | séries diárias de questionários, leituras do smartwatch, alertas e campos de procedimentos |
 | `/api/hospitals` | ADMIN, DOCTOR (exclusão só ADMIN) | CRUD e busca de hospitais |
 | `/api/doctors` | ADMIN, DOCTOR (parte só ADMIN) | CRUD e busca de médicos |
 | `/api/hospital/**` (`profile`, `dashboard`, `doctors`, `procedures`) | HOSPITAL | portal do hospital |

@@ -12,27 +12,39 @@ import com.tcc.domain.model.DoctorProcedure;
 
 public interface DoctorProcedureRepository extends JpaRepository<DoctorProcedure, UUID> {
 
-    List<DoctorProcedure> findByProcedureIdAndActiveTrue(UUID procedureId);
+  List<DoctorProcedure> findByProcedureIdAndActiveTrue(UUID procedureId);
 
-    List<DoctorProcedure> findByDoctorIdAndActiveTrue(UUID doctorId);
+  List<DoctorProcedure> findByDoctorIdAndActiveTrue(UUID doctorId);
 
-    Optional<DoctorProcedure> findByDoctorIdAndProcedureIdAndActiveTrue(UUID doctorId, UUID procedureId);
+  Optional<DoctorProcedure> findByDoctorIdAndProcedureIdAndActiveTrue(UUID doctorId, UUID procedureId);
 
-    Optional<DoctorProcedure> findByIdAndActiveTrue(UUID id);
+  Optional<DoctorProcedure> findByIdAndActiveTrue(UUID id);
 
-    boolean existsByDoctorIdAndProcedureIdAndActiveTrue(UUID doctorId, UUID procedureId);
+  boolean existsByDoctorIdAndProcedureIdAndActiveTrue(UUID doctorId, UUID procedureId);
 
-    /**
-     * Busca o vínculo ignorando o active. Necessário porque uq_doctor_procedures_pair
-     * impede inserir um segundo par (doctor_id, procedure_id): reatrelar um médico
-     * reaproveita a linha inativada em vez de criar outra.
-     */
-    Optional<DoctorProcedure> findByDoctorIdAndProcedureId(UUID doctorId, UUID procedureId);
+  /**
+   * Busca o vínculo ignorando o active. Necessário porque
+   * uq_doctor_procedures_pair
+   * impede inserir um segundo par (doctor_id, procedure_id): reatrelar um médico
+   * reaproveita a linha inativada em vez de criar outra.
+   */
+  Optional<DoctorProcedure> findByDoctorIdAndProcedureId(UUID doctorId, UUID procedureId);
 
-    long countByProcedureIdAndActiveTrue(UUID procedureId);
+  long countByProcedureIdAndActiveTrue(UUID procedureId);
 
-    long countByDoctorIdAndActiveTrue(UUID doctorId);
+  long countByDoctorIdAndActiveTrue(UUID doctorId);
 
-    @Query("SELECT dp FROM DoctorProcedure dp JOIN FETCH dp.procedure WHERE dp.doctor.user.id = :userId AND dp.active = true AND dp.procedure.active = true ORDER BY dp.createdAt")
-    List<DoctorProcedure> findActiveByDoctorUserId(@Param("userId") UUID userId);
+  @Query("SELECT dp FROM DoctorProcedure dp JOIN FETCH dp.procedure WHERE dp.doctor.user.id = :userId AND dp.active = true AND dp.procedure.active = true ORDER BY dp.createdAt")
+  List<DoctorProcedure> findActiveByDoctorUserId(@Param("userId") UUID userId);
+
+  @Query("""
+      SELECT CASE WHEN COUNT(dp) > 0 THEN TRUE ELSE FALSE END
+      FROM DoctorProcedure dp
+      WHERE dp.procedure.id = :procedureId
+        AND (:doctorId IS NULL OR dp.doctor.id = :doctorId)
+        AND (:hospitalId IS NULL OR dp.doctor.hospital.id = :hospitalId)
+      """)
+  boolean existsAccessibleProcedure(@Param("procedureId") UUID procedureId,
+      @Param("doctorId") UUID doctorId,
+      @Param("hospitalId") UUID hospitalId);
 }
