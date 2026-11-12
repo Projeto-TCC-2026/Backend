@@ -121,6 +121,47 @@ class PresentationMetricsServiceImplTest {
     }
 
     @Test
+    void procedureMetricsGroupsFieldsWithTheSameNameTypeAndUnit() {
+        UUID procedureId = UUID.randomUUID();
+        UUID temperatureFieldId = UUID.randomUUID();
+        UUID equivalentTemperatureFieldId = UUID.randomUUID();
+        UUID fahrenheitFieldId = UUID.randomUUID();
+        DoctorProcedureField temperature = field(temperatureFieldId, FieldDataType.DECIMAL);
+        temperature.setName("Temperatura");
+        temperature.setUnit("°C");
+        DoctorProcedureField equivalentTemperature = field(equivalentTemperatureFieldId, FieldDataType.DECIMAL);
+        equivalentTemperature.setName("Temperatura");
+        equivalentTemperature.setUnit("°C");
+        DoctorProcedureField fahrenheitTemperature = field(fahrenheitFieldId, FieldDataType.DECIMAL);
+        fahrenheitTemperature.setName("Temperatura");
+        fahrenheitTemperature.setUnit("°F");
+        when(userRepository.findByEmailWithHospital(EMAIL)).thenReturn(Optional.of(user(Role.ADMIN)));
+        when(procedureRepository.existsById(procedureId)).thenReturn(true);
+        when(fieldRepository.findMetricsFields(procedureId, null, null))
+                .thenReturn(List.of(temperature, equivalentTemperature, fahrenheitTemperature));
+        when(checkinRepository.findNumericFieldValues(
+                List.of(temperatureFieldId, equivalentTemperatureFieldId, fahrenheitFieldId),
+                List.of(FieldDataType.INTEGER, FieldDataType.DECIMAL, FieldDataType.SCALE),
+                START.minusDays(7).atStartOfDay(), END.plusDays(1).atStartOfDay(), null, null))
+                .thenReturn(List.<Object[]>of(
+                        new Object[] { temperatureFieldId, START.minusDays(7).atTime(10, 0), "10" },
+                        new Object[] { equivalentTemperatureFieldId, START.minusDays(7).atTime(11, 0), "14" },
+                        new Object[] { fahrenheitFieldId, START.minusDays(7).atTime(12, 0), "50" }));
+
+        ProcedureMetricsResponse result = service.getProcedureMetrics(EMAIL, procedureId, START, END);
+
+        assertThat(result.fields()).hasSize(2);
+        assertThat(result.fields().get(0).sourceFieldIds())
+                .containsExactly(temperatureFieldId, equivalentTemperatureFieldId);
+        assertThat(result.fields().get(0).name()).isEqualTo("Temperatura");
+        assertThat(result.fields().get(0).unit()).isEqualTo("°C");
+        assertThat(result.fields().get(0).dailyAverages().get(0).average()).isEqualByComparingTo("12");
+        assertThat(result.fields().get(0).dailyAverages().get(0).sampleSize()).isEqualTo(2);
+        assertThat(result.fields().get(1).unit()).isEqualTo("°F");
+        assertThat(result.fields().get(1).dailyAverages().get(0).average()).isEqualByComparingTo("50");
+    }
+
+    @Test
     void hospitalCanAccessMetricsForAProcedureOwnedByItsHospital() {
         UUID procedureId = UUID.randomUUID();
         UUID hospitalId = UUID.randomUUID();

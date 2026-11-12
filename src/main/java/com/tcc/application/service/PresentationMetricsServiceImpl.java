@@ -29,7 +29,9 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -143,18 +145,18 @@ public class PresentationMetricsServiceImpl implements PresentationMetricsServic
                 .filter(field -> NUMERIC_TYPES.contains(field.getDataType()))
                 .toList();
 
-        Map<UUID, Map<LocalDate, Aggregate>> aggregates = new HashMap<>();
+        Map<MetricKey, FieldAggregate> aggregates = new LinkedHashMap<>();
+        Map<UUID, MetricKey> fieldMetricKeys = new HashMap<>();
         for (DoctorProcedureField field : numericFields) {
-            Map<LocalDate, Aggregate> days = new HashMap<>();
-            for (LocalDate day = dataStartDate; !day.isAfter(endDate); day = day.plusDays(1)) {
-                days.put(day, new Aggregate());
-            }
-            aggregates.put(field.getId(), days);
+            MetricKey key = metricKey(field);
+            fieldMetricKeys.put(field.getId(), key);
+            FieldAggregate aggregate = aggregates.computeIfAbsent(
+                    key, ignored -> new FieldAggregate(field, new ArrayList<>(), dailyAggregates(dataStartDate, endDate)));
+            aggregate.sourceFieldIds().add(field.getId());
         }
 
         if (!numericFields.isEmpty()) {
-            List<UUID> fieldIds = numericFields.stream().map(doctorProcedureField -> doctorProcedureField.getId())
-                    .toList();
+            List<UUID> fieldIds = numericFields.stream().map(DoctorProcedureField::getId).toList();
             List<Object[]> values = checkinRepository.findNumericFieldValues(
                     fieldIds, NUMERIC_TYPES, dataStart, dataEnd, scope.doctorId(), scope.hospitalId());
             for (Object[] row : values) {
@@ -164,20 +166,23 @@ public class PresentationMetricsServiceImpl implements PresentationMetricsServic
                 if (rawValue == null || rawValue.isBlank()) {
                     continue;
                 }
-                Aggregate aggregate = aggregates.get(fieldId).get(date);
+                MetricKey key = fieldMetricKeys.get(fieldId);
+                FieldAggregate fieldAggregate = key == null ? null : aggregates.get(key);
+                Aggregate aggregate = fieldAggregate == null ? null : fieldAggregate.dailyAverages().get(date);
                 if (aggregate != null) {
                     aggregate.add(new BigDecimal(rawValue.trim()));
                 }
             }
         }
 
-        List<ProcedureFieldMetricsResponse> responseFields = numericFields.stream()
-                .map(field -> new ProcedureFieldMetricsResponse(
-                        field.getId(),
-                        field.getName(),
-                        field.getDataType(),
-                        field.getUnit(),
-                        aggregates.get(field.getId()).entrySet().stream()
+        List<ProcedureFieldMetricsResponse> responseFields = aggregates.values().stream()
+                .map(fieldAggregate -> new ProcedureFieldMetricsResponse(
+                        fieldAggregate.representative().getId(),
+                        List.copyOf(fieldAggregate.sourceFieldIds()),
+                        fieldAggregate.representative().getName(),
+                        fieldAggregate.representative().getDataType(),
+                        fieldAggregate.representative().getUnit(),
+                        fieldAggregate.dailyAverages().entrySet().stream()
                                 .sorted(Map.Entry.comparingByKey())
                                 .map(entry -> new DailyAverageResponse(
                                         entry.getKey(),
@@ -188,6 +193,20 @@ public class PresentationMetricsServiceImpl implements PresentationMetricsServic
 
         return new ProcedureMetricsResponse(
                 procedureId, startDate, endDate, dataStartDate, endDate, responseFields);
+    }
+
+    private MetricKey metricKey(DoctorProcedureField field) {
+        String normalizedName = field.getName().trim().toLowerCase(Locale.ROOT);
+        String normalizedUnit = field.getUnit() == null ? "" : field.getUnit().trim();
+        return new MetricKey(normalizedName, field.getDataType(), normalizedUnit);
+    }
+
+    private Map<LocalDate, Aggregate> dailyAggregates(LocalDate startDate, LocalDate endDate) {
+        Map<LocalDate, Aggregate> dailyAggregates = new HashMap<>();
+        for (LocalDate day = startDate; !day.isAfter(endDate); day = day.plusDays(1)) {
+            dailyAggregates.put(day, new Aggregate());
+        }
+        return dailyAggregates;
     }
 
     private Scope resolveScope(String email) {
@@ -257,6 +276,15 @@ public class PresentationMetricsServiceImpl implements PresentationMetricsServic
     }
 
     private record Scope(Role role, UUID doctorId, UUID hospitalId) {
+    }
+
+    private record MetricKey(String name, FieldDataType dataType, String unit) {
+    }
+
+    private record FieldAggregate(
+            DoctorProcedureField representative,
+            List<UUID> sourceFieldIds,
+            Map<LocalDate, Aggregate> dailyAverages) {
     }
 
     private static final class Aggregate {

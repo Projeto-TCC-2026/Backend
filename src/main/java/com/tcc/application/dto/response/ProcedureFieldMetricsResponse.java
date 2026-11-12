@@ -6,6 +6,7 @@ import java.util.UUID;
 
 public record ProcedureFieldMetricsResponse(
         UUID fieldId,
+        List<UUID> sourceFieldIds,
         String name,
         FieldDataType dataType,
         String unit,
