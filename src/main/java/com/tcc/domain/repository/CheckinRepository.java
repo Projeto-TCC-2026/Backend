@@ -30,6 +30,32 @@ public interface CheckinRepository extends JpaRepository<Checkin, UUID> {
       @Param("end") LocalDateTime end);
 
   @Query("""
+      SELECT DISTINCT c.manualDate
+      FROM Checkin c
+      JOIN c.patientProcedure pp
+      WHERE pp.patient.id = :patientId
+        AND c.source = :source
+        AND c.manualDate >= :startDate
+        AND c.manualDate <= :endDate
+      """)
+  List<LocalDate> findDailyManualCheckinDates(@Param("patientId") UUID patientId,
+      @Param("startDate") LocalDate startDate,
+      @Param("endDate") LocalDate endDate,
+      @Param("source") CheckinSource source);
+
+  @Query("""
+      SELECT CASE WHEN COUNT(c) > 0 THEN TRUE ELSE FALSE END
+      FROM Checkin c
+      JOIN c.patientProcedure pp
+      WHERE pp.patient.id = :patientId
+        AND c.source = :source
+        AND c.manualDate = :date
+      """)
+  boolean existsManualCheckinByPatientIdAndManualDate(@Param("patientId") UUID patientId,
+      @Param("source") CheckinSource source,
+      @Param("date") LocalDate date);
+
+  @Query("""
       SELECT DISTINCT c FROM Checkin c
       JOIN FETCH c.patientProcedure pp
       JOIN FETCH pp.patient
@@ -71,4 +97,26 @@ public interface CheckinRepository extends JpaRepository<Checkin, UUID> {
       @Param("end") LocalDateTime end,
       @Param("doctorId") UUID doctorId,
       @Param("hospitalId") UUID hospitalId);
+
+  @Query("""
+      SELECT f.id, c.manualDate, fv.rawValue
+      FROM CheckinFieldValue fv
+      JOIN fv.checkin c
+      JOIN fv.field f
+      JOIN c.patientProcedure pp
+      WHERE pp.id = :patientProcedureId
+        AND pp.patient.id = :patientId
+        AND f.id IN :fieldIds
+        AND f.dataType IN :numericTypes
+        AND c.source = :source
+        AND c.manualDate >= :startDate
+        AND c.manualDate <= :endDate
+      """)
+  List<Object[]> findManualNumericFieldValues(@Param("patientId") UUID patientId,
+      @Param("patientProcedureId") UUID patientProcedureId,
+      @Param("fieldIds") List<UUID> fieldIds,
+      @Param("numericTypes") List<FieldDataType> numericTypes,
+      @Param("startDate") LocalDate startDate,
+      @Param("endDate") LocalDate endDate,
+      @Param("source") CheckinSource source);
 }

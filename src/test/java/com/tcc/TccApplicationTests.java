@@ -14,6 +14,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
 import com.tcc.domain.model.AlertStatus;
+import com.tcc.domain.model.CheckinSource;
 import com.tcc.domain.model.FieldDataType;
 import com.tcc.domain.repository.AlertRepository;
 import com.tcc.domain.repository.CheckinRepository;
@@ -175,6 +176,14 @@ class TccApplicationTests {
                                 List.of(missingId),
                                 List.of(FieldDataType.INTEGER, FieldDataType.DECIMAL, FieldDataType.SCALE),
                                 start, end, null, missingHospitalId)).isEmpty();
+                assertThat(checkinRepository.findDailyManualCheckinDates(
+                                missingId, start.toLocalDate(), end.toLocalDate(), CheckinSource.MANUAL)).isEmpty();
+                assertThat(checkinRepository.existsManualCheckinByPatientIdAndManualDate(
+                                missingId, CheckinSource.MANUAL, start.toLocalDate())).isFalse();
+                assertThat(checkinRepository.findManualNumericFieldValues(
+                                missingId, missingId, List.of(missingId),
+                                List.of(FieldDataType.INTEGER, FieldDataType.DECIMAL, FieldDataType.SCALE),
+                                start.toLocalDate(), end.toLocalDate(), CheckinSource.MANUAL)).isEmpty();
         }
 
         @Test

@@ -85,6 +85,9 @@ public class CheckinServiceImpl implements CheckinService {
     @Override
     @Transactional
     public CheckinResponse submitManual(String email, UUID patientProcedureId, ManualCheckinRequest request) {
+        Patient patient = patientRepository.findByUserId(resolveUserId(email))
+                .orElseThrow(() -> new UnauthorizedException("Paciente não encontrado para o usuário autenticado"));
+        validateNoManualCheckinToday(patient);
         return submitManual(email, patientProcedureId, request, null);
         }
 
@@ -113,6 +116,8 @@ public class CheckinServiceImpl implements CheckinService {
                 existing.getSubmittedAt(), existing.getEditUntil());
         }
 
+        validateNoManualCheckinToday(patient);
+
         LocalDateTime submittedAt = LocalDateTime.now();
         CheckinSubmission submission = new CheckinSubmission();
         submission.setPatient(patient);
@@ -133,6 +138,13 @@ public class CheckinServiceImpl implements CheckinService {
 
         return new AggregatedCheckinResponse(savedSubmission.getId(), checkinIds,
             savedSubmission.getSubmittedAt(), savedSubmission.getEditUntil());
+        }
+
+        private void validateNoManualCheckinToday(Patient patient) {
+        if (checkinRepository.existsManualCheckinByPatientIdAndManualDate(
+                patient.getId(), CheckinSource.MANUAL, LocalDate.now())) {
+            throw new BusinessException("O relatório diário já foi enviado hoje");
+        }
         }
 
         private CheckinResponse submitManual(String email, UUID patientProcedureId,

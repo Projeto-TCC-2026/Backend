@@ -92,7 +92,7 @@ class CheckinServiceImplTest {
 
         when(userRepository.findByEmailAndActiveTrue(EMAIL)).thenReturn(Optional.of(user));
         when(patientRepository.findByUserId(USER_ID)).thenReturn(Optional.of(patient));
-        when(patientProcedureRepository.findByIdAndActiveTrue(PATIENT_PROCEDURE_ID))
+        lenient().when(patientProcedureRepository.findByIdAndActiveTrue(PATIENT_PROCEDURE_ID))
                 .thenReturn(Optional.of(patientProcedure));
         lenient().when(doctorProcedureRepository.findByDoctorIdAndProcedureIdAndActiveTrue(
                         doctor.getId(), procedure.getId()))
@@ -132,6 +132,17 @@ class CheckinServiceImplTest {
                 new ManualCheckinRequest(List.of())))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("Já existe um check-in");
+    }
+
+    @Test
+    void rejectsManualCheckinWhenAnotherProcedureWasAlreadySubmittedToday() {
+        when(checkinRepository.existsManualCheckinByPatientIdAndManualDate(
+                patientProcedure.getPatient().getId(), CheckinSource.MANUAL, LocalDate.now())).thenReturn(true);
+
+        assertThatThrownBy(() -> service.submitManual(EMAIL, PATIENT_PROCEDURE_ID,
+                new ManualCheckinRequest(List.of())))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("relatório diário já foi enviado");
     }
 
     @Test
