@@ -2,6 +2,8 @@ package com.tcc.application.dto.request;
 
 import java.time.LocalDate;
 
+import com.tcc.application.validation.Cpf;
+
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -24,8 +26,7 @@ public record PatientUpdateRequest(
         String fullName,
 
         @NotBlank(message = "CPF é obrigatório")
-        @Size(min = 11, max = 11, message = "CPF deve ter 11 caracteres")
-        @Pattern(regexp = "\\d{11}", message = "CPF deve conter apenas números")
+        @Cpf
         String cpf,
 
         @NotNull(message = "Data de nascimento é obrigatória")

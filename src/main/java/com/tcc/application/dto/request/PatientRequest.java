@@ -4,6 +4,8 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+import com.tcc.application.validation.Cpf;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -33,8 +35,7 @@ public record PatientRequest(
         String fullName,
 
         @NotBlank(message = "CPF é obrigatório")
-        @Size(min = 11, max = 11, message = "CPF deve ter 11 caracteres")
-        @Pattern(regexp = "\\d{11}", message = "CPF deve conter apenas números")
+        @Cpf
         String cpf,
 
         @NotNull(message = "Data de nascimento é obrigatória")

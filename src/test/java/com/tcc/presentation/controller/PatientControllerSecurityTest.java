@@ -160,7 +160,7 @@ class PatientControllerSecurityTest {
         return """
                 {
                   "fullName": "Paciente de Teste",
-                  "cpf": "12345678901",
+                  "cpf": "12345678909",
                   "birthDate": "1990-01-01",
                   "gender": "MALE",
                   "phone": "11999999999",

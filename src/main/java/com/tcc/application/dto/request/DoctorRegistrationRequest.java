@@ -1,5 +1,6 @@
 package com.tcc.application.dto.request;
 
+import com.tcc.application.validation.Cpf;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -26,7 +27,7 @@ public record DoctorRegistrationRequest(
         String fullName,
 
         @NotBlank(message = "CPF é obrigatório")
-        @Size(min = 11, max = 11, message = "CPF deve ter 11 caracteres")
+        @Cpf
         String cpf,
 
         @NotBlank(message = "CRM é obrigatório")

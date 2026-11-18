@@ -1,5 +1,6 @@
 package com.tcc.application.dto.request;
 
+import com.tcc.application.validation.Cnpj;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -11,7 +12,7 @@ public record HospitalRegistrationRequest(
         String name,
 
         @NotBlank(message = "CNPJ é obrigatório")
-        @Size(min = 14, max = 14, message = "CNPJ deve ter 14 caracteres")
+        @Cnpj
         String cnpj,
 
         @Size(max = 20, message = "Telefone deve ter no máximo 20 caracteres")
