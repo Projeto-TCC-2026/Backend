@@ -16,7 +16,7 @@ concurrency:
 env:
   AWS_ROLE_ARN: arn:aws:iam::919446725618:role/github-actions-backend-deploy
   ARTIFACT: s3://tcc-backend-artifacts-2026/backend/app.jar
-  INSTANCE_ID: i-0a721a294edd7c00c
+  ASG_NAME: tcc-api-asg     # o servidor é descoberto pelo grupo automático
 
 jobs:
   deploy:
@@ -46,6 +46,19 @@ jobs:
 
       - name: Enviar JAR para o S3
         run: aws s3 cp target/tcc-0.0.1-SNAPSHOT.jar "$ARTIFACT"
+
+      - name: Descobrir o servidor ativo do Auto Scaling
+        run: |
+          INSTANCE_ID=$(aws autoscaling describe-auto-scaling-groups --region sa-east-1 \
+            --auto-scaling-group-names "$ASG_NAME" \
+            --query "AutoScalingGroups[0].Instances[?LifecycleState=='InService'].InstanceId | [0]" \
+            --output text)
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
+            echo "Nenhum servidor ativo no $ASG_NAME. O JAR ja esta no S3; o proximo servidor que subir vai usa-lo."
+            exit 1
+          fi
+          echo "Servidor ativo: $INSTANCE_ID"
+          echo "INSTANCE_ID=$INSTANCE_ID" >> "$GITHUB_ENV"
 
       - name: Deploy na EC2 via SSM
         run: |
