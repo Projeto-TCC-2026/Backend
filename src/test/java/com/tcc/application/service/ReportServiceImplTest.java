@@ -36,6 +36,7 @@ import com.tcc.domain.repository.PatientProcedureRepository;
 import com.tcc.domain.repository.PatientRepository;
 import com.tcc.domain.repository.ProcedureRepository;
 import com.tcc.domain.repository.UserRepository;
+import com.tcc.exception.BusinessException;
 import com.tcc.exception.UnauthorizedException;
 
 @ExtendWith(MockitoExtension.class)
@@ -51,7 +52,7 @@ class ReportServiceImplTest {
     @Mock private AlertRepository alertRepository;
 
     @Test
-    void hospitalExportIsScopedAndProducesValidEmptyWorkbook() throws Exception {
+    void hospitalExportRejectsReportWhenCheckinsAreEmpty() throws Exception {
         Hospital hospital = new Hospital();
         hospital.setId(UUID.randomUUID());
         hospital.setActive(true);
@@ -67,13 +68,10 @@ class ReportServiceImplTest {
         when(checkinRepository.findForReport(any(), any(), eq(procedure.getId()), eq(null), eq(null),
                 eq(hospital.getId()))).thenReturn(List.of());
 
-        byte[] export = service().exportCheckins(user.getEmail(), date, date, procedure.getId(), null, null);
-
-        assertThat(export).isNotEmpty();
-        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(export))) {
-            assertThat(workbook.getSheetAt(0).getRow(0).getCell(0).getStringCellValue())
-                    .isEqualTo("Data/hora de envio");
-        }
+        assertThatThrownBy(() -> service().exportCheckins(
+                user.getEmail(), date, date, procedure.getId(), null, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Não há dados para exportar");
         verify(checkinRepository).findForReport(date.atStartOfDay(), date.plusDays(1).atStartOfDay(),
                 procedure.getId(), null, null, hospital.getId());
     }
@@ -114,8 +112,10 @@ class ReportServiceImplTest {
         when(checkinRepository.findForReport(any(), any(), eq(procedure.getId()), eq(patientId), eq(null),
                 eq(hospital.getId()))).thenReturn(List.of());
 
-        assertThat(service().exportCheckins(user.getEmail(), date, date, procedure.getId(), patientId, null))
-                .isNotEmpty();
+        assertThatThrownBy(() -> service().exportCheckins(
+                user.getEmail(), date, date, procedure.getId(), patientId, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Não há dados para exportar");
     }
 
     @Test
@@ -157,7 +157,9 @@ class ReportServiceImplTest {
         when(alertRepository.findForReport(eq(date.atStartOfDay()),
                 eq(date.plusDays(1).atStartOfDay()), any())).thenReturn(List.of());
 
-        assertThat(service().exportAlerts(user.getEmail(), date, date, null, null, null)).isNotEmpty();
+        assertThatThrownBy(() -> service().exportAlerts(user.getEmail(), date, date, null, null, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Não há dados para exportar");
 
         verify(alertRepository).findForReport(eq(date.atStartOfDay()),
                 eq(date.plusDays(1).atStartOfDay()), any());
@@ -183,7 +185,8 @@ class ReportServiceImplTest {
         when(userRepository.findByEmailWithHospital(user.getEmail())).thenReturn(Optional.of(user));
         when(alertRepository.findForReport(any(), any(), any())).thenReturn(List.of());
 
-        service().exportAlerts(user.getEmail(), date, date, null, null, null);
+        assertThatThrownBy(() -> service().exportAlerts(user.getEmail(), date, date, null, null, null))
+                .isInstanceOf(BusinessException.class);
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Collection<String>> captor = ArgumentCaptor.forClass(Collection.class);
