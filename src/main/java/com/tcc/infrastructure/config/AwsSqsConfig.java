@@ -25,12 +25,15 @@ public class AwsSqsConfig {
      * Cliente do SES usado pelo aviso de alerta ao médico.
      *
      * <p>Diferente do {@code SqsClient} acima, este bean é condicional: ele só
-     * existe quando {@code app.alert-email.enabled=true}. Com o e-mail desligado
-     * (o padrão) entra o {@code NoOpAlertEmailSender}, que não tem cliente AWS, e
-     * nada precisa ser criado.
+     * existe quando {@code app.alert-email.enabled=true} e
+     * {@code app.alert-email.provider=ses} (o padrão quando ausente). Com o e-mail
+     * desligado entra o {@code NoOpAlertEmailSender}, e com {@code provider=sqs}
+     * entra o {@code SqsAlertEmailSender}, que usa o {@code SqsClient} acima; em
+     * nenhum dos dois casos o cliente SES é criado.
      */
     @Bean
     @ConditionalOnProperty(name = "app.alert-email.enabled", havingValue = "true")
+    @ConditionalOnProperty(name = "app.alert-email.provider", havingValue = "ses", matchIfMissing = true)
     public SesV2Client sesV2Client(
             @Value("${app.alert-email.aws-region:us-east-1}") String awsRegion) {
         return SesV2Client.builder()

@@ -26,6 +26,7 @@ import software.amazon.awssdk.services.sesv2.model.SendEmailRequest;
  */
 @Service
 @ConditionalOnProperty(name = "app.alert-email.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "app.alert-email.provider", havingValue = "ses", matchIfMissing = true)
 public class SesAlertEmailSender implements AlertEmailSender {
 
     private static final Logger log = LoggerFactory.getLogger(SesAlertEmailSender.class);
