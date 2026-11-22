@@ -8,6 +8,8 @@ services:
 
     environment:
       SPRING_PROFILES_ACTIVE: dev
+      APP_TIMEZONE: ${APP_TIMEZONE:-America/Sao_Paulo}
+      TZ: ${APP_TIMEZONE:-America/Sao_Paulo}
 
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}

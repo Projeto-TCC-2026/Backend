@@ -866,12 +866,13 @@ public class AlertServiceImpl implements AlertService {
     private String buildReason(Double value, ReadingThreshold range) {
         Double min = range.getNormalMin();
         Double max = range.getNormalMax();
+        String friendlyName = READING_TYPE_NAMES.getOrDefault(range.getReadingType(), range.getReadingType());
 
         if (min != null && value < min) {
-            return "Valor abaixo do mínimo normal de " + min + " para " + range.getReadingType();
+            return "Valor abaixo do mínimo normal de " + min + " para " + friendlyName;
         }
         if (max != null && value > max) {
-            return "Valor acima do máximo normal de " + max + " para " + range.getReadingType();
+            return "Valor acima do máximo normal de " + max + " para " + friendlyName;
         }
         return null;
     }
@@ -909,10 +910,15 @@ public class AlertServiceImpl implements AlertService {
         return alertMapper.toEntity(alertRequest, patient, reading);
     }
 
+    private static final java.util.Map<String, String> READING_TYPE_NAMES = java.util.Map.of(
+            "HEART_RATE", "Frequência cardíaca",
+            "SPO2", "Saturação de oxigênio",
+            "TEMPERATURE", "Temperatura corporal"
+    );
+
     private String buildTitle(ReadingThreshold range) {
-        String label = range.getLabel();
-        String title = "Leitura fora da faixa normal: " + range.getReadingType()
-                + (label != null ? " (" + label + ")" : "");
+        String friendlyName = READING_TYPE_NAMES.getOrDefault(range.getReadingType(), range.getReadingType());
+        String title = "Leitura fora da faixa normal: " + friendlyName;
         return title.length() > 255 ? title.substring(0, 255) : title;
     }
 

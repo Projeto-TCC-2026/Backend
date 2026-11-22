@@ -16,9 +16,11 @@ RUN ./mvnw clean package -DskipTests -B
 # ---- Estágio 2: runtime — só roda o .jar ----
 FROM eclipse-temurin:17-jre
 WORKDIR /app
+ENV TZ=America/Sao_Paulo
+ENV APP_TIMEZONE=America/Sao_Paulo
 
 # Traz APENAS o .jar pronto do estágio de build. Sem Maven, sem código-fonte.
 COPY --from=build /app/target/*.jar app.jar
 
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["sh", "-c", "exec java -Duser.timezone=${APP_TIMEZONE:-America/Sao_Paulo} -jar app.jar"]

@@ -42,6 +42,7 @@ import com.tcc.domain.repository.PatientProcedureRepository;
 import com.tcc.domain.repository.PatientRepository;
 import com.tcc.domain.repository.ProcedureRepository;
 import com.tcc.domain.repository.UserRepository;
+import com.tcc.exception.BusinessException;
 import com.tcc.exception.ResourceNotFoundException;
 import com.tcc.exception.UnauthorizedException;
 
@@ -165,6 +166,9 @@ public class ReportServiceImpl implements ReportService {
         List<Checkin> checkins = checkinRepository.findForReport(
                 startDate.atStartOfDay(), endDate.plusDays(1).atStartOfDay(), filters.procedureId(),
                 filters.patientId(), filters.doctorId(), filters.hospitalId());
+        if (checkins.isEmpty()) {
+            throw new BusinessException("Não há dados para exportar no período e filtros selecionados");
+        }
 
         try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             Map<UUID, List<Checkin>> byProcedure = checkins.stream()
@@ -224,6 +228,7 @@ public class ReportServiceImpl implements ReportService {
             writeHeader(sheet, "Data/hora de emissão", "Paciente", "Médico", "Procedimento",
                     "Dado clínico/Métrica", "Valor recebido", "Origem", "Severidade", "Rótulo", "Status");
             int rowIndex = 1;
+            int exportedRows = 0;
             for (Alert alert : alerts) {
                 if (filters.patientId() != null && !filters.patientId().equals(alert.getPatient().getId())) {
                     continue;
@@ -246,6 +251,10 @@ public class ReportServiceImpl implements ReportService {
                 set(row, 7, alert.getSeverity());
                 set(row, 8, alert.getTitle());
                 set(row, 9, alert.getStatus());
+                exportedRows++;
+            }
+            if (exportedRows == 0) {
+                throw new BusinessException("Não há dados para exportar no período e filtros selecionados");
             }
             setWidths(sheet, 10);
             workbook.write(output);

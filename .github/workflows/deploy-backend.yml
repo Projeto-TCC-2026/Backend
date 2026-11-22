@@ -81,9 +81,11 @@ jobs:
             break
           done
 
+          echo "Saida do comando SSM:"
           aws ssm get-command-invocation --region sa-east-1 \
             --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
-            --query '[StandardOutputContent,StandardErrorContent]' --output text
+            --query '{status:Status,statusDetails:StatusDetails,responseCode:ResponseCode,stdout:StandardOutputContent,stderr:StandardErrorContent}' \
+            --output json
 
           echo "Status final: $STATUS"
           [ "$STATUS" = "Success" ]
