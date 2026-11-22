@@ -60,6 +60,19 @@ jobs:
           echo "Servidor ativo: $INSTANCE_ID"
           echo "INSTANCE_ID=$INSTANCE_ID" >> "$GITHUB_ENV"
 
+      - name: Verificar agente SSM da EC2
+        run: |
+          SSM_INFO=$(aws ssm describe-instance-information --region sa-east-1 \
+           --filters "Key=InstanceIds,Values=$INSTANCE_ID" \
+           --query 'InstanceInformationList[0].[PingStatus,AgentVersion,PlatformType]' \
+           --output text)
+          echo "Estado SSM: $SSM_INFO"
+          PING_STATUS=$(printf '%s' "$SSM_INFO" | awk '{print $1}')
+          if [ "$PING_STATUS" != "Online" ]; then
+           echo "::error::A instancia $INSTANCE_ID não está Online no SSM. Estado: $SSM_INFO"
+           exit 1
+          fi
+
       - name: Deploy na EC2 via SSM
         run: |
           jq -Rs '{commands: [.]}' scripts/deploy-ec2.sh > params.json
@@ -84,7 +97,7 @@ jobs:
           echo "Saida do comando SSM:"
           aws ssm get-command-invocation --region sa-east-1 \
             --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
-            --query '{status:Status,responseCode:ResponseCode,stdout:StandardOutputContent,stderr:StandardErrorContent}' \
+            --query '{status:Status,statusDetails:StatusDetails,responseCode:ResponseCode,stdout:StandardOutputContent,stderr:StandardErrorContent}' \
             --output json
 
           echo "Status final: $STATUS"
